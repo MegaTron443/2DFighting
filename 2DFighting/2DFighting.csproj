@@ -9,8 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MoonSharp" Version="0.9.0.3" />
+    <PackageReference Include="MoonSharp" Version="2.0.0" />
     <PackageReference Include="Raylib-cs" Version="4.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Scripts\**\*.lua">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
