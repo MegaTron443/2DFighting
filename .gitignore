@@ -1,0 +1,21 @@
+# Build output (handles all nested bin/obj folders)
+[Bb]in/
+[Oo]bj/
+
+# Artifacts
+*.dll
+*.pdb
+*.exe
+
+# User-specific / VS Code / IDE
+.vscode/
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+
+# Keep these if you actually want to ignore them
+*.png
+.editorconfig
+StyleCop.json
+*.sln
