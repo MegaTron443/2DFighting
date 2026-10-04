@@ -1,8 +1,13 @@
 ﻿using System.Numerics;
 using Raylib_cs;
 
-Raylib.InitWindow(800, 600, "2D Fighting Game");
-Raylib.SetTargetFPS(60);
+AppConfig config = AppConfig.Load("config.json");
+
+int sw = config.Display.ScreenWidth;
+int sh = config.Display.ScreenHeight;
+
+Raylib.InitWindow(sw, sh, config.Display.Title);
+Raylib.SetTargetFPS(config.Display.TargetFps);
 
 PhysicsEngine physics = new PhysicsEngine();
 Timer timer = new Timer();
@@ -12,37 +17,64 @@ physics.Initialize();
 timer.Initialize();
 lua.Initialize();
 
-Player p1 = new Player("Player 1", isAI: false, playerIndex: 0, new Vector2(150, 300));
-Player p2 = new Player("Player 2", isAI: false, playerIndex: 1, new Vector2(550, 300));
+Player? p1 = null;
+Player? p2 = null;
 
-// Initial character assignment (or performed inside GUIEngine menus)
-p1.ChangeCharacter(lua.CreateCharacter("brawler"));
-p2.ChangeCharacter(lua.CreateCharacter("brawler"));
-GameState.SetState(State.Playing);
+GameState.SetState(State.MainMenu);
 
 while (!Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
     timer.Update(dt);
 
-    GameData data = new GameData(p1, p2, timer, lua);
+    if (GameState.CurrentState == State.GameOver && (p1 != null || p2 != null))
+    {
+        p1 = null;
+        p2 = null;
+    }
 
-    GUIEngine.Update(data);
-    p1.HandleInput();
-    p2.HandleInput();
+    GameData data = new GameData(p1, p2, timer, lua, config);
 
-    physics.Update(data);
+    GUIEngine.Update(ref p1, ref p2, data);
 
+    if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
+    {
+        p1.HandleInput();
+        p2.HandleInput();
+        physics.Update(data);
+    }
+
+    HandlePauseInput();
+
+    // Render loop
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.RAYWHITE);
+    Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, sw, (int)PhysicsEngine.GroundY, Color.BLACK);
 
-    Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, 800, (int)PhysicsEngine.GroundY, Color.BLACK);
+    if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
+    {
+        p1.Draw();
+        p2.Draw();
+    }
 
-    p1.Draw();
-    p2.Draw();
-    GUIEngine.Update(data);
+    GUIEngine.Draw(data);
 
     Raylib.EndDrawing();
+}
+
+void HandlePauseInput()
+{
+    if (Raylib.IsKeyPressed(config.Controls.Pause))
+    {
+        if (GameState.CurrentState == State.Playing)
+        {
+            GameState.SetState(State.Paused);
+        }
+        else if (GameState.CurrentState == State.Paused)
+        {
+            GameState.SetState(State.Playing);
+        }
+    }
 }
 
 Raylib.CloseWindow();

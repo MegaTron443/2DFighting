@@ -72,14 +72,21 @@ public class PhysicsEngine
 
     private void CheckHits(Player attacker, Player defender)
     {
+        if (attacker.CurrentCharacter == null || attacker.CurrentCharacter.HasHit) return;
+
         if (attacker.TryGetHitbox(out Rectangle hitbox))
         {
             Rectangle defHurtbox = defender.GetHurtbox();
             if (Raylib.CheckCollisionRecs(hitbox, defHurtbox))
             {
+                attacker.CurrentCharacter.HasHit = true;
+
+                defender.HitstunTimer = attacker.CurrentCharacter!.ActiveSkill!.HitStun;
                 defender.Health -= attacker.CurrentCharacter!.ActiveSkill!.Damage;
                 defender.Velocity.X = attacker.FacingRight ? 350f : -350f;
             }
         }
     }
+
+
 }

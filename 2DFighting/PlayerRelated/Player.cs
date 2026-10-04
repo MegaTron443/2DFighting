@@ -10,6 +10,8 @@ public class Player
     private readonly int _playerIndex;
     private readonly KeyHandler _keyHandler;
     private readonly PlayerAI? _aiController;
+    public float HitstunTimer { get; set; } = 0f;
+    public bool IsInHitstun => HitstunTimer > 0f;
     public Character? CurrentCharacter { get; private set; }
 
     public Vector2 Position;
@@ -19,12 +21,12 @@ public class Player
     public int Health { get; set; } = 100;
     public bool IsAlive => Health > 0;
 
-    public Player(string name, bool isAI, int playerIndex, Vector2 spawnPos)
+    public Player(string name, bool isAI, int playerIndex, Vector2 spawnPos, AppConfig appConfig)
     {
         _name = name;
         _isAI = isAI;
         _playerIndex = playerIndex;
-        _keyHandler = new KeyHandler(playerIndex);
+        _keyHandler = new KeyHandler(appConfig);
         Position = spawnPos;
         FacingRight = playerIndex == 0;
 
@@ -51,30 +53,23 @@ public class Player
     public bool TryGetHitbox(out Rectangle hitbox)
     {
         hitbox = default;
-        if (CurrentCharacter == null || CurrentCharacter.ActiveSkill == null) return false;
+        if (CurrentCharacter == null || !CurrentCharacter.IsHitboxActive) return false;
 
-        SkillData skill = CurrentCharacter.ActiveSkill;
-        int start = skill.StartupFrames;
-        int end = start + skill.ActiveFrames;
+        SkillData skill = CurrentCharacter.ActiveSkill!;
+        Rectangle offset = skill.HitboxOffset;
+        float hitX = FacingRight
+            ? Position.X + offset.x
+            : Position.X + CurrentCharacter.Width - offset.x - offset.width;
 
-        if (CurrentCharacter.CurrentActionFrame >= start && CurrentCharacter.CurrentActionFrame < end)
-        {
-            Rectangle offset = skill.HitboxOffset;
-            float hitX = FacingRight
-                ? Position.X + offset.x
-                : Position.X + CurrentCharacter.Width - offset.x - offset.width;
-
-            hitbox = new Rectangle(hitX, Position.Y + offset.y, offset.width, offset.height);
-            return true;
-        }
-
-        return false;
+        hitbox = new Rectangle(hitX, Position.Y + offset.y, offset.width, offset.height);
+        return true;
     }
 
-    // TODO: Rework with KeyHandler and PlayerAI for better input handling
     public void HandleInput()
     {
+        if (GameState.CurrentState != State.Playing) return;
         if (CurrentCharacter == null) return;
+        if (IsInHitstun) return;
 
         if (_isAI && _aiController != null)
         {
@@ -82,34 +77,24 @@ public class Player
             return;
         }
 
-        if (_playerIndex == 0)
-        {
-            float dir = 0;
-            if (Raylib.IsKeyDown(KeyboardKey.KEY_D)) dir += 1;
-            if (Raylib.IsKeyDown(KeyboardKey.KEY_A)) dir -= 1;
-
-            CurrentCharacter.Move(this, dir);
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_W)) CurrentCharacter.Jump(this);
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_J)) CurrentCharacter.ExecuteSkill(this, "light_punch");
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_K)) CurrentCharacter.ExecuteSkill(this, "heavy_kick");
-        }
-        else if (_playerIndex == 1)
-        {
-            float dir = 0;
-            if (Raylib.IsKeyDown(KeyboardKey.KEY_RIGHT)) dir += 1;
-            if (Raylib.IsKeyDown(KeyboardKey.KEY_LEFT)) dir -= 1;
-
-            CurrentCharacter.Move(this, dir);
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_UP)) CurrentCharacter.Jump(this);
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_KP_1)) CurrentCharacter.ExecuteSkill(this, "light_punch");
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_KP_2)) CurrentCharacter.ExecuteSkill(this, "heavy_kick");
-        }
+        _keyHandler.HandleInput(CurrentCharacter, this, _playerIndex);
     }
 
     public void Update(float dt)
     {
+        if (GameState.CurrentState != State.Playing) return;
+        if (HitstunTimer > 0f)
+        {
+            HitstunTimer -= dt;
+        }
+
         if (CurrentCharacter == null) return;
         CurrentCharacter.Update(this, dt);
+
+        if (!IsAlive)
+        {
+            GameState.SetState(State.GameOver);
+        }
     }
 
     public void Draw()

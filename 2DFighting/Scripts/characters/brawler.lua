@@ -37,7 +37,9 @@ Character = {
             active_frames = 3,
             recovery_frames = 8,
             -- Hitbox relative to player's root (X, Y, Width, Height)
-            hitbox = { x_offset = 50.0, y_offset = 25.0, width = 45.0, height = 25.0 }
+            hitbox = { x_offset = 50.0, y_offset = 25.0, width = 45.0, height = 25.0 },
+            hitStun = 0.25,
+            cooldown_time = 10.0
         },
         heavy_kick = {
             input_trigger = "K",
@@ -45,7 +47,9 @@ Character = {
             startup_frames = 9,
             active_frames = 5,
             recovery_frames = 16,
-            hitbox = { x_offset = 55.0, y_offset = 40.0, width = 60.0, height = 30.0 }
+            hitbox = { x_offset = 55.0, y_offset = 40.0, width = 60.0, height = 30.0 },
+            hitStun = 0.5,
+            cooldown_time = 2.0
         }
     }
 }

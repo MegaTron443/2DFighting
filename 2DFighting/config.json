@@ -1,0 +1,28 @@
+{
+  "Display": {
+    "ScreenWidth": 800,
+    "ScreenHeight": 600,
+    "TargetFps": 60,
+    "Title": "2D Fighting Game"
+  },
+  "Controls": {
+    "Pause": "KEY_EQUAL",
+    "Restart": "KEY_R",
+    "P1": {
+      "Left": "KEY_A",
+      "Right": "KEY_D",
+      "Jump": "KEY_W",
+      "Crouch": "KEY_S",
+      "LightPunch": "KEY_J",
+      "HeavyKick": "KEY_K"
+    },
+    "P2": {
+      "Left": "KEY_LEFT",
+      "Right": "KEY_RIGHT",
+      "Jump": "KEY_UP",
+      "Crouch": "KEY_DOWN",
+      "LightPunch": "KEY_P",
+      "HeavyKick": "KEY_O"
+    }
+  }
+}
