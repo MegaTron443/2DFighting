@@ -13,7 +13,7 @@ public class PhysicsEngine
         if (GameState.CurrentState != State.Playing) return;
         if (data.Player1.CurrentCharacter == null || data.Player2.CurrentCharacter == null) return;
 
-        float dt = data.Timer.DeltaTime;
+        float dt = Timer.FixedDeltaTime;
 
         data.Player1.Update(dt);
         data.Player2.Update(dt);

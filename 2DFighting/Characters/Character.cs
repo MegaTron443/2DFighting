@@ -172,14 +172,13 @@ public class Character
             }
         }
 
-        SkillCooldowns.Keys.ToList().ForEach(skill =>
+        foreach (var skill in SkillCooldowns.Keys.ToList())
         {
             if (SkillCooldowns[skill] > 0)
             {
-                SkillCooldowns[skill] -= dt;
-                if (SkillCooldowns[skill] < 0) SkillCooldowns[skill] = 0;
+                SkillCooldowns[skill] = MathF.Max(0f, SkillCooldowns[skill] - dt);
             }
-        });
+        }
     }
 
     public void Draw(Player p)

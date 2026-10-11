@@ -2,7 +2,6 @@
 using Raylib_cs;
 
 AppConfig config = AppConfig.Load("config.json");
-
 int sw = config.Display.ScreenWidth;
 int sh = config.Display.ScreenHeight;
 
@@ -22,7 +21,7 @@ Player? p2 = null;
 
 GameState.SetState(State.MainMenu);
 
-while (GameState.CurrentState != State.Exit || Raylib.WindowShouldClose())
+while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
     timer.Update(dt);
@@ -36,17 +35,19 @@ while (GameState.CurrentState != State.Exit || Raylib.WindowShouldClose())
     GameData data = new GameData(p1, p2, timer, lua, config);
 
     GUIEngine.Update(ref p1, ref p2, data);
+    HandlePauseInput();
 
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
-        p1.HandleInput();
-        p2.HandleInput();
-        physics.Update(data);
+        while (timer.CheckFixedTick())
+        {
+            p1.HandleInput();
+            p2.HandleInput();
+
+            physics.Update(data);
+        }
     }
 
-    HandlePauseInput();
-
-    // Render loop
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.RAYWHITE);
 
@@ -66,13 +67,9 @@ void HandlePauseInput()
     if (Raylib.IsKeyPressed(config.Controls.Pause))
     {
         if (GameState.CurrentState == State.Playing)
-        {
             GameState.SetState(State.Paused);
-        }
         else if (GameState.CurrentState == State.Paused)
-        {
             GameState.SetState(State.Playing);
-        }
     }
 }
 
