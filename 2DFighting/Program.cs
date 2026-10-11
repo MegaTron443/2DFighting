@@ -22,7 +22,7 @@ Player? p2 = null;
 
 GameState.SetState(State.MainMenu);
 
-while (!Raylib.WindowShouldClose())
+while (GameState.CurrentState != State.Exit || Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
     timer.Update(dt);
@@ -49,7 +49,6 @@ while (!Raylib.WindowShouldClose())
     // Render loop
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.RAYWHITE);
-    Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, sw, (int)PhysicsEngine.GroundY, Color.BLACK);
 
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
