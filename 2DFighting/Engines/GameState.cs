@@ -11,7 +11,9 @@ public class GameState
 public enum State
 {
     MainMenu,
+    ChoiceMenu,
     Playing,
     Paused,
-    GameOver
+    GameOver,
+    Exit,
 }
