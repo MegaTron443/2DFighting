@@ -2,9 +2,9 @@ using Raylib_cs;
 
 public class PhysicsEngine
 {
-    public const float GroundY = 500f;
-    public const float LeftBoundary = 40f;
-    public const float RightBoundary = 760f;
+    public static float GroundY = 0.85f*Raylib.GetScreenHeight();
+    public static float LeftBoundary = 0.01f*Raylib.GetScreenWidth();
+    public static float RightBoundary = 0.99f*Raylib.GetScreenWidth();
 
     public void Initialize() { }
 
