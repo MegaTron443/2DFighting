@@ -7,7 +7,7 @@ public class SkillData
     public int StartupFrames { get; set; }
     public int ActiveFrames { get; set; }
     public int RecoveryFrames { get; set; }
-    public Rectangle HitboxOffset { get; set; }
+    public Rectangle HitboxOffsetPct { get; set; }
     public float HitStun { get; set; }
     public float CooldownTime { get; set; }
 }

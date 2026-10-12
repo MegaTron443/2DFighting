@@ -3,11 +3,11 @@ Character = {
     
     -- Physics & Core Body
     physics = {
-        width = 60.0,
-        height = 110.0,
-        walk_speed = 320.0,
-        jump_force = -650.0,
-        gravity = 1400.0,
+        width_pct = 0.05,
+        height_pct = 0.20,
+        walk_speed_pct = 0.25,
+        jump_force_pct = -0.65,
+        gravity_pct = 1.40,
         friction = 0.85
     },
 
@@ -16,8 +16,8 @@ Character = {
         sprite_sheet = "Assets/Characters/brawler_sheet.png",
         frame_width = 128,
         frame_height = 128,
-        draw_offset_x = -34.0,
-        draw_offset_y = -18.0
+        draw_offset_x_pct = -0.55,
+        draw_offset_y_pct = -0.15
     },
 
     -- Animations
@@ -36,8 +36,7 @@ Character = {
             startup_frames = 4,
             active_frames = 3,
             recovery_frames = 8,
-            -- Hitbox relative to player's root (X, Y, Width, Height)
-            hitbox = { x_offset = 50.0, y_offset = 25.0, width = 45.0, height = 25.0 },
+            hitbox = { x_offset_pct = 0.80, y_offset_pct = 0.20, width_pct = 0.75, height_pct = 0.25 },
             hitStun = 0.25,
             cooldown_time = 10.0
         },
@@ -47,7 +46,7 @@ Character = {
             startup_frames = 9,
             active_frames = 5,
             recovery_frames = 16,
-            hitbox = { x_offset = 55.0, y_offset = 40.0, width = 60.0, height = 30.0 },
+            hitbox = { x_offset_pct = 0.80, y_offset_pct = 0.50, width_pct = 1.0, height_pct = 0.35 },
             hitStun = 0.5,
             cooldown_time = 2.0
         }

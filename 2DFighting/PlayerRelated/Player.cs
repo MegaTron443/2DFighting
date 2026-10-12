@@ -47,7 +47,13 @@ public class Player
     public Rectangle GetHurtbox()
     {
         if (CurrentCharacter == null) return default;
-        return new Rectangle(Position.X, Position.Y, CurrentCharacter.Width, CurrentCharacter.Height);
+        
+        return new Rectangle(
+            Position.X - (CurrentCharacter.Width / 2f),
+            Position.Y - (CurrentCharacter.Height / 2f),
+            CurrentCharacter.Width,
+            CurrentCharacter.Height
+        );
     }
 
     public bool TryGetHitbox(out Rectangle hitbox)
@@ -56,12 +62,23 @@ public class Player
         if (CurrentCharacter == null || !CurrentCharacter.IsHitboxActive) return false;
 
         SkillData skill = CurrentCharacter.ActiveSkill!;
-        Rectangle offset = skill.HitboxOffset;
-        float hitX = FacingRight
-            ? Position.X + offset.x
-            : Position.X + CurrentCharacter.Width - offset.x - offset.width;
+        Rectangle pct = skill.HitboxOffsetPct;
 
-        hitbox = new Rectangle(hitX, Position.Y + offset.y, offset.width, offset.height);
+        float hbWidth = CurrentCharacter.Width * pct.width;
+        float hbHeight = CurrentCharacter.Height * pct.height;
+        float offsetX = CurrentCharacter.Width * pct.x;
+        float offsetY = CurrentCharacter.Height * pct.y;
+
+        float rootX = Position.X - (CurrentCharacter.Width / 2f);
+        float rootY = Position.Y - (CurrentCharacter.Height / 2f);
+
+        float hitX = FacingRight
+            ? rootX + offsetX
+            : rootX + CurrentCharacter.Width - offsetX - hbWidth;
+
+        float hitY = rootY + offsetY;
+
+        hitbox = new Rectangle(hitX, hitY, hbWidth, hbHeight);
         return true;
     }
 

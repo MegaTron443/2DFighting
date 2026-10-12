@@ -6,20 +6,27 @@ public class Character
 {
     public string Name { get; private set; } = "";
 
-    // --- Physics Parameters (From Lua) ---
-    public float Width { get; private set; } = 60f;
-    public float Height { get; private set; } = 110f;
-    public float WalkSpeed { get; private set; } = 320f;
-    public float JumpForce { get; private set; } = -650f;
-    public float Gravity { get; private set; } = 1400f;
+    // --- Viewport Percentage Ratios ---
+    public float WidthPct { get; private set; } = 0.05f;
+    public float HeightPct { get; private set; } = 0.20f;
+    public float WalkSpeedPct { get; private set; } = 0.25f;
+    public float JumpForcePct { get; private set; } = -0.65f;
+    public float GravityPct { get; private set; } = 1.40f;
     public float Friction { get; private set; } = 0.85f;
     public float HitStun { get; private set; } = 0.25f;
 
+    // --- Physics Parameters (From Lua) ---
+    public float Width => Raylib.GetScreenWidth() * WidthPct;
+    public float Height => Raylib.GetScreenHeight() * HeightPct;
+    public float WalkSpeed => Raylib.GetScreenWidth() * WalkSpeedPct;
+    public float JumpForce => Raylib.GetScreenHeight() * JumpForcePct;
+    public float Gravity => Raylib.GetScreenHeight() * GravityPct;
+
     // --- Rendering Offsets ---
-    public float DrawOffsetX { get; private set; } = 0f;
-    public float DrawOffsetY { get; private set; } = 0f;
-    public int FrameWidth { get; private set; } = 128;
-    public int FrameHeight { get; private set; } = 128;
+    public float DrawOffsetX => Width * DrawOffsetXPct;
+    public float DrawOffsetY => Height * DrawOffsetYPct;
+    public float DrawOffsetXPct { get; private set; } = 0f;
+    public float DrawOffsetYPct { get; private set; } = 0f;
 
     // --- Actions & Skills ---
     public SkillData? ActiveSkill { get; private set; }
@@ -56,21 +63,19 @@ public class Character
         var phys = t.Get("physics").Table;
         if (phys != null)
         {
-            Width = (float)(phys.Get("width").CastToNumber() ?? 60.0);
-            Height = (float)(phys.Get("height").CastToNumber() ?? 110.0);
-            WalkSpeed = (float)(phys.Get("walk_speed").CastToNumber() ?? 320.0);
-            JumpForce = (float)(phys.Get("jump_force").CastToNumber() ?? -650.0);
-            Gravity = (float)(phys.Get("gravity").CastToNumber() ?? 1400.0);
+            WidthPct = (float)(phys.Get("width_pct").CastToNumber() ?? 0.05);
+            HeightPct = (float)(phys.Get("height_pct").CastToNumber() ?? 0.20);
+            WalkSpeedPct = (float)(phys.Get("walk_speed_pct").CastToNumber() ?? 0.25);
+            JumpForcePct = (float)(phys.Get("jump_force_pct").CastToNumber() ?? -0.65);
+            GravityPct = (float)(phys.Get("gravity_pct").CastToNumber() ?? 1.40);
             Friction = (float)(phys.Get("friction").CastToNumber() ?? 0.85);
         }
 
         var rend = t.Get("rendering").Table;
         if (rend != null)
         {
-            FrameWidth = (int)(rend.Get("frame_width").CastToNumber() ?? 128);
-            FrameHeight = (int)(rend.Get("frame_height").CastToNumber() ?? 128);
-            DrawOffsetX = (float)(rend.Get("draw_offset_x").CastToNumber() ?? 0);
-            DrawOffsetY = (float)(rend.Get("draw_offset_y").CastToNumber() ?? 0);
+            DrawOffsetXPct = (float)(rend.Get("draw_offset_x_pct").CastToNumber() ?? 0.0);
+            DrawOffsetYPct = (float)(rend.Get("draw_offset_y_pct").CastToNumber() ?? 0.0);
         }
 
         var skillsTable = t.Get("skills").Table;
@@ -80,15 +85,15 @@ public class Character
             {
                 var sTable = pair.Value.Table;
                 var hb = sTable.Get("hitbox").Table;
-                Rectangle hbRect = new Rectangle(0, 0, 0, 0);
+                Rectangle hbPctRect = new Rectangle(0, 0, 0, 0);
 
                 if (hb != null)
                 {
-                    hbRect = new Rectangle(
-                        (float)(hb.Get("x_offset").CastToNumber() ?? 0),
-                        (float)(hb.Get("y_offset").CastToNumber() ?? 0),
-                        (float)(hb.Get("width").CastToNumber() ?? 20),
-                        (float)(hb.Get("height").CastToNumber() ?? 20)
+                    hbPctRect = new Rectangle(
+                        (float)(hb.Get("x_offset_pct").CastToNumber() ?? hb.Get("x_offset").CastToNumber() ?? 0.0),
+                        (float)(hb.Get("y_offset_pct").CastToNumber() ?? hb.Get("y_offset").CastToNumber() ?? 0.0),
+                        (float)(hb.Get("width_pct").CastToNumber() ?? hb.Get("width").CastToNumber() ?? 0.2),
+                        (float)(hb.Get("height_pct").CastToNumber() ?? hb.Get("height").CastToNumber() ?? 0.2)
                     );
                 }
 
@@ -100,7 +105,7 @@ public class Character
                     StartupFrames = (int)(sTable.Get("startup_frames").CastToNumber() ?? 0),
                     ActiveFrames = (int)(sTable.Get("active_frames").CastToNumber() ?? 0),
                     RecoveryFrames = (int)(sTable.Get("recovery_frames").CastToNumber() ?? 0),
-                    HitboxOffset = hbRect,
+                    HitboxOffsetPct = hbPctRect,
                     HitStun = (float)(sTable.Get("hitStun").CastToNumber() ?? 0.25),
                     CooldownTime = (float)(sTable.Get("cooldown_time").CastToNumber() ?? 0.0)
                 };

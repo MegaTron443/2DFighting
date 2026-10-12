@@ -30,9 +30,12 @@ public class PhysicsEngine
     private void ClampPlayer(Player p)
     {
         Character ch = p.CurrentCharacter!;
-        if (p.Position.Y + ch.Height >= GroundY)
+        float halfW = ch.Width / 2f;
+        float halfH = ch.Height / 2f;
+
+        if (p.Position.Y + halfH >= GroundY)
         {
-            p.Position.Y = GroundY - ch.Height;
+            p.Position.Y = GroundY - halfH;
             p.Velocity.Y = 0;
             p.IsGrounded = true;
         }
@@ -41,8 +44,11 @@ public class PhysicsEngine
             p.IsGrounded = false;
         }
 
-        if (p.Position.X < LeftBoundary) p.Position.X = LeftBoundary;
-        if (p.Position.X + ch.Width > RightBoundary) p.Position.X = RightBoundary - ch.Width;
+        if (p.Position.X - halfW < LeftBoundary) 
+            p.Position.X = LeftBoundary + halfW;
+            
+        if (p.Position.X + halfW > RightBoundary) 
+            p.Position.X = RightBoundary - halfW;
     }
 
     private void ResolvePushback(Player p1, Player p2)
