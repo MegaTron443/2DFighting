@@ -40,15 +40,21 @@ public class PhysicsEngine
 
         if (HitstopTimer > 0f)
         {
+            data.Player1.SavePreviousState();
+            data.Player2.SavePreviousState();
             HitstopTimer -= dt;
             return;
         }
+
+        data.Player1.SavePreviousState();
+        data.Player2.SavePreviousState();
 
         data.Player1.Update(dt);
         data.Player2.Update(dt);
 
         ClampPlayer(data.Player1);
         ClampPlayer(data.Player2);
+
         ResolvePushback(data.Player1, data.Player2);
 
         UpdateAutoFacing(data.Player1, data.Player2);

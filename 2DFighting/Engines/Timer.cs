@@ -10,6 +10,8 @@ public class Timer
     public float DeltaTime => _deltaTime;
     public float ElapsedTime => _elapsedTime;
 
+    public float Alpha => Math.Clamp(_accumulator / FixedDeltaTime, 0f, 1f);
+
     public void Initialize()
     {
         _deltaTime = 0f;

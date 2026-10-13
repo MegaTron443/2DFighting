@@ -39,12 +39,17 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
         timer.Update(dt);
-        
-        p1.HandleInput();
-        p2.HandleInput();
+
+        p1.PollInput();
+        p2.PollInput();
 
         while (timer.CheckFixedTick())
         {
+            if (PhysicsEngine.HitstopTimer <= 0f)
+            {
+                p1.ConsumeInput();
+                p2.ConsumeInput();
+            }
             physics.Update(data);
         }
     }
@@ -54,8 +59,8 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
-        p1.Draw();
-        p2.Draw();
+        p1.Draw(timer.Alpha);
+        p2.Draw(timer.Alpha);
     }
 
     GUIEngine.Draw(data);

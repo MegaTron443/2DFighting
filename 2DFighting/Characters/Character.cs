@@ -245,9 +245,9 @@ public class Character
         }
     }
 
-    public void Draw(Player p)
+    public void Draw(Player p, float alpha)
     {
-        Rectangle hurtbox = p.GetHurtbox();
+        Rectangle hurtbox = p.GetRenderHurtbox(alpha);
 
         Color bodyColor = p.IsInHitstun
             ? Color.ORANGE
@@ -264,7 +264,7 @@ public class Character
             Raylib.DrawRectangleLinesEx(hurtbox, 2, Color.WHITE);
         }
 
-        if (p.TryGetHitbox(out Rectangle hitbox))
+        if (p.TryGetRenderHitbox(alpha, out Rectangle hitbox))
         {
             Raylib.DrawRectangleRec(hitbox, new Color(255, 0, 0, 160));
             Raylib.DrawRectangleLinesEx(hitbox, 2, Color.YELLOW);

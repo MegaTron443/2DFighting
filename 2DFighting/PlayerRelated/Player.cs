@@ -19,6 +19,7 @@ public class Player
     public Character? CurrentCharacter { get; private set; }
 
     public Vector2 Position;
+    public Vector2 PreviousPosition;
     public Vector2 Velocity;
     public bool IsGrounded = false;
     public bool FacingRight = true;
@@ -43,6 +44,7 @@ public class Player
         _keyHandler = new KeyHandler(appConfig);
         SpawnPosition = spawnPos;
         Position = spawnPos;
+        PreviousPosition = spawnPos;
         FacingRight = playerIndex == 0;
 
         if (_isAI)
@@ -62,6 +64,7 @@ public class Player
     public void ResetState(bool faceRight)
     {
         Position = SpawnPosition;
+        PreviousPosition = SpawnPosition;
         Velocity = Vector2.Zero;
         Health = MAX_HEALTH;
         HitstunTimer = 0f;
@@ -77,6 +80,16 @@ public class Player
             CurrentCharacter.HasHit = false;
             CurrentCharacter.SkillCooldowns.Clear();
         }
+    }
+
+    public void SavePreviousState()
+    {
+        PreviousPosition = Position;
+    }
+
+    public Vector2 GetInterpolatedPosition(float alpha)
+    {
+        return Vector2.Lerp(PreviousPosition, Position, alpha);
     }
 
     public Rectangle GetHurtbox()
@@ -99,6 +112,55 @@ public class Player
             fullW,
             fullH
         );
+    }
+
+    public Rectangle GetRenderHurtbox(float alpha)
+    {
+        if (CurrentCharacter == null) return default;
+
+        Vector2 renderPos = GetInterpolatedPosition(alpha);
+        float fullW = CurrentCharacter.Width;
+        float fullH = CurrentCharacter.Height;
+
+        if (IsCrouching && IsGrounded)
+        {
+            float crouchH = fullH * CROUCH_HEIGHT_RATIO;
+            float topY = (renderPos.Y + (fullH / 2f)) - crouchH;
+            return new Rectangle(renderPos.X - (fullW / 2f), topY, fullW, crouchH);
+        }
+
+        return new Rectangle(
+            renderPos.X - (fullW / 2f),
+            renderPos.Y - (fullH / 2f),
+            fullW,
+            fullH
+        );
+    }
+
+    public bool TryGetRenderHitbox(float alpha, out Rectangle hitbox)
+    {
+        hitbox = default;
+        if (CurrentCharacter == null || !CurrentCharacter.IsHitboxActive) return false;
+
+        Vector2 renderPos = GetInterpolatedPosition(alpha);
+        SkillData skill = CurrentCharacter.ActiveSkill!;
+        Rectangle pct = skill.HitboxOffsetPct;
+
+        float hbWidth = CurrentCharacter.Width * pct.width;
+        float hbHeight = CurrentCharacter.Height * pct.height;
+        float offsetX = CurrentCharacter.Width * pct.x;
+        float offsetY = CurrentCharacter.Height * pct.y;
+
+        float rootX = renderPos.X - (CurrentCharacter.Width / 2f);
+        float rootY = renderPos.Y - (CurrentCharacter.Height / 2f);
+
+        float hitX = FacingRight
+            ? rootX + offsetX
+            : rootX + CurrentCharacter.Width - offsetX - hbWidth;
+        float hitY = rootY + offsetY;
+
+        hitbox = new Rectangle(hitX, hitY, hbWidth, hbHeight);
+        return true;
     }
 
     public bool TryGetHitbox(out Rectangle hitbox)
@@ -127,10 +189,15 @@ public class Player
         return true;
     }
 
-    public void HandleInput()
+    public void PollInput()
     {
-        if (GameState.CurrentState != State.Playing) return;
-        if (CurrentCharacter == null) return;
+        if (GameState.CurrentState != State.Playing || CurrentCharacter == null) return;
+        if (!_isAI) _keyHandler.PollHardwareInput(_playerIndex);
+    }
+
+    public void ConsumeInput()
+    {
+        if (GameState.CurrentState != State.Playing || CurrentCharacter == null) return;
         if (IsInHitstun) return;
 
         if (_isAI && _aiController != null)
@@ -139,7 +206,7 @@ public class Player
             return;
         }
 
-        IsInputIdle = _keyHandler.HandleInput(CurrentCharacter, this, _playerIndex);
+        IsInputIdle = _keyHandler.ConsumeBufferedInput(CurrentCharacter, this, _playerIndex);
     }
 
     public void Translate(float dx, float dy)
@@ -171,9 +238,9 @@ public class Player
         }
     }
 
-    public void Draw()
+    public void Draw(float alpha)
     {
         if (CurrentCharacter == null) return;
-        CurrentCharacter.Draw(this);
+        CurrentCharacter.Draw(this, alpha);
     }
 }
