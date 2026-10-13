@@ -119,6 +119,7 @@ public static class GUIEngine
                   {
                       if (ctx.Data.Player1?.CurrentCharacter != null && ctx.Data.Player2?.CurrentCharacter != null)
                       {
+                          PhysicsEngine.ResetMatch(ctx.Data.Player1, ctx.Data.Player2);
                           GameState.SetState(State.Playing);
                       }
                   })
@@ -166,7 +167,6 @@ public static class GUIEngine
                 MainMenu(ref p1, ref p2, data);
                 break;
             case State.ChoiceMenu:
-                DrawChoiceMenu(data);
                 break;
             case State.Playing:
                 break;
@@ -202,30 +202,7 @@ public static class GUIEngine
 
     private static void MainMenu(ref Player? p1, ref Player? p2, GameData data)
     {
-        Vector2 p1Spawn = new Vector2(sw * 0.1f, PhysicsEngine.GroundY * 0.9f);
-        Vector2 p2Spawn = new Vector2(sw * 0.9f, PhysicsEngine.GroundY * 0.9f);
 
-        if (Raylib.IsKeyPressed(KeyboardKey.KEY_ONE))
-        {
-            p1 = new Player("Player 1", isAI: false, playerIndex: 0, p1Spawn, data.AppConfig);
-            Character brawler = data.LuaEngine.CreateCharacter("brawler");
-            p1.ChangeCharacter(brawler);
-        }
-
-        if (Raylib.IsKeyPressed(KeyboardKey.KEY_TWO))
-        {
-            p2 = new Player("Player 2", isAI: false, playerIndex: 1, p2Spawn, data.AppConfig);
-            Character brawler2 = data.LuaEngine.CreateCharacter("brawler");
-            p2.ChangeCharacter(brawler2);
-        }
-
-        if (p1?.CurrentCharacter != null && p2?.CurrentCharacter != null)
-        {
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER))
-            {
-                GameState.SetState(State.Playing);
-            }
-        }
     }
 
     public static void GameOver()
@@ -245,6 +222,9 @@ public static class GUIEngine
                 break;
             case State.Playing:
                 DrawPlaying(data);
+                break;
+            case State.ChoiceMenu:
+                DrawChoiceMenu(data);
                 break;
             case State.Paused:
                 DrawPause(data);
@@ -290,32 +270,8 @@ public static class GUIEngine
 
     private static void DrawPlaying(GameData data)
     {
-        DrawHealthBar(data);
+        CombatHUD.Draw(data);
         Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, sw, (int)PhysicsEngine.GroundY, Color.BLACK);
-    }
-
-    private static void DrawHealthBar(GameData data)
-    {
-        if (data.Player1 == null || data.Player2 == null) return;
-
-        float p1HealthPercent = Math.Clamp(data.Player1.Health / (float)Player.MAX_HEALTH, 0f, 1f);
-        float p2HealthPercent = Math.Clamp(data.Player2.Health / (float)Player.MAX_HEALTH, 0f, 1f);
-
-        int barWidth = (int)(sw * 0.30f);
-        int barHeight = (int)(sh * 0.05f);
-
-        int p1BarX = (int)(sw * 0.10f);
-        int p2BarX = (int)(sw * 0.90f) - barWidth;
-        int barY = (int)(sh * 0.05f);
-
-        int p1Fill = (int)(barWidth * p1HealthPercent);
-        int p2Fill = (int)(barWidth * p2HealthPercent);
-
-        Raylib.DrawRectangle(p1BarX, barY, barWidth, barHeight, Color.GRAY);
-        Raylib.DrawRectangle(p2BarX, barY, barWidth, barHeight, Color.GRAY);
-
-        Raylib.DrawRectangle(p1BarX, barY, p1Fill, barHeight, Color.RED);
-        Raylib.DrawRectangle(p2BarX + (barWidth - p2Fill), barY, p2Fill, barHeight, Color.BLUE);
     }
 
     private static void DrawPause(GameData data)

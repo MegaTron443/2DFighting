@@ -4,6 +4,7 @@ using MoonSharp.Interpreter;
 [MoonSharpUserData]
 public class PhysicsEngine
 {
+    public static float RoundTimer { get; set; } = 99f;
     public const float GROUND_Y_PCT = 0.85f;
     public const float LEFT_BOUNDARY_PCT = 0.01f;
     public const float RIGHT_BOUNDARY_PCT = 0.99f;
@@ -55,6 +56,16 @@ public class PhysicsEngine
 
         CheckHits(data.Player1, data.Player2);
         CheckHits(data.Player2, data.Player1);
+
+        RoundTimer = MathF.Max(0f, RoundTimer - dt);
+        if (RoundTimer <= 0f)
+        {
+            GameState.SetState(State.GameOver);
+            return;
+        }
+
+        if (!data.Player1.IsInHitstun) data.Player2.ComboCount = 0;
+        if (!data.Player2.IsInHitstun) data.Player1.ComboCount = 0;
     }
 
     private void UpdateAutoFacing(Player player, Player opponent)
@@ -109,6 +120,11 @@ public class PhysicsEngine
             target.IsAirStalled = true;
             target.SetVelocity(0f, 0f);
         }
+
+        if (damage > 0 && stun > 0f)
+        {
+            source.ComboCount++;
+        }
     }
 
     public static void ApplyLaunchForce(Player source, Player target, int damage, float stun, float launchXPct, float launchYPct)
@@ -133,6 +149,19 @@ public class PhysicsEngine
         float vx = dir * launchXPct * Raylib.GetScreenWidth();
         float vy = launchYPct * Raylib.GetScreenHeight();
         target.SetVelocity(vx, vy);
+
+        if (damage > 0 && stun > 0f)
+        {
+            source.ComboCount++;
+        }
+    }
+
+    public static void ResetMatch(Player p1, Player p2)
+    {
+        HitstopTimer = 0f;
+        RoundTimer = 99f;
+        p1.ResetState(faceRight: true);
+        p2.ResetState(faceRight: false);
     }
 
     private void ClampPlayer(Player p)

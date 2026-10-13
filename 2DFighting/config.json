@@ -7,7 +7,6 @@
   },
   "Controls": {
     "Pause": "KEY_EQUAL",
-    "Restart": "KEY_R",
     "P1": {
       "Left": "KEY_A",
       "Right": "KEY_D",

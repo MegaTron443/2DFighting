@@ -5,6 +5,8 @@ using MoonSharp.Interpreter;
 [MoonSharpUserData]
 public class Player
 {
+    public Vector2 SpawnPosition { get; }
+    public int ComboCount { get; set; } = 0;
     public const int MAX_HEALTH = 100;
     public const float CROUCH_HEIGHT_RATIO = 0.65f;
     private readonly string _name;
@@ -39,6 +41,7 @@ public class Player
         _isAI = isAI;
         _playerIndex = playerIndex;
         _keyHandler = new KeyHandler(appConfig);
+        SpawnPosition = spawnPos;
         Position = spawnPos;
         FacingRight = playerIndex == 0;
 
@@ -54,6 +57,26 @@ public class Player
         Health = MAX_HEALTH;
         Velocity = Vector2.Zero;
         return true;
+    }
+
+    public void ResetState(bool faceRight)
+    {
+        Position = SpawnPosition;
+        Velocity = Vector2.Zero;
+        Health = MAX_HEALTH;
+        HitstunTimer = 0f;
+        IsGrounded = false;
+        IsCrouching = false;
+        IsAirStalled = false;
+        FacingRight = faceRight;
+        ComboCount = 0;
+
+        if (CurrentCharacter != null)
+        {
+            CurrentCharacter.ActiveSkill = null;
+            CurrentCharacter.HasHit = false;
+            CurrentCharacter.SkillCooldowns.Clear();
+        }
     }
 
     public Rectangle GetHurtbox()

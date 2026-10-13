@@ -56,7 +56,6 @@ public class DisplaySettings
 public class ControlSettings
 {
     public KeyboardKey Pause { get; set; } = KeyboardKey.KEY_EQUAL;
-    public KeyboardKey Restart { get; set; } = KeyboardKey.KEY_R;
     public PlayerControls P1 { get; set; } = new PlayerControls
     {
         Left = KeyboardKey.KEY_A,

@@ -24,7 +24,6 @@ GameState.SetState(State.MainMenu);
 while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
-    timer.Update(dt);
 
     if (GameState.CurrentState == State.GameOver && (p1 != null || p2 != null))
     {
@@ -39,6 +38,8 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
+        timer.Update(dt);
+        
         p1.HandleInput();
         p2.HandleInput();
 
