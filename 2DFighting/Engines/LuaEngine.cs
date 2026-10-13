@@ -2,6 +2,16 @@ using System;
 using System.IO;
 using MoonSharp.Interpreter;
 
+[Flags]
+public enum ActionButtonMask
+{
+    None = 0,
+    KeyTop = 1 << 0,
+    KeyBottom = 1 << 1,
+    KeyLeft = 1 << 2,
+    KeyRight = 1 << 3
+}
+
 public class LuaEngine
 {
     private static readonly string RootPath = AppDomain.CurrentDomain.BaseDirectory;
@@ -24,6 +34,36 @@ public class LuaEngine
         {
             Directory.CreateDirectory(charPath);
         }
+
+        RegisterKeysEnvironment();
+    }
+
+    private void RegisterKeysEnvironment()
+    {
+        string helperScript = @"
+            local meta = {}
+            meta.__add = function(a, b)
+                local v1 = type(a) == 'table' and a.value or a
+                local v2 = type(b) == 'table' and b.value or b
+                local result = { value = (v1 + v2) }
+                setmetatable(result, meta)
+                return result
+            end
+
+            local function makeKey(val)
+                local t = { value = val }
+                setmetatable(t, meta)
+                return t
+            end
+
+            Keys = {
+                KeyTop    = makeKey(1),   -- 1 << 0
+                KeyBottom = makeKey(2),   -- 1 << 1
+                KeyLeft   = makeKey(4),   -- 1 << 2
+                KeyRight  = makeKey(8),   -- 1 << 3
+            }
+        ";
+        ScriptRuntime.DoString(helperScript);
     }
 
     public Character CreateCharacter(string characterId)

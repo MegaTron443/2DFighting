@@ -31,6 +31,7 @@ public class Animation
 public enum AnimationState
 {
     Idle,
+    Blocking,
     Walking,
     Jumping,
     Attacking,

@@ -230,7 +230,7 @@ public static class GUIEngine
 
     public static void GameOver()
     {
-        if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER) || Raylib.IsKeyPressed(KeyboardKey.KEY_R))
+        if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER))
         {
             GameState.SetState(State.MainMenu);
         }

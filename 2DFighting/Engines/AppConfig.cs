@@ -63,8 +63,10 @@ public class ControlSettings
         Right = KeyboardKey.KEY_D,
         Jump = KeyboardKey.KEY_W,
         Crouch = KeyboardKey.KEY_S,
-        LightPunch = KeyboardKey.KEY_J,
-        HeavyKick = KeyboardKey.KEY_K
+        KeyTop =  KeyboardKey.KEY_T,
+        KeyRight = KeyboardKey.KEY_H,
+        KeyLeft = KeyboardKey.KEY_F,
+        KeyBottom = KeyboardKey.KEY_G
     };
 
     public PlayerControls P2 { get; set; } = new PlayerControls
@@ -73,8 +75,10 @@ public class ControlSettings
         Right = KeyboardKey.KEY_RIGHT,
         Jump = KeyboardKey.KEY_UP,
         Crouch = KeyboardKey.KEY_DOWN,
-        LightPunch = KeyboardKey.KEY_KP_1,
-        HeavyKick = KeyboardKey.KEY_KP_2
+        KeyTop =  KeyboardKey.KEY_I,
+        KeyRight = KeyboardKey.KEY_L,
+        KeyLeft = KeyboardKey.KEY_J,
+        KeyBottom = KeyboardKey.KEY_K
     };
 }
 
@@ -84,6 +88,9 @@ public class PlayerControls
     public KeyboardKey Right { get; set; }
     public KeyboardKey Jump { get; set; }
     public KeyboardKey Crouch { get; set; }
-    public KeyboardKey LightPunch { get; set; }
-    public KeyboardKey HeavyKick { get; set; }
+
+    public KeyboardKey KeyTop { get; set; }
+    public KeyboardKey KeyRight { get; set; }
+    public KeyboardKey KeyLeft { get; set; }
+    public KeyboardKey KeyBottom { get; set; }
 }

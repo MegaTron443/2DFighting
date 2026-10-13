@@ -18,6 +18,14 @@ public class Player
     public Vector2 Velocity;
     public bool IsGrounded = false;
     public bool FacingRight = true;
+    public bool IsInputIdle { get; private set; } = true;
+
+    public bool IsNeutralBlocking => 
+        IsGrounded && 
+        IsInputIdle && 
+        CurrentCharacter?.ActiveSkill == null && 
+        !IsInHitstun;
+    
     public int Health { get; set; } = 100;
     public bool IsAlive => Health > 0;
 
@@ -94,7 +102,7 @@ public class Player
             return;
         }
 
-        _keyHandler.HandleInput(CurrentCharacter, this, _playerIndex);
+        IsInputIdle = _keyHandler.HandleInput(CurrentCharacter, this, _playerIndex);
     }
 
     public void Update(float dt)

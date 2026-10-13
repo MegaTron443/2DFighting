@@ -13,16 +13,20 @@
       "Right": "KEY_D",
       "Jump": "KEY_W",
       "Crouch": "KEY_S",
-      "LightPunch": "KEY_J",
-      "HeavyKick": "KEY_K"
+      "KeyTop": "KEY_T",
+      "KeyRight": "KEY_H",
+      "KeyLeft": "KEY_F",
+      "KeyBottom": "KEY_G"
     },
     "P2": {
       "Left": "KEY_LEFT",
       "Right": "KEY_RIGHT",
       "Jump": "KEY_UP",
       "Crouch": "KEY_DOWN",
-      "LightPunch": "KEY_P",
-      "HeavyKick": "KEY_O"
+      "KeyTop": "KEY_I",
+      "KeyRight": "KEY_L",
+      "KeyLeft": "KEY_J",
+      "KeyBottom": "KEY_K"
     }
   }
 }

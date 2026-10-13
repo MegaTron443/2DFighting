@@ -39,11 +39,11 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
+        p1.HandleInput();
+        p2.HandleInput();
+
         while (timer.CheckFixedTick())
         {
-            p1.HandleInput();
-            p2.HandleInput();
-
             physics.Update(data);
         }
     }

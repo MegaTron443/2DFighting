@@ -29,7 +29,7 @@ public class Character
     public float DrawOffsetYPct { get; private set; } = 0f;
 
     // --- Actions & Skills ---
-    public SkillData? ActiveSkill { get; private set; }
+    public SkillData? ActiveSkill { get; set; }
     public int CurrentActionFrame { get; private set; } = 0;
     public Dictionary<string, SkillData> Skills { get; } = new();
     public Dictionary<string, float> SkillCooldowns { get; } = new();
@@ -97,17 +97,35 @@ public class Character
                     );
                 }
 
+                var triggerObj = sTable.Get("input_trigger");
+                int triggerMask = 0;
+
+                if (triggerObj.Type == DataType.Table)
+                {
+                    triggerMask = (int)(triggerObj.Table.Get("value").CastToNumber() ?? 0);
+                }
+                else if (triggerObj.Type == DataType.Number)
+                {
+                    triggerMask = (int)triggerObj.Number;
+                }
+
                 Skills[pair.Key.String] = new SkillData
                 {
                     Name = pair.Key.String,
-                    InputKey = sTable.Get("input_trigger").String ?? "",
+                    TriggerMask = triggerMask,
                     Damage = (int)(sTable.Get("damage").CastToNumber() ?? 10),
                     StartupFrames = (int)(sTable.Get("startup_frames").CastToNumber() ?? 0),
                     ActiveFrames = (int)(sTable.Get("active_frames").CastToNumber() ?? 0),
                     RecoveryFrames = (int)(sTable.Get("recovery_frames").CastToNumber() ?? 0),
                     HitboxOffsetPct = hbPctRect,
                     HitStun = (float)(sTable.Get("hitStun").CastToNumber() ?? 0.25),
-                    CooldownTime = (float)(sTable.Get("cooldown_time").CastToNumber() ?? 0.0)
+                    CooldownTime = (float)(sTable.Get("cooldown_time").CastToNumber() ?? 0.0),
+                    IsBlockBreak = sTable.Get("is_blockbreak").CastToBool(),
+                    OnBlockBreak = sTable.Get("on_blockbreak"),
+                    IsCounter = sTable.Get("is_counter").CastToBool(),
+                    OnCounter = sTable.Get("on_counter"),
+                    CustomLogic = sTable.Get("is_customlogic").CastToBool(),
+                    OnCustomLogic = sTable.Get("on_customlogic")
                 };
             }
         }
@@ -137,7 +155,7 @@ public class Character
         if (ActiveSkill != null) return;
         if (Skills.TryGetValue(skillName, out var skill))
         {
-            ActiveSkill = skill;
+            ActiveSkill = skill;    
             CurrentActionFrame = 0;
             HasHit = false;
             p.Velocity.X = 0;
@@ -167,6 +185,10 @@ public class Character
 
         if (ActiveSkill != null)
         {
+            if (ActiveSkill.CustomLogic && ActiveSkill.OnCustomLogic?.Function != null)
+            {
+                ActiveSkill.OnCustomLogic.Function.Call(p, this, dt);
+            }
             CurrentActionFrame++;
             int total = ActiveSkill.StartupFrames + ActiveSkill.ActiveFrames + ActiveSkill.RecoveryFrames;
             if (CurrentActionFrame >= total)
