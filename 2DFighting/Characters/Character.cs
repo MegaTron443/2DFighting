@@ -51,6 +51,17 @@ public class Character
         }
     }
 
+    public bool IsHyperArmorActive
+    {
+        get
+        {
+            if (ActiveSkill == null || !ActiveSkill.IsHyperFrames) return false;
+            int start = ActiveSkill.HyperStartFrame;
+            int end = start + ActiveSkill.HyperFrames;
+            return CurrentActionFrame >= start && CurrentActionFrame < end;
+        }
+    }
+
     private void LoadFromLua(string path, Script script)
     {
         script.DoFile(path);
@@ -109,14 +120,26 @@ public class Character
                     triggerMask = (int)triggerObj.Number;
                 }
 
+                string heightStr = (sTable.Get("attack_height").String ?? "mid").ToLowerInvariant();
+                AttackHeight atkHeight = heightStr switch
+                {
+                    "low"      => AttackHeight.Low,
+                    "overhead" => AttackHeight.Overhead,
+                    _          => AttackHeight.Mid
+                };
+
                 Skills[pair.Key.String] = new SkillData
                 {
                     Name = pair.Key.String,
                     TriggerMask = triggerMask,
                     Damage = (int)(sTable.Get("damage").CastToNumber() ?? 10),
+                    Height = atkHeight,
                     StartupFrames = (int)(sTable.Get("startup_frames").CastToNumber() ?? 0),
                     ActiveFrames = (int)(sTable.Get("active_frames").CastToNumber() ?? 0),
                     RecoveryFrames = (int)(sTable.Get("recovery_frames").CastToNumber() ?? 0),
+                    IsHyperFrames = sTable.Get("is_hyperframes").CastToBool(),
+                    HyperStartFrame = (int)(sTable.Get("hyper_start_frame").CastToNumber() ?? 0),
+                    HyperFrames = (int)(sTable.Get("hyper_frames").CastToNumber() ?? 0),
                     HitboxOffsetPct = hbPctRect,
                     HitStun = (float)(sTable.Get("hitStun").CastToNumber() ?? 0.25),
                     CooldownTime = (float)(sTable.Get("cooldown_time").CastToNumber() ?? 0.0),
@@ -137,8 +160,6 @@ public class Character
         if (ActiveSkill != null) return;
 
         p.Velocity.X = direction * WalkSpeed;
-        if (direction > 0) p.FacingRight = true;
-        if (direction < 0) p.FacingRight = false;
     }
 
     public void Jump(Player p)
@@ -154,6 +175,7 @@ public class Character
     {
         if (SkillCooldowns.ContainsKey(skillName) && SkillCooldowns[skillName] > 0) return;
         if (ActiveSkill != null) return;
+        if (p.IsCrouching) return;
         if (Skills.TryGetValue(skillName, out var skill))
         {
             ActiveSkill = skill;    
@@ -167,9 +189,20 @@ public class Character
 
     public void Update(Player p, float dt)
     {
+        if (p.IsInHitstun && ActiveSkill != null)
+        {
+            ActiveSkill = null;
+            CurrentActionFrame = 0;
+            HasHit = false;
+        }
+
         if (!p.IsGrounded)
         {
-            if (IsHitboxActive || p.IsInHitstun)
+            if (p.IsInHitstun && p.IsAirStalled)
+            {
+                p.Velocity.Y = 0f;
+            }
+            else if (IsHitboxActive && (ActiveSkill == null || !ActiveSkill.CustomLogic))
             {
                 p.Velocity.Y = 0f;
             }
@@ -180,6 +213,7 @@ public class Character
         }
         else if (ActiveSkill == null)
         {
+            p.IsAirStalled = false;
             p.Velocity.X *= Friction;
         }
 
@@ -191,6 +225,7 @@ public class Character
             {
                 ActiveSkill.OnCustomLogic.Function.Call(p, this, dt);
             }
+
             CurrentActionFrame++;
             int total = ActiveSkill.StartupFrames + ActiveSkill.ActiveFrames + ActiveSkill.RecoveryFrames;
             if (CurrentActionFrame >= total)
@@ -214,8 +249,20 @@ public class Character
     {
         Rectangle hurtbox = p.GetHurtbox();
 
-        Raylib.DrawRectangleRec(hurtbox, p.FacingRight ? Color.DARKBLUE : Color.MAROON);
-        Raylib.DrawRectangleLinesEx(hurtbox, 2, Color.WHITE);
+        Color bodyColor = p.IsInHitstun
+            ? Color.ORANGE
+            : (p.FacingRight ? Color.DARKBLUE : Color.MAROON);
+
+        Raylib.DrawRectangleRec(hurtbox, bodyColor);
+
+        if (IsHyperArmorActive)
+        {
+            Raylib.DrawRectangleLinesEx(hurtbox, 5, Color.GOLD);
+        }
+        else
+        {
+            Raylib.DrawRectangleLinesEx(hurtbox, 2, Color.WHITE);
+        }
 
         if (p.TryGetHitbox(out Rectangle hitbox))
         {

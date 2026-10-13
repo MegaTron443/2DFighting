@@ -5,6 +5,8 @@ using MoonSharp.Interpreter;
 [MoonSharpUserData]
 public class Player
 {
+    public const int MAX_HEALTH = 100;
+    public const float CROUCH_HEIGHT_RATIO = 0.65f;
     private readonly string _name;
     private readonly bool _isAI;
     private readonly int _playerIndex;
@@ -19,6 +21,8 @@ public class Player
     public bool IsGrounded = false;
     public bool FacingRight = true;
     public bool IsInputIdle { get; private set; } = true;
+    public bool IsCrouching { get; set; } = false;
+    public bool IsAirStalled { get; set; } = false;
 
     public bool IsNeutralBlocking => 
         IsGrounded && 
@@ -26,7 +30,7 @@ public class Player
         CurrentCharacter?.ActiveSkill == null && 
         !IsInHitstun;
     
-    public int Health { get; set; } = 100;
+    public int Health { get; set; } = MAX_HEALTH;
     public bool IsAlive => Health > 0;
 
     public Player(string name, bool isAI, int playerIndex, Vector2 spawnPos, AppConfig appConfig)
@@ -47,7 +51,7 @@ public class Player
     public bool ChangeCharacter(Character newCharacter)
     {
         CurrentCharacter = newCharacter;
-        Health = 100;
+        Health = MAX_HEALTH;
         Velocity = Vector2.Zero;
         return true;
     }
@@ -55,12 +59,22 @@ public class Player
     public Rectangle GetHurtbox()
     {
         if (CurrentCharacter == null) return default;
-        
+
+        float fullW = CurrentCharacter.Width;
+        float fullH = CurrentCharacter.Height;
+
+        if (IsCrouching && IsGrounded)
+        {
+            float crouchH = fullH * CROUCH_HEIGHT_RATIO;
+            float topY = (Position.Y + (fullH / 2f)) - crouchH;
+            return new Rectangle(Position.X - (fullW / 2f), topY, fullW, crouchH);
+        }
+
         return new Rectangle(
-            Position.X - (CurrentCharacter.Width / 2f),
-            Position.Y - (CurrentCharacter.Height / 2f),
-            CurrentCharacter.Width,
-            CurrentCharacter.Height
+            Position.X - (fullW / 2f),
+            Position.Y - (fullH / 2f),
+            fullW,
+            fullH
         );
     }
 

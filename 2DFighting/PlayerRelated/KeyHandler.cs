@@ -30,7 +30,6 @@ public class KeyHandler
         float dir = 0;
         if (Raylib.IsKeyDown(controls.Right)) dir += 1;
         if (Raylib.IsKeyDown(controls.Left)) dir -= 1;
-        currentCharacter.Move(player, dir);
 
         bool jumped = false;
         if (Raylib.IsKeyPressed(controls.Jump))
@@ -40,6 +39,12 @@ public class KeyHandler
         }
 
         bool isCrouching = Raylib.IsKeyDown(controls.Crouch);
+        player.IsCrouching = isCrouching;
+        if (isCrouching)
+        {
+            dir = 0;
+        }
+        currentCharacter.Move(player, dir);
 
         int pressedThisFrame = 0;
         int heldThisFrame = 0;
@@ -55,10 +60,9 @@ public class KeyHandler
         if (Raylib.IsKeyDown(controls.KeyRight))     heldThisFrame |= (1 << 3);
 
         bool hasInput = dir != 0 
-                     || jumped 
-                     || isCrouching 
-                     || pressedThisFrame != 0 
-                     || heldThisFrame != 0;
+              || jumped 
+              || pressedThisFrame != 0 
+              || heldThisFrame != 0;
 
         if (!_inputBuffers.ContainsKey(playerIndex))
             _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
@@ -98,6 +102,9 @@ public class KeyHandler
         foreach (var skill in currentCharacter.Skills.Values)
         {
             if (skill.TriggerMask == 0) continue;
+
+            if (currentCharacter.SkillCooldowns.TryGetValue(skill.Name, out float cd) && cd > 0f)
+                continue;
 
             if ((combinedMask & skill.TriggerMask) == skill.TriggerMask)
             {
@@ -150,6 +157,11 @@ public class KeyHandler
 
         if (canExecute)
         {
+            if (currentCharacter.ActiveSkill != null)
+            {
+                currentCharacter.SkillCooldowns[currentCharacter.ActiveSkill.Name] = 0f;
+            }
+
             currentCharacter.ActiveSkill = null;
             currentCharacter.ExecuteSkill(player, bestSkill.Name);
             buffer.Clear();

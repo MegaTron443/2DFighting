@@ -67,7 +67,7 @@ public static class GUIEngine
             Vector2 spawn_p1 = new Vector2(sw * 0.1f, PhysicsEngine.GroundY * 0.9f);
             Player p1 = new Player("Player 1", isAI: false, playerIndex: 0, spawn_p1, ctx.Data.AppConfig);
 
-            Vector2 spawn_p2 = new Vector2(sw * 0.9f - 60f, PhysicsEngine.GroundY * 0.9f);
+            Vector2 spawn_p2 = new Vector2(sw * 0.9f, PhysicsEngine.GroundY * 0.9f);
             Player p2 = new Player("Player 2", isAI: isAI, playerIndex: 1, spawn_p2, ctx.Data.AppConfig);
 
             ctx.SetP1(p1);
@@ -203,7 +203,7 @@ public static class GUIEngine
     private static void MainMenu(ref Player? p1, ref Player? p2, GameData data)
     {
         Vector2 p1Spawn = new Vector2(sw * 0.1f, PhysicsEngine.GroundY * 0.9f);
-        Vector2 p2Spawn = new Vector2(sw * 0.9f - 60f, PhysicsEngine.GroundY * 0.9f);
+        Vector2 p2Spawn = new Vector2(sw * 0.9f, PhysicsEngine.GroundY * 0.9f);
 
         if (Raylib.IsKeyPressed(KeyboardKey.KEY_ONE))
         {
@@ -298,8 +298,8 @@ public static class GUIEngine
     {
         if (data.Player1 == null || data.Player2 == null) return;
 
-        float p1HealthPercent = Math.Clamp(data.Player1.Health / 100f, 0f, 1f);
-        float p2HealthPercent = Math.Clamp(data.Player2.Health / 100f, 0f, 1f);
+        float p1HealthPercent = Math.Clamp(data.Player1.Health / (float)Player.MAX_HEALTH, 0f, 1f);
+        float p2HealthPercent = Math.Clamp(data.Player2.Health / (float)Player.MAX_HEALTH, 0f, 1f);
 
         int barWidth = (int)(sw * 0.30f);
         int barHeight = (int)(sh * 0.05f);

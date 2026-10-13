@@ -4,9 +4,29 @@ using MoonSharp.Interpreter;
 [MoonSharpUserData]
 public class PhysicsEngine
 {
-    public static float GroundY = 0.85f * Raylib.GetScreenHeight();
-    public static float LeftBoundary = 0.01f * Raylib.GetScreenWidth();
-    public static float RightBoundary = 0.99f * Raylib.GetScreenWidth();
+    public const float GROUND_Y_PCT = 0.85f;
+    public const float LEFT_BOUNDARY_PCT = 0.01f;
+    public const float RIGHT_BOUNDARY_PCT = 0.99f;
+
+    private const float AUTO_FACE_DEADZONE_PX = 2f;
+    private const float PUSHBACK_SPLIT_FACTOR = 0.5f;
+
+    private const int HEAVY_HITSTOP_DAMAGE_THRESHOLD = 35;
+    private const float HEAVY_HITSTOP_DURATION = 0.09f;
+    private const float LIGHT_HITSTOP_DURATION = 0.045f;
+
+    private const float DEFAULT_COUNTER_KNOCKBACK_PCT = 0.21f;
+    private const float DEFAULT_BLOCK_KNOCKBACK_PCT = 0.23f;
+    private const float DEFAULT_CLEAN_KNOCKBACK_PCT = 0.18f;
+
+    private const float BLOCK_CHIP_DAMAGE_MULTIPLIER = 0.20f;
+    private const float BLOCK_STUN_MULTIPLIER = 0.40f;
+
+    public static float GroundY => GROUND_Y_PCT * Raylib.GetScreenHeight();
+    public static float LeftBoundary => LEFT_BOUNDARY_PCT * Raylib.GetScreenWidth();
+    public static float RightBoundary => RIGHT_BOUNDARY_PCT * Raylib.GetScreenWidth();
+
+    public static float HitstopTimer { get; set; } = 0f;
 
     public void Initialize() { }
 
@@ -16,6 +36,13 @@ public class PhysicsEngine
         if (data.Player1.CurrentCharacter == null || data.Player2.CurrentCharacter == null) return;
 
         float dt = Timer.FixedDeltaTime;
+
+        if (HitstopTimer > 0f)
+        {
+            HitstopTimer -= dt;
+            return;
+        }
+
         data.Player1.Update(dt);
         data.Player2.Update(dt);
 
@@ -23,29 +50,89 @@ public class PhysicsEngine
         ClampPlayer(data.Player2);
         ResolvePushback(data.Player1, data.Player2);
 
+        UpdateAutoFacing(data.Player1, data.Player2);
+        UpdateAutoFacing(data.Player2, data.Player1);
+
         CheckHits(data.Player1, data.Player2);
         CheckHits(data.Player2, data.Player1);
     }
 
-    /// <summary>
-    /// Centralized force & hitstun helper (Exposed to C# and Lua).
-    /// Logic 1 (Grounded): Applies horizontal knockback + stun.
-    /// Logic 2 (Airborne): No knockback (halted in air), applies stun only.
-    /// </summary>
-    public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackSpeed)
+    private void UpdateAutoFacing(Player player, Player opponent)
+    {
+        if (player.IsGrounded && !player.IsInHitstun && player.CurrentCharacter?.ActiveSkill == null)
+        {
+            if (MathF.Abs(player.Position.X - opponent.Position.X) > AUTO_FACE_DEADZONE_PX)
+            {
+                player.FacingRight = player.Position.X < opponent.Position.X;
+            }
+        }
+    }
+
+    private bool CanBlockAttack(Player defender, SkillData attackSkill)
+    {
+        if (!defender.IsNeutralBlocking || attackSkill.IsBlockBreak)
+            return false;
+
+        return attackSkill.Height switch
+        {
+            AttackHeight.Low      => defender.IsCrouching,
+            AttackHeight.Overhead => !defender.IsCrouching,
+            _                     => true
+        };
+    }
+
+    public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackPct)
     {
         target.Health -= damage;
+
+        Character? targetChar = target.CurrentCharacter;
+        if (targetChar != null && targetChar.IsHyperArmorActive)
+            return;
+
+        if (targetChar != null)
+        {
+            targetChar.ActiveSkill = null;
+            targetChar.HasHit = false;
+        }
+
         target.HitstunTimer = stun;
 
         if (target.IsGrounded)
         {
+            target.IsAirStalled = false;
             float dir = source.FacingRight ? 1f : -1f;
-            target.SetVelocity(dir * groundKnockbackSpeed, 0f);
+            float speedPx = groundKnockbackPct * Raylib.GetScreenWidth();
+            target.SetVelocity(dir * speedPx, 0f);
         }
         else
         {
+            target.IsAirStalled = true;
             target.SetVelocity(0f, 0f);
         }
+    }
+
+    public static void ApplyLaunchForce(Player source, Player target, int damage, float stun, float launchXPct, float launchYPct)
+    {
+        target.Health -= damage;
+
+        Character? targetChar = target.CurrentCharacter;
+        if (targetChar != null && targetChar.IsHyperArmorActive)
+            return;
+
+        if (targetChar != null)
+        {
+            targetChar.ActiveSkill = null;
+            targetChar.HasHit = false;
+        }
+
+        target.HitstunTimer = stun;
+        target.IsGrounded = false;
+        target.IsAirStalled = false;
+
+        float dir = source.FacingRight ? 1f : -1f;
+        float vx = dir * launchXPct * Raylib.GetScreenWidth();
+        float vy = launchYPct * Raylib.GetScreenHeight();
+        target.SetVelocity(vx, vy);
     }
 
     private void ClampPlayer(Player p)
@@ -54,13 +141,14 @@ public class PhysicsEngine
         float halfW = ch.Width / 2f;
         float halfH = ch.Height / 2f;
 
-        if (p.Position.Y + halfH >= GroundY)
+        if (p.Position.Y + halfH >= GroundY && p.Velocity.Y >= 0f)
         {
             p.Position.Y = GroundY - halfH;
             p.Velocity.Y = 0;
             p.IsGrounded = true;
+            p.IsAirStalled = false;
         }
-        else
+        else if (p.Position.Y + halfH < GroundY)
         {
             p.IsGrounded = false;
         }
@@ -83,7 +171,7 @@ public class PhysicsEngine
                 ? (r1.x + r1.width) - r2.x
                 : (r2.x + r2.width) - r1.x;
 
-            float half = overlap * 0.5f;
+            float half = overlap * PUSHBACK_SPLIT_FACTOR;
             if (p1.Position.X < p2.Position.X)
             {
                 p1.Position.X -= half;
@@ -113,10 +201,14 @@ public class PhysicsEngine
         attacker.CurrentCharacter!.HasHit = true;
         SkillData attackSkill = attacker.CurrentCharacter.ActiveSkill!;
 
+        HitstopTimer = attackSkill.Damage >= HEAVY_HITSTOP_DAMAGE_THRESHOLD
+            ? HEAVY_HITSTOP_DURATION
+            : LIGHT_HITSTOP_DURATION;
+
         if (TryResolveCounter(attacker, defender, attackSkill))
             return;
 
-        if (defender.IsNeutralBlocking && !attackSkill.IsBlockBreak)
+        if (CanBlockAttack(defender, attackSkill))
         {
             ApplyBlockedHit(attacker, defender, attackSkill);
             return;
@@ -155,7 +247,7 @@ public class PhysicsEngine
         }
         else
         {
-            ApplyHitForce(defender, attacker, counterSkill.Damage, counterSkill.HitStun, 400f);
+            ApplyHitForce(defender, attacker, counterSkill.Damage, counterSkill.HitStun, DEFAULT_COUNTER_KNOCKBACK_PCT);
         }
 
         return true;
@@ -163,10 +255,10 @@ public class PhysicsEngine
 
     private void ApplyBlockedHit(Player attacker, Player defender, SkillData skill)
     {
-        int chipDamage = (int)(skill.Damage * 0.20f);
-        float blockStun = skill.HitStun * 0.4f;
+        int chipDamage = (int)(skill.Damage * BLOCK_CHIP_DAMAGE_MULTIPLIER);
+        float blockStun = skill.HitStun * BLOCK_STUN_MULTIPLIER;
 
-        ApplyHitForce(attacker, defender, chipDamage, blockStun, 450f);
+        ApplyHitForce(attacker, defender, chipDamage, blockStun, DEFAULT_BLOCK_KNOCKBACK_PCT);
     }
 
     private void ApplyCleanHit(Player attacker, Player defender, SkillData skill)
@@ -177,6 +269,6 @@ public class PhysicsEngine
             return;
         }
 
-        ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, 350f);
+        ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, DEFAULT_CLEAN_KNOCKBACK_PCT);
     }
 }

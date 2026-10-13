@@ -1,3 +1,44 @@
+-- ==========================================
+-- BRAWLER CONSTANTS (No Magic Numbers)
+-- ==========================================
+local MAX_HEALTH = 100
+
+-- Parry Constants
+local PARRY_HEAL_AMOUNT    = 10
+local PARRY_COUNTER_DAMAGE = 30
+local PARRY_COUNTER_STUN   = 1.10
+local PARRY_KNOCKBACK_PCT  = 0.25
+
+-- Lunge Punch Constants
+local LUNGE_ACTIVE_END_FRAME = 12
+local LUNGE_SPEED_MULTIPLIER = 1.6
+
+-- Low Sweep Constants
+local SWEEP_KNOCKBACK_PCT = 0.22
+
+-- Guard Crush Constants
+local GUARD_CRUSH_BONUS_DAMAGE  = 65
+local GUARD_CRUSH_BONUS_STUN    = 1.40
+local GUARD_CRUSH_KNOCKBACK_PCT = 0.30
+
+-- Rising Uppercut Constants
+local UPPERCUT_LAUNCH_FRAME       = 2
+local UPPERCUT_SELF_SPEED_X_MULT  = 0.65
+local UPPERCUT_SELF_JUMP_Y_MULT   = 1.05
+local UPPERCUT_TARGET_LAUNCH_X_PCT = 0.08 -- Was 180 (bugged)! Now 8% screen width/sec
+local UPPERCUT_TARGET_LAUNCH_Y_PCT = -0.78
+
+-- Meteor Dive Constants
+local METEOR_ASCEND_END_FRAME  = 8
+local METEOR_DIVE_END_FRAME    = 18
+local METEOR_ASCEND_X_MULT     = 1.0
+local METEOR_ASCEND_Y_MULT     = 2.0
+local METEOR_DIVE_X_MULT       = 2.2
+local METEOR_DIVE_Y_MULT       = 2.6
+local METEOR_BREAK_DAMAGE      = 90
+local METEOR_BREAK_STUN        = 1.80
+local METEOR_BREAK_KNOCKBACK_PCT = 0.35
+
 Character = {
     name = "Brawler",
     
@@ -37,7 +78,7 @@ Character = {
             startup_frames = 3,
             active_frames = 3,
             recovery_frames = 6,
-            hitbox = { x_offset_pct = 0.75, y_offset_pct = 0.20, width_pct = 0.70, height_pct = 0.20 },
+            hitbox = { x_offset_pct = 0.75, y_offset_pct = 0.08, width_pct = 0.70, height_pct = 0.20 },
             hitStun = 0.20,
             cooldown_time = 0.3
         },
@@ -46,6 +87,7 @@ Character = {
         low_sweep = {
             input_trigger = Keys.KeyBottom,
             damage = 22,
+            attack_height = "low",
             startup_frames = 7,
             active_frames = 4,
             recovery_frames = 14,
@@ -53,8 +95,8 @@ Character = {
             hitStun = 0.45,
             cooldown_time = 1.2,
             on_hit = function(attacker, defender, skill)
-                -- Custom Lua hit logic using the exposed helper (550 knockback on ground, 0 in air)
-                ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, 550)
+                -- Fixed: 0.22 (22% screen width/sec) instead of 550!
+                ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, SWEEP_KNOCKBACK_PCT)
             end
         },
 
@@ -70,8 +112,8 @@ Character = {
             cooldown_time = 2.5,
             is_counter = true,
             on_counter = function(defender, attacker)
-                defender.Health = math.min(100, defender.Health + 10)
-                ApplyHitForce(defender, attacker, 30, 1.1, 600)
+                defender.Health = math.min(MAX_HEALTH, defender.Health + PARRY_HEAL_AMOUNT)
+                ApplyHitForce(defender, attacker, PARRY_COUNTER_DAMAGE, PARRY_COUNTER_STUN, PARRY_KNOCKBACK_PCT)
             end
         },
 
@@ -88,8 +130,8 @@ Character = {
             is_customlogic = true,
             on_customlogic = function(player, character, dt)
                 local dir = player.FacingRight and 1 or -1
-                if character.CurrentActionFrame < 12 then
-                    player:Translate(dir * character.WalkSpeed * 2.2 * dt, 0)
+                if character.CurrentActionFrame < LUNGE_ACTIVE_END_FRAME then
+                    player:Translate(dir * character.WalkSpeed * LUNGE_SPEED_MULTIPLIER * dt, 0)
                 end
             end
         },
@@ -98,15 +140,18 @@ Character = {
         guard_crush = {
             input_trigger = Keys.KeyTop + Keys.KeyBottom,
             damage = 45,
-            startup_frames = 11,
+            startup_frames = 14,
             active_frames = 5,
             recovery_frames = 18,
+            is_hyperframes = true,
+            hyper_start_frame = 3,
+            hyper_frames = 14,
             hitbox = { x_offset_pct = 0.80, y_offset_pct = 0.15, width_pct = 1.25, height_pct = 0.55 },
             hitStun = 0.70,
             cooldown_time = 4.0,
             is_blockbreak = true,
             on_blockbreak = function(attacker, defender)
-                ApplyHitForce(attacker, defender, 65, 1.4, 700)
+                ApplyHitForce(attacker, defender, GUARD_CRUSH_BONUS_DAMAGE, GUARD_CRUSH_BONUS_STUN, GUARD_CRUSH_KNOCKBACK_PCT)
             end
         },
 
@@ -114,20 +159,25 @@ Character = {
         rising_uppercut = {
             input_trigger = Keys.KeyTop + Keys.KeyRight,
             damage = 38,
+            attack_height = "overhead",
             startup_frames = 5,
             active_frames = 8,
             recovery_frames = 16,
             hitbox = { x_offset_pct = 0.65, y_offset_pct = -0.35, width_pct = 0.85, height_pct = 0.95 },
-            hitStun = 0.65,
+            hitStun = 0.85,
             cooldown_time = 3.0,
             is_customlogic = true,
             on_customlogic = function(player, character, dt)
                 local dir = player.FacingRight and 1 or -1
                 local frame = character.CurrentActionFrame
-                if frame >= 2 and frame <= 12 then
+                if frame == UPPERCUT_LAUNCH_FRAME then
                     player.IsGrounded = false
-                    player:Translate(dir * character.WalkSpeed * 0.9 * dt, -character.WalkSpeed * 1.8 * dt)
+                    player:SetVelocity(dir * character.WalkSpeed * UPPERCUT_SELF_SPEED_X_MULT, character.JumpForce * UPPERCUT_SELF_JUMP_Y_MULT)
                 end
+            end,
+            on_hit = function(attacker, defender, skill)
+                -- Fixed: 0.08 X pct instead of 180!
+                ApplyLaunchForce(attacker, defender, skill.Damage, skill.HitStun, UPPERCUT_TARGET_LAUNCH_X_PCT, UPPERCUT_TARGET_LAUNCH_Y_PCT)
             end
         },
 
@@ -138,6 +188,9 @@ Character = {
             startup_frames = 8,
             active_frames = 10,
             recovery_frames = 22,
+            is_hyperframes = true,
+            hyper_start_frame = 0,
+            hyper_frames = 18,
             hitbox = { x_offset_pct = 0.50, y_offset_pct = 0.10, width_pct = 1.50, height_pct = 0.80 },
             hitStun = 1.0,
             cooldown_time = 6.0,
@@ -146,15 +199,15 @@ Character = {
             on_customlogic = function(player, character, dt)
                 local dir = player.FacingRight and 1 or -1
                 local frame = character.CurrentActionFrame
-                if frame < 8 then
+                if frame < METEOR_ASCEND_END_FRAME then
                     player.IsGrounded = false
-                    player:Translate(dir * character.WalkSpeed * 1.2 * dt, -character.WalkSpeed * 2.5 * dt)
-                elseif frame < 18 then
-                    player:Translate(dir * character.WalkSpeed * 2.8 * dt, character.WalkSpeed * 3.2 * dt)
+                    player:Translate(dir * character.WalkSpeed * METEOR_ASCEND_X_MULT * dt, -character.WalkSpeed * METEOR_ASCEND_Y_MULT * dt)
+                elseif frame < METEOR_DIVE_END_FRAME then
+                    player:Translate(dir * character.WalkSpeed * METEOR_DIVE_X_MULT * dt, character.WalkSpeed * METEOR_DIVE_Y_MULT * dt)
                 end
             end,
             on_blockbreak = function(attacker, defender)
-                ApplyHitForce(attacker, defender, 90, 1.8, 850)
+                ApplyHitForce(attacker, defender, METEOR_BREAK_DAMAGE, METEOR_BREAK_STUN, METEOR_BREAK_KNOCKBACK_PCT)
             end
         }
     }

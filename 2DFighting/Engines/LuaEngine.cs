@@ -30,6 +30,7 @@ public class LuaEngine
         ScriptRuntime = new Script();
         ScriptRuntime.Globals["NewVec2"] = (Func<float, float, Vector2>)((x, y) => new Vector2(x, y));
         ScriptRuntime.Globals["ApplyHitForce"] = (Action<Player, Player, int, float, float>)PhysicsEngine.ApplyHitForce;
+        ScriptRuntime.Globals["ApplyLaunchForce"] = (Action<Player, Player, int, float, float, float>)PhysicsEngine.ApplyLaunchForce;
     }
 
     public void Initialize()
