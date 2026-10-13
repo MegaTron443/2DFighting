@@ -1,5 +1,7 @@
 using Raylib_cs;
+using MoonSharp.Interpreter;
 
+[MoonSharpUserData]
 public class PhysicsEngine
 {
     public static float GroundY = 0.85f * Raylib.GetScreenHeight();
@@ -23,6 +25,27 @@ public class PhysicsEngine
 
         CheckHits(data.Player1, data.Player2);
         CheckHits(data.Player2, data.Player1);
+    }
+
+    /// <summary>
+    /// Centralized force & hitstun helper (Exposed to C# and Lua).
+    /// Logic 1 (Grounded): Applies horizontal knockback + stun.
+    /// Logic 2 (Airborne): No knockback (halted in air), applies stun only.
+    /// </summary>
+    public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackSpeed)
+    {
+        target.Health -= damage;
+        target.HitstunTimer = stun;
+
+        if (target.IsGrounded)
+        {
+            float dir = source.FacingRight ? 1f : -1f;
+            target.SetVelocity(dir * groundKnockbackSpeed, 0f);
+        }
+        else
+        {
+            target.SetVelocity(0f, 0f);
+        }
     }
 
     private void ClampPlayer(Player p)
@@ -104,7 +127,7 @@ public class PhysicsEngine
             if (attackSkill.OnBlockBreak?.Function != null)
             {
                 attackSkill.OnBlockBreak.Function.Call(attacker, defender);
-            } 
+            }
             else
             {
                 ApplyCleanHit(attacker, defender, attackSkill);
@@ -124,15 +147,15 @@ public class PhysicsEngine
         SkillData counterSkill = defChar.ActiveSkill;
 
         attacker.CurrentCharacter!.ActiveSkill = null;
-        attacker.HitstunTimer = counterSkill.HitStun;
-        attacker.Health -= counterSkill.Damage;
-        attacker.Velocity.X = defender.FacingRight ? 400f : -400f;
+        defender.SetVelocity(0f, 0f);
 
-        defender.Velocity.X = 0f;
-
-        if (counterSkill.OnCounter != null && counterSkill.OnCounter.Function != null)
+        if (counterSkill.OnCounter?.Function != null)
         {
             counterSkill.OnCounter.Function.Call(defender, attacker);
+        }
+        else
+        {
+            ApplyHitForce(defender, attacker, counterSkill.Damage, counterSkill.HitStun, 400f);
         }
 
         return true;
@@ -140,15 +163,20 @@ public class PhysicsEngine
 
     private void ApplyBlockedHit(Player attacker, Player defender, SkillData skill)
     {
-        defender.Health -= (int)(skill.Damage * 0.20f);
-        defender.HitstunTimer = skill.HitStun * 0.4f;
-        defender.Velocity.X = attacker.FacingRight ? 450f : -450f;
+        int chipDamage = (int)(skill.Damage * 0.20f);
+        float blockStun = skill.HitStun * 0.4f;
+
+        ApplyHitForce(attacker, defender, chipDamage, blockStun, 450f);
     }
 
     private void ApplyCleanHit(Player attacker, Player defender, SkillData skill)
     {
-        defender.Health -= skill.Damage;
-        defender.HitstunTimer = skill.HitStun;
-        defender.Velocity.X = attacker.FacingRight ? 350f : -350f;
+        if (skill.OnHit?.Function != null)
+        {
+            skill.OnHit.Function.Call(attacker, defender, skill);
+            return;
+        }
+
+        ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, 350f);
     }
 }

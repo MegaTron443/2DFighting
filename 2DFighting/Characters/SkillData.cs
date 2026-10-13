@@ -17,4 +17,5 @@ public class SkillData
     public DynValue? OnCounter { get; set; }
     public bool CustomLogic { get; set; }
     public DynValue? OnCustomLogic { get; set; }
+    public DynValue? OnHit { get; set; }
 }

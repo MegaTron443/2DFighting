@@ -105,6 +105,18 @@ public class Player
         IsInputIdle = _keyHandler.HandleInput(CurrentCharacter, this, _playerIndex);
     }
 
+    public void Translate(float dx, float dy)
+    {
+        Position.X += dx;
+        Position.Y += dy;
+    }
+
+    public void SetVelocity(float vx, float vy)
+    {
+        Velocity.X = vx;
+        Velocity.Y = vy;
+    }
+
     public void Update(float dt)
     {
         if (GameState.CurrentState != State.Playing) return;

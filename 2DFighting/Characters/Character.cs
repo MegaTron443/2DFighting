@@ -125,7 +125,8 @@ public class Character
                     IsCounter = sTable.Get("is_counter").CastToBool(),
                     OnCounter = sTable.Get("on_counter"),
                     CustomLogic = sTable.Get("is_customlogic").CastToBool(),
-                    OnCustomLogic = sTable.Get("on_customlogic")
+                    OnCustomLogic = sTable.Get("on_customlogic"),
+                    OnHit = sTable.Get("on_hit")
                 };
             }
         }
@@ -158,6 +159,7 @@ public class Character
             ActiveSkill = skill;    
             CurrentActionFrame = 0;
             HasHit = false;
+            SkillCooldowns[skillName] = skill.CooldownTime;
             p.Velocity.X = 0;
             p.Velocity.Y = 0;
         }
@@ -167,7 +169,7 @@ public class Character
     {
         if (!p.IsGrounded)
         {
-            if (IsHitboxActive)
+            if (IsHitboxActive || p.IsInHitstun)
             {
                 p.Velocity.Y = 0f;
             }

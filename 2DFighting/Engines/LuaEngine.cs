@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Numerics;
 using MoonSharp.Interpreter;
 
 [Flags]
@@ -23,8 +24,12 @@ public class LuaEngine
         UserData.RegisterType<Character>();
         UserData.RegisterType<Player>();
         UserData.RegisterType<SkillData>();
+        UserData.RegisterType<PhysicsEngine>();
+        UserData.RegisterType<Vector2>();
 
         ScriptRuntime = new Script();
+        ScriptRuntime.Globals["NewVec2"] = (Func<float, float, Vector2>)((x, y) => new Vector2(x, y));
+        ScriptRuntime.Globals["ApplyHitForce"] = (Action<Player, Player, int, float, float>)PhysicsEngine.ApplyHitForce;
     }
 
     public void Initialize()
