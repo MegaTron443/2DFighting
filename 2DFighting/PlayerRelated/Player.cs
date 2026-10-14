@@ -17,6 +17,7 @@ public class Player
     public float HitstunTimer { get; set; } = 0f;
     public bool IsInHitstun => HitstunTimer > 0f;
     public Character? CurrentCharacter { get; private set; }
+    public Player? TargetOpponent { get; private set; }
 
     public Vector2 Position;
     public Vector2 PreviousPosition;
@@ -36,7 +37,30 @@ public class Player
     public int Health { get; set; } = MAX_HEALTH;
     public bool IsAlive => Health > 0;
 
-    public Player(string name, bool isAI, int playerIndex, Vector2 spawnPos, AppConfig appConfig)
+    public bool IsStunned => IsInHitstun;
+    public bool IsHit { get; set; } = false;
+
+    public GameAction JustExecutedAction { get; set; } = GameAction.None;
+    public SpecialMotion JustExecutedMotion { get; set; } = SpecialMotion.None;
+    public string? JustCompletedComboSignature { get; set; } = null;
+
+    public bool IsAttacking => CurrentCharacter?.ActiveSkill != null;
+    public bool IsAttackingLow => CurrentCharacter?.ActiveSkill?.Height == AttackHeight.Low;
+
+    public bool InRecoveryFrames
+    {
+        get
+        {
+            if (CurrentCharacter?.ActiveSkill == null) return false;
+            SkillData skill = CurrentCharacter.ActiveSkill;
+            int activeEndFrame = skill.StartupFrames + skill.ActiveFrames;
+            return CurrentCharacter.CurrentActionFrame >= activeEndFrame;
+        }
+    }
+
+    public bool CanTech => !IsGrounded && IsInHitstun && HitstunTimer < 0.15f;
+
+    public Player(string name, bool isAI, int playerIndex, Vector2 spawnPos, AppConfig appConfig, Player? opponent = null)
     {
         _name = name;
         _isAI = isAI;
@@ -46,11 +70,35 @@ public class Player
         Position = spawnPos;
         PreviousPosition = spawnPos;
         FacingRight = playerIndex == 0;
+        TargetOpponent = opponent;
 
         if (_isAI)
         {
-            _aiController = new PlayerAI();
+            _aiController = new PlayerAI(this, _keyHandler, TargetOpponent);
         }
+    }
+
+    public static Player Create(string name, int playerIndex, Vector2 spawnPos, AppConfig appConfig, bool isAI = false)
+    {
+        return new Player(name, isAI, playerIndex, spawnPos, appConfig);
+    }
+
+    public Player WithOpponent(Player opponent)
+    {
+        SetOpponent(opponent);
+        return this;
+    }
+
+    public Player WithCharacter(Character character)
+    {
+        ChangeCharacter(character);
+        return this;
+    }
+
+    public void SetOpponent(Player opponent)
+    {
+        TargetOpponent = opponent;
+        _aiController?.SetOpponent(opponent);
     }
 
     public bool ChangeCharacter(Character newCharacter)
@@ -202,7 +250,8 @@ public class Player
 
         if (_isAI && _aiController != null)
         {
-            _aiController.HandleAIInput();
+            _aiController.HandleAIInput(Timer.FixedDeltaTime);
+            IsInputIdle = _keyHandler.ConsumeBufferedInput(CurrentCharacter, this, _playerIndex);
             return;
         }
 

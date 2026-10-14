@@ -65,14 +65,16 @@ public static class GUIEngine
         void SetupGame(ButtonContext ctx, bool isAI)
         {
             Vector2 spawn_p1 = new Vector2(sw * 0.1f, PhysicsEngine.GroundY * 0.9f);
-            Player p1 = new Player("Player 1", isAI: false, playerIndex: 0, spawn_p1, ctx.Data.AppConfig);
-
             Vector2 spawn_p2 = new Vector2(sw * 0.9f, PhysicsEngine.GroundY * 0.9f);
-            Player p2 = new Player("Player 2", isAI: isAI, playerIndex: 1, spawn_p2, ctx.Data.AppConfig);
+
+            Player p1 = Player.Create("Player 1", 0, spawn_p1, ctx.Data.AppConfig, isAI: false);
+            Player p2 = Player.Create("Player 2", 1, spawn_p2, ctx.Data.AppConfig, isAI: isAI);
+
+            p1.SetOpponent(p2);
+            p2.SetOpponent(p1);
 
             ctx.SetP1(p1);
             ctx.SetP2(p2);
-
             GameState.SetState(State.ChoiceMenu);
         }
 
