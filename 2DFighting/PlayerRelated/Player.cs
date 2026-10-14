@@ -89,7 +89,7 @@ public class Player
 
     public Vector2 GetInterpolatedPosition(float alpha)
     {
-        return Vector2.Lerp(PreviousPosition, Position, alpha);
+        return Vector2.Lerp(PreviousPosition, Position, alpha); // Haha larp function actually used!!!
     }
 
     public Rectangle GetHurtbox()
