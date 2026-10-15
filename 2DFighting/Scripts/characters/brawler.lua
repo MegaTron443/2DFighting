@@ -1,8 +1,6 @@
 -- ==========================================
 -- BRAWLER CONSTANTS (No Magic Numbers)
 -- ==========================================
-local MAX_HEALTH = 100
-
 -- Parry Constants
 local PARRY_HEAL_AMOUNT    = 10
 local PARRY_COUNTER_DAMAGE = 30
@@ -112,7 +110,7 @@ Character = {
             cooldown_time = 2.5,
             is_counter = true,
             on_counter = function(defender, attacker)
-                defender.Health = math.min(MAX_HEALTH, defender.Health + PARRY_HEAL_AMOUNT)
+                defender.Health = math.min(defender.MAX_HEALTH, defender.Health + PARRY_HEAL_AMOUNT)
                 ApplyHitForce(defender, attacker, PARRY_COUNTER_DAMAGE, PARRY_COUNTER_STUN, PARRY_KNOCKBACK_PCT)
             end
         },

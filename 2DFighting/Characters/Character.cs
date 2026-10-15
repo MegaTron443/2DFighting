@@ -157,8 +157,8 @@ public class Character
 
     public void Move(Player p, float direction)
     {
+        p.IsHoldingBack = (p.FacingRight && direction < 0f) || (!p.FacingRight && direction > 0f);
         if (ActiveSkill != null) return;
-
         p.Velocity.X = direction * WalkSpeed;
     }
 
@@ -168,6 +168,7 @@ public class Character
         {
             p.Velocity.Y = JumpForce;
             p.IsGrounded = false;
+            p.JustExecutedAction = GameAction.Jump;
         }
     }
 
@@ -176,14 +177,28 @@ public class Character
         if (SkillCooldowns.ContainsKey(skillName) && SkillCooldowns[skillName] > 0) return;
         if (ActiveSkill != null) return;
         if (p.IsCrouching) return;
+
         if (Skills.TryGetValue(skillName, out var skill))
         {
-            ActiveSkill = skill;    
+            ActiveSkill = skill;
             CurrentActionFrame = 0;
             HasHit = false;
             SkillCooldowns[skillName] = skill.CooldownTime;
             p.Velocity.X = 0;
             p.Velocity.Y = 0;
+
+            if (skill.IsCounter)
+                p.JustExecutedAction = GameAction.Counter;
+            else if (skill.IsBlockBreak)
+                p.JustExecutedAction = GameAction.GuardBreak;
+            else if (skill.Height == AttackHeight.Low)
+                p.JustExecutedAction = GameAction.LowAttack;
+            else if (skill.Height == AttackHeight.Overhead)
+                p.JustExecutedAction = GameAction.OverheadAttack;
+            else if (skill.StartupFrames <= 5)
+                p.JustExecutedAction = GameAction.FastPoke;
+            else
+                p.JustExecutedAction = GameAction.HeavyAttack;
         }
     }
 

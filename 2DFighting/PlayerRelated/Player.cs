@@ -7,7 +7,7 @@ public class Player
 {
     public Vector2 SpawnPosition { get; }
     public int ComboCount { get; set; } = 0;
-    public const int MAX_HEALTH = 100;
+    public const int MAX_HEALTH = 200;
     public const float CROUCH_HEIGHT_RATIO = 0.65f;
     private readonly string _name;
     private readonly bool _isAI;
@@ -28,10 +28,12 @@ public class Player
     public bool IsCrouching { get; set; } = false;
     public bool IsAirStalled { get; set; } = false;
 
-    public bool IsNeutralBlocking => 
-        IsGrounded && 
-        IsInputIdle && 
-        CurrentCharacter?.ActiveSkill == null && 
+    public bool IsHoldingBack { get; set; } = false;
+
+    public bool IsNeutralBlocking =>
+        IsGrounded &&
+        (IsInputIdle || IsHoldingBack || IsCrouching) &&
+        CurrentCharacter?.ActiveSkill == null &&
         !IsInHitstun;
     
     public int Health { get; set; } = MAX_HEALTH;
@@ -74,7 +76,7 @@ public class Player
 
         if (_isAI)
         {
-            _aiController = new PlayerAI(this, _keyHandler, TargetOpponent);
+            _aiController = new PlayerAI(this, _keyHandler, playerIndex, TargetOpponent);
         }
     }
 
@@ -245,6 +247,10 @@ public class Player
 
     public void ConsumeInput()
     {
+        JustExecutedAction = GameAction.None;
+        JustExecutedMotion = SpecialMotion.None;
+        JustCompletedComboSignature = null;
+
         if (GameState.CurrentState != State.Playing || CurrentCharacter == null) return;
         if (IsInHitstun) return;
 
@@ -254,7 +260,6 @@ public class Player
             IsInputIdle = _keyHandler.ConsumeBufferedInput(CurrentCharacter, this, _playerIndex);
             return;
         }
-
         IsInputIdle = _keyHandler.ConsumeBufferedInput(CurrentCharacter, this, _playerIndex);
     }
 
@@ -284,6 +289,7 @@ public class Player
         if (!IsAlive)
         {
             GameState.SetState(State.GameOver);
+            Console.WriteLine(_playerIndex);
         }
     }
 

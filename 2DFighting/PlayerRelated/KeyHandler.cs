@@ -207,8 +207,22 @@ public class KeyHandler
                 _latchedDir = -1f;
                 _latchedCrouch = true;
                 break;
+            case GameDirection.DownRight:
+                _latchedDir = 1f;
+                _latchedCrouch = true;
+                break;
+            case GameDirection.Up:
+                _latchedDir = 0f;
+                _latchedJumpPressed = true;
+                _latchedCrouch = false;
+                break;
             case GameDirection.UpRight:
                 _latchedDir = 1f;
+                _latchedJumpPressed = true;
+                _latchedCrouch = false;
+                break;
+            case GameDirection.UpLeft:
+                _latchedDir = -1f;
                 _latchedJumpPressed = true;
                 _latchedCrouch = false;
                 break;
@@ -220,40 +234,18 @@ public class KeyHandler
         }
     }
 
-    public void SimulateButtonPress(GameAction action)
+    public void SimulateMaskPress(int mask, int playerIndex = 1)
     {
-        if (action == GameAction.Jump)
+        if (mask == 0) return;
+
+        _latchedCrouch = false;
+        _latchedHeldMask |= mask;
+
+        if (!_inputBuffers.ContainsKey(playerIndex))
         {
-            _latchedJumpPressed = true;
-            return;
+            _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
         }
 
-        int mask = action switch
-        {
-            GameAction.LightAttack  => (1 << 0), // KeyTop
-            GameAction.MediumAttack => (1 << 1), // KeyBottom
-            GameAction.HeavyAttack  => (1 << 2), // KeyLeft
-            GameAction.CrouchAttack => (1 << 3), // KeyRight
-            _ => 0
-        };
-
-        if (mask != 0)
-        {
-            _latchedHeldMask |= mask;
-            if (!_inputBuffers.ContainsKey(1))
-            {
-                _inputBuffers[1] = new Queue<(float time, int mask)>();
-            }
-            _inputBuffers[1].Enqueue(((float)Raylib.GetTime(), mask));
-        }
-    }
-
-    public void SimulateSpecialMotion(SpecialMotion motion)
-    {
-        if (motion == SpecialMotion.QuarterCircleForward)
-        {
-            _latchedCrouch = true;
-            SimulateButtonPress(GameAction.HeavyAttack);
-        }
+        _inputBuffers[playerIndex].Enqueue(((float)Raylib.GetTime() - 0.1f, mask));
     }
 }
