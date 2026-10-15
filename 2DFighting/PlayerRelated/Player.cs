@@ -146,6 +146,7 @@ public class Player
             CurrentCharacter.ActiveSkill = null;
             CurrentCharacter.HasHit = false;
             CurrentCharacter.SkillCooldowns.Clear();
+            CurrentCharacter.CustomData.Clear();
         }
     }
 

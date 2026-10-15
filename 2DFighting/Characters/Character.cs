@@ -46,6 +46,7 @@ public class Character
     public Color PrimaryColor { get; private set; } = Color.DARKBLUE;
     public Color SecondaryColor { get; private set; } = Color.MAROON;
     public DynValue? OnPassive { get; private set; }
+    public Dictionary<string, float> CustomData { get; } = new();
 
     public Character(string luaFilePath, Script script)
     {
