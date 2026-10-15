@@ -16,7 +16,6 @@ public enum ActionButtonMask
 public class LuaEngine
 {
     private static readonly string RootPath = AppDomain.CurrentDomain.BaseDirectory;
-
     public Script ScriptRuntime { get; }
 
     public LuaEngine()
@@ -25,12 +24,18 @@ public class LuaEngine
         UserData.RegisterType<Player>();
         UserData.RegisterType<SkillData>();
         UserData.RegisterType<PhysicsEngine>();
+        UserData.RegisterType<Projectile>();
         UserData.RegisterType<Vector2>();
 
         ScriptRuntime = new Script();
+
+        ScriptRuntime.Globals["PhysicsEngine"] = UserData.CreateStatic<PhysicsEngine>();
         ScriptRuntime.Globals["NewVec2"] = (Func<float, float, Vector2>)((x, y) => new Vector2(x, y));
         ScriptRuntime.Globals["ApplyHitForce"] = (Action<Player, Player, int, float, float>)PhysicsEngine.ApplyHitForce;
         ScriptRuntime.Globals["ApplyLaunchForce"] = (Action<Player, Player, int, float, float, float>)PhysicsEngine.ApplyLaunchForce;
+
+        ScriptRuntime.Globals["create_projectile"] = (Func<Player, Vector2, Vector2, DynValue?, DynValue?, Projectile>)ProjectileFactory.CreateShorthand;
+        ScriptRuntime.Globals["CreateProjectile"] = (Func<Player, Table, Projectile>)ProjectileFactory.CreateFromTable;
     }
 
     public void Initialize()
@@ -40,11 +45,10 @@ public class LuaEngine
         {
             Directory.CreateDirectory(charPath);
         }
-
-        RegisterKeysEnvironment();
+        RegisterKeysAndTrajectoriesEnvironment();
     }
 
-    private void RegisterKeysEnvironment()
+    private void RegisterKeysAndTrajectoriesEnvironment()
     {
         string helperScript = @"
             local meta = {}
@@ -68,6 +72,58 @@ public class LuaEngine
                 KeyLeft   = makeKey(4),   -- 1 << 2
                 KeyRight  = makeKey(8),   -- 1 << 3
             }
+
+            Trajectories = {
+                Linear = function()
+                    return function(proj, dt) end
+                end,
+
+                SineWave = function(amplitudePx, frequency)
+                    return function(proj, dt)
+                        local vy = math.cos(proj.ElapsedTime * frequency) * amplitudePx
+                        proj:SetVelocity(proj.VelX, vy)
+                    end
+                end,
+
+                Gravity = function(gravityPxPerSec, bounceFactor)
+                    return function(proj, dt)
+                        local vy = proj.VelY + (gravityPxPerSec * dt)
+                        local groundY = proj.GroundY - (proj.Height * 0.5)
+                        if proj.PosY >= groundY and vy > 0 then
+                            if bounceFactor and bounceFactor > 0 then
+                                vy = -vy * bounceFactor
+                            else
+                                proj:Destroy()
+                                return
+                            end
+                        end
+                        proj:SetVelocity(proj.VelX, vy)
+                    end
+                end,
+
+                Boomerang = function(turnAroundTime, accelPx)
+                    local flipped = false
+                    return function(proj, dt)
+                        local dir = proj.FacingRight and 1 or -1
+                        local vx = proj.VelX - (dir * accelPx * dt)
+                        proj:SetVelocity(vx, proj.VelY)
+                        if not flipped and proj.ElapsedTime >= turnAroundTime then
+                            flipped = true
+                            proj:ResetHit()
+                        end
+                    end
+                end,
+
+                Homing = function(turnRate)
+                    return function(proj, dt)
+                        local target = proj.Target
+                        if target == nil then return end
+                        local dy = target.PosY - proj.PosY
+                        local vy = proj.VelY + (dy * turnRate * dt)
+                        proj:SetVelocity(proj.VelX, vy)
+                    end
+                end
+            }
         ";
         ScriptRuntime.DoString(helperScript);
     }
@@ -79,12 +135,10 @@ public class LuaEngine
         {
             path = Path.Combine(RootPath, "Scripts", "lua", $"{characterId}.lua");
         }
-
         if (!File.Exists(path))
         {
             throw new FileNotFoundException($"Character script '{characterId}.lua' not found in Scripts/characters/ or Scripts/lua/");
         }
-
         return new Character(path, ScriptRuntime);
     }
 

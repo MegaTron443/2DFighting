@@ -43,6 +43,10 @@ public class Character
     public Dictionary<string, float> SkillCooldowns { get; } = new();
     public bool HasHit { get; set; } = false;
 
+    public Color PrimaryColor { get; private set; } = Color.DARKBLUE;
+    public Color SecondaryColor { get; private set; } = Color.MAROON;
+    public DynValue? OnPassive { get; private set; }
+
     public Character(string luaFilePath, Script script)
     {
         LoadFromLua(luaFilePath, script);
@@ -75,8 +79,12 @@ public class Character
         // Isolated environment per character script so globals don't collide
         Table env = new Table(script);
         env["Keys"] = script.Globals.Get("Keys");
+        env["Trajectories"] = script.Globals.Get("Trajectories");
         env["ApplyHitForce"] = script.Globals.Get("ApplyHitForce");
         env["ApplyLaunchForce"] = script.Globals.Get("ApplyLaunchForce");
+        env["create_projectile"] = script.Globals.Get("create_projectile");
+        env["CreateProjectile"] = script.Globals.Get("CreateProjectile");
+        env["PhysicsEngine"] = script.Globals.Get("PhysicsEngine");
         env["NewVec2"] = script.Globals.Get("NewVec2");
         env["math"] = script.Globals.Get("math");
 
@@ -99,6 +107,7 @@ public class Character
             GravityPct = (float)(phys.Get("gravity_pct").CastToNumber() ?? 1.40);
             Friction = (float)(phys.Get("friction").CastToNumber() ?? 0.85);
         }
+        OnPassive = t.Get("on_passive");
 
         var rend = t.Get("rendering").Table;
         if (rend != null)
@@ -116,6 +125,17 @@ public class Character
                 {
                     _spriteSheet = Raylib.LoadTexture(fullSheetPath);
                 }
+            }
+
+            var colTbl = rend.Get("body_color").Table;
+            if (colTbl != null)
+            {
+                PrimaryColor = new Color(
+                    (int)(colTbl.Get(1).CastToNumber() ?? 30),
+                    (int)(colTbl.Get(2).CastToNumber() ?? 80),
+                    (int)(colTbl.Get(3).CastToNumber() ?? 180),
+                    255
+                );
             }
         }
 
@@ -314,6 +334,11 @@ public class Character
 
         Animator.Update(dt, Animations);
 
+        if (OnPassive != null && OnPassive.Type == DataType.Function)
+        {
+            OnPassive.Function.Call(p, this, dt);
+        }
+
         foreach (var skill in SkillCooldowns.Keys.ToList())
         {
             if (SkillCooldowns[skill] > 0)
@@ -356,9 +381,15 @@ public class Character
 
         if (ShowDebugBoxes || !hasSprite)
         {
+            Color tintBase = PrimaryColor;
+            if (!p.FacingRight)
+            {
+                tintBase = new Color((int)(PrimaryColor.r * 0.8f), (int)(PrimaryColor.g * 0.8f), (int)(PrimaryColor.b * 0.8f), 255);
+            }
+
             Color bodyColor = p.IsInvulnerable
                 ? Color.SKYBLUE
-                : (p.IsInHitstun ? Color.ORANGE : (p.FacingRight ? Color.DARKBLUE : Color.MAROON));
+                : (p.IsInHitstun ? Color.ORANGE : tintBase);
 
             if (hasSprite)
             {

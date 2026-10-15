@@ -257,6 +257,18 @@ public class PlayerAI
         }
     }
 
+    private bool IncomingProjectileThreat()
+    {
+        foreach (var proj in PhysicsEngine.ActiveProjectiles)
+        {
+            if (!proj.IsActive || proj.Owner == _self) continue;
+            float distPx = MathF.Abs(proj.Position.X - _self.Position.X);
+            if (distPx < Raylib.GetScreenWidth() * 0.22f)
+                return true;
+        }
+        return false;
+    }
+
     private bool IsSkillReady(SkillData skill)
     {
         if (_self.CurrentCharacter == null) return false;
@@ -513,10 +525,11 @@ public class PlayerAI
     }
 
     private bool ShouldDefend() =>
-        _opponent != null &&
-        _opponent.IsAttacking &&
-        !_opponent.InRecoveryFrames &&
-        GetDistancePct() < _maxOffensiveReachPct * 1.15f;
+        IncomingProjectileThreat() ||
+        (_opponent != null &&
+         _opponent.IsAttacking &&
+         !_opponent.InRecoveryFrames &&
+         GetDistancePct() < _maxOffensiveReachPct * 1.15f);
 
     private bool CanAdaptByDifficulty()
     {

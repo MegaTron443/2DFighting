@@ -61,6 +61,13 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
     {
         p1.Draw(timer.Alpha);
         p2.Draw(timer.Alpha);
+
+        if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
+        {
+            p1.Draw(timer.Alpha);
+            p2.Draw(timer.Alpha);
+            PhysicsEngine.DrawProjectiles(timer.Alpha);
+        }
     }
 
     GUIEngine.Draw(data);

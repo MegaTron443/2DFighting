@@ -32,6 +32,7 @@ public class PhysicsEngine
     public static float LeftBoundary => LEFT_BOUNDARY_PCT * Raylib.GetScreenWidth();
     public static float RightBoundary => RIGHT_BOUNDARY_PCT * Raylib.GetScreenWidth();
     public static float HitstopTimer { get; set; } = 0f;
+    public static List<Projectile> ActiveProjectiles { get; } = new();
 
     public void Initialize() { }
 
@@ -91,6 +92,8 @@ public class PhysicsEngine
 
         // Simultaneous Hit Detection (Prevents P1 Priority Bias)
         ResolveSimultaneousHits(data.Player1, data.Player2);
+
+        UpdateProjectiles(dt, data.Player1, data.Player2);
 
         RoundTimer = MathF.Max(0f, RoundTimer - dt);
 
@@ -265,6 +268,7 @@ public class PhysicsEngine
 
     public static void StartNextRound(Player p1, Player p2)
     {
+        ActiveProjectiles.Clear();
         HitstopTimer = 0f;
         RoundTimer = 99f;
         RoundTransitionTimer = 0f;
@@ -427,6 +431,104 @@ public class PhysicsEngine
             ApplyHitForce(defender, attacker, counterSkill.Damage, counterSkill.HitStun, DEFAULT_COUNTER_KNOCKBACK_PCT);
         }
         return true;
+    }
+
+    public static void SpawnProjectile(Projectile p)
+    {
+        ActiveProjectiles.Add(p);
+    }
+
+    private void UpdateProjectiles(float dt, Player p1, Player p2)
+    {
+        foreach (var proj in ActiveProjectiles)
+        {
+            proj.SavePreviousState();
+            proj.Update(dt);
+        }
+
+        for (int i = 0; i < ActiveProjectiles.Count; i++)
+        {
+            var a = ActiveProjectiles[i];
+            if (!a.IsActive || !a.DestroyOnHit) continue;
+
+            for (int j = i + 1; j < ActiveProjectiles.Count; j++)
+            {
+                var b = ActiveProjectiles[j];
+                if (!b.IsActive || !b.DestroyOnHit || a.Owner == b.Owner) continue;
+
+                if (Raylib.CheckCollisionRecs(a.GetHitbox(), b.GetHitbox()))
+                {
+                    a.Destroy();
+                    b.Destroy();
+                }
+            }
+        }
+
+        foreach (var proj in ActiveProjectiles)
+        {
+            if (!proj.IsActive || proj.HasHit) continue;
+
+            Player defender = proj.Target;
+            if (defender.IsInvulnerable) continue;
+
+            if (Raylib.CheckCollisionRecs(proj.GetHitbox(), defender.GetHurtbox()))
+            {
+                proj.HasHit = true;
+
+                // Active Counter/Parry absorbs projectile and heals/counters!
+                Character? defChar = defender.CurrentCharacter;
+                if (defChar?.ActiveSkill != null && defChar.ActiveSkill.IsCounter && defChar.IsHitboxActive)
+                {
+                    proj.Destroy();
+                    defender.Health = Math.Min(Player.MAX_HEALTH, defender.Health + 10);
+                    continue;
+                }
+
+                // Check Blocking
+                bool blocked = defender.IsNeutralBlocking && !proj.IsBlockBreak && (proj.attackHeight switch
+                {
+                    AttackHeight.Low      => defender.IsCrouching,
+                    AttackHeight.Overhead => !defender.IsCrouching,
+                    _                     => true
+                });
+
+                if (blocked)
+                {
+                    int rawChip = (int)(proj.Damage * BLOCK_CHIP_DAMAGE_MULTIPLIER);
+                    int nonLethalChip = Math.Max(0, Math.Min(rawChip, defender.Health - 1));
+                    int prevCombo = proj.Owner.ComboCount;
+                    ApplyHitForce(proj.Owner, defender, nonLethalChip, proj.HitStun * BLOCK_STUN_MULTIPLIER, DEFAULT_BLOCK_KNOCKBACK_PCT * 0.65f);
+                    proj.Owner.ComboCount = prevCombo;
+                }
+                else
+                {
+                    HitstopTimer = MathF.Max(HitstopTimer, LIGHT_HITSTOP_DURATION);
+                    if (proj.OnHit != null && proj.OnHit.Type == DataType.Function)
+                    {
+                        proj.OnHit.Function.Call(proj.Owner, defender, proj);
+                    }
+                    else
+                    {
+                        ApplyHitForce(proj.Owner, defender, proj.Damage, proj.HitStun, proj.KnockbackPct);
+                    }
+                }
+
+                if (proj.DestroyOnHit)
+                {
+                    proj.Destroy();
+                }
+            }
+        }
+
+        ActiveProjectiles.RemoveAll(p => !p.IsActive);
+    }
+
+    public static void DrawProjectiles(float alpha)
+    {
+        foreach (var proj in ActiveProjectiles)
+        {
+            proj.Draw(alpha);
+        }
     }
 
     private void ApplyCleanHit(Player attacker, Player defender, SkillData skill)

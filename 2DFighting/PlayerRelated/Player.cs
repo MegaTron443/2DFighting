@@ -60,6 +60,9 @@ public class Player
     public bool IsAttacking => CurrentCharacter?.ActiveSkill != null;
     public bool IsAttackingLow => CurrentCharacter?.ActiveSkill?.Height == AttackHeight.Low;
 
+    public float PosX => Position.X;
+    public float PosY => Position.Y;
+
     public bool InRecoveryFrames
     {
         get

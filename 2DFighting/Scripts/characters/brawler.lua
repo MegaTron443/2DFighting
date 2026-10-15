@@ -115,21 +115,28 @@ local Character = {
             end
         },
 
-        -- 4. Lunge Dash Punch
-        lunge_punch = {
+        plasma_shot = {
             input_trigger = Keys.KeyRight,
-            damage = 28,
-            startup_frames = 6,
-            active_frames = 6,
-            recovery_frames = 12,
-            hitbox = { x_offset_pct = 0.85, y_offset_pct = 0.25, width_pct = 0.90, height_pct = 0.35 },
-            hitStun = 0.45,
-            cooldown_time = 2.0,
+            damage = 16,
+            startup_frames = 7,
+            active_frames = 4,
+            recovery_frames = 13,
+            hitbox = { x_offset_pct = 0.75, y_offset_pct = 0.20, width_pct = 0.70, height_pct = 0.35 },
+            hitStun = 0.38,
+            cooldown_time = 1.6,
             is_customlogic = true,
             on_customlogic = function(player, character, dt)
-                local dir = player.FacingRight and 1 or -1
-                if character.CurrentActionFrame < LUNGE_ACTIVE_END_FRAME then
-                    player:Translate(dir * character.WalkSpeed * LUNGE_SPEED_MULTIPLIER * dt, 0)
+                if character.CurrentActionFrame == 7 then
+                    CreateProjectile(player, {
+                        x_offset_pct = 0.06,
+                        y_offset_pct = -0.01,
+                        speed_x_pct = 0.50,
+                        width_pct = 0.038,
+                        height_pct = 0.055,
+                        damage = 15,
+                        hitStun = 0.35,
+                        color = { 60, 160, 255 }
+                    })
                 end
             end
         },
