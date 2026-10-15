@@ -41,11 +41,13 @@ public static class CombatHUD
         if (data.Player1 == null || data.Player2 == null) return;
 
         DrawHealthBars(data.Player1, data.Player2);
+        DrawRoundPips(data.Player1, data.Player2);
         DrawRoundTimer();
         DrawSkillCooldowns(data.Player1, xPct: 0.10f, rightAlign: false);
         DrawSkillCooldowns(data.Player2, xPct: 0.90f, rightAlign: true);
         DrawComboCounter(data.Player1, xPct: 0.10f, rightAlign: false);
         DrawComboCounter(data.Player2, xPct: 0.90f, rightAlign: true);
+        DrawRoundAnnouncement();
     }
 
     private static void DrawHealthBars(Player p1, Player p2)
@@ -60,6 +62,28 @@ public static class CombatHUD
         UIRenderer.DrawProgressBar(p2Rect, p2Pct, P2HealthStyle);
     }
 
+    private static void DrawRoundPips(Player p1, Player p2)
+    {
+        int sw = Raylib.GetScreenWidth();
+        int sh = Raylib.GetScreenHeight();
+        float radius = sh * 0.011f;
+        int y = (int)(sh * 0.03f);
+        int spacing = (int)(radius * 2.6f);
+
+        for (int i = 0; i < PhysicsEngine.ROUNDS_TO_WIN; i++)
+        {
+            int p1PipX = (int)(sw * 0.41f) - (i * spacing);
+            Color p1Col = i < p1.RoundsWon ? Color.GOLD : Color.DARKGRAY;
+            Raylib.DrawCircle(p1PipX, y, radius, p1Col);
+            Raylib.DrawCircleLines(p1PipX, y, radius, Color.BLACK);
+
+            int p2PipX = (int)(sw * 0.59f) + (i * spacing);
+            Color p2Col = i < p2.RoundsWon ? Color.GOLD : Color.DARKGRAY;
+            Raylib.DrawCircle(p2PipX, y, radius, p2Col);
+            Raylib.DrawCircleLines(p2PipX, y, radius, Color.BLACK);
+        }
+    }
+
     private static void DrawRoundTimer()
     {
         int sw = Raylib.GetScreenWidth();
@@ -72,8 +96,27 @@ public static class CombatHUD
         string timeText = ((int)MathF.Ceiling(PhysicsEngine.RoundTimer)).ToString("00");
         int fontSize = (int)(sh * 0.045f);
         int textW = Raylib.MeasureText(timeText, fontSize);
-
         Raylib.DrawText(timeText, (sw - textW) / 2, (int)(box.y + (box.height - fontSize) / 2f), fontSize, Color.WHITE);
+
+        int roundFont = Math.Max(12, (int)(sh * 0.02f));
+        string roundLabel = $"ROUND {PhysicsEngine.CurrentRound}";
+        int rw = Raylib.MeasureText(roundLabel, roundFont);
+        Raylib.DrawText(roundLabel, (sw - rw) / 2, (int)(box.y + box.height + 6), roundFont, Color.DARKGRAY);
+    }
+
+    private static void DrawRoundAnnouncement()
+    {
+        if (string.IsNullOrEmpty(PhysicsEngine.RoundAnnouncement)) return;
+
+        int sw = Raylib.GetScreenWidth();
+        int sh = Raylib.GetScreenHeight();
+        int fontSize = (int)(sh * 0.055f);
+        int textW = Raylib.MeasureText(PhysicsEngine.RoundAnnouncement, fontSize);
+        int x = (sw - textW) / 2;
+        int y = (int)(sh * 0.35f);
+
+        Raylib.DrawText(PhysicsEngine.RoundAnnouncement, x + 3, y + 3, fontSize, Color.BLACK);
+        Raylib.DrawText(PhysicsEngine.RoundAnnouncement, x, y, fontSize, Color.GOLD);
     }
 
     private static void DrawSkillCooldowns(Player player, float xPct, bool rightAlign)
@@ -102,6 +145,7 @@ public static class CombatHUD
             Rectangle slotRect = UIRenderer.GetPctRect(slotXPct, yPct, slotW, slotH);
             UIBarStyle style = currentCd <= 0f ? CooldownReadyStyle : CooldownChargingStyle;
             style.RightToLeft = rightAlign;
+
             UIRenderer.DrawProgressBar(slotRect, readyPct, style);
 
             string label = skill.Name.Length > 5 ? skill.Name[..5].ToUpper() : skill.Name.ToUpper();
@@ -118,9 +162,9 @@ public static class CombatHUD
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
         int fontSize = (int)(sh * 0.045f);
-
         string text = $"{player.ComboCount} HIT COMBO!";
         int textW = Raylib.MeasureText(text, fontSize);
+
         int drawX = rightAlign ? (int)(sw * xPct) - textW : (int)(sw * xPct);
         int drawY = (int)(sh * 0.16f);
 

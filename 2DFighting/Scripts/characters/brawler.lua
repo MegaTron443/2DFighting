@@ -1,6 +1,7 @@
 -- ==========================================
 -- BRAWLER CONSTANTS (No Magic Numbers)
 -- ==========================================
+
 -- Parry Constants
 local PARRY_HEAL_AMOUNT    = 10
 local PARRY_COUNTER_DAMAGE = 30
@@ -20,24 +21,24 @@ local GUARD_CRUSH_BONUS_STUN    = 1.40
 local GUARD_CRUSH_KNOCKBACK_PCT = 0.30
 
 -- Rising Uppercut Constants
-local UPPERCUT_LAUNCH_FRAME       = 2
-local UPPERCUT_SELF_SPEED_X_MULT  = 0.65
-local UPPERCUT_SELF_JUMP_Y_MULT   = 1.05
-local UPPERCUT_TARGET_LAUNCH_X_PCT = 0.08 -- Was 180 (bugged)! Now 8% screen width/sec
+local UPPERCUT_LAUNCH_FRAME        = 2
+local UPPERCUT_SELF_SPEED_X_MULT   = 0.65
+local UPPERCUT_SELF_JUMP_Y_MULT    = 1.05
+local UPPERCUT_TARGET_LAUNCH_X_PCT = 0.08
 local UPPERCUT_TARGET_LAUNCH_Y_PCT = -0.78
 
 -- Meteor Dive Constants
-local METEOR_ASCEND_END_FRAME  = 8
-local METEOR_DIVE_END_FRAME    = 18
-local METEOR_ASCEND_X_MULT     = 1.0
-local METEOR_ASCEND_Y_MULT     = 2.0
-local METEOR_DIVE_X_MULT       = 2.2
-local METEOR_DIVE_Y_MULT       = 2.6
-local METEOR_BREAK_DAMAGE      = 90
-local METEOR_BREAK_STUN        = 1.80
+local METEOR_ASCEND_END_FRAME    = 8
+local METEOR_DIVE_END_FRAME      = 18
+local METEOR_ASCEND_X_MULT       = 1.0
+local METEOR_ASCEND_Y_MULT       = 2.0
+local METEOR_DIVE_X_MULT         = 2.2
+local METEOR_DIVE_Y_MULT         = 2.6
+local METEOR_BREAK_DAMAGE        = 90
+local METEOR_BREAK_STUN          = 1.80
 local METEOR_BREAK_KNOCKBACK_PCT = 0.35
 
-Character = {
+local Character = {
     name = "Brawler",
     
     -- Physics & Core Body
@@ -69,7 +70,7 @@ Character = {
 
     -- Skill/Move Definitions
     skills = {
-        -- 1. Fast Jab (Uses default 2-state ApplyHitForce)
+        -- 1. Fast Jab
         quick_jab = {
             input_trigger = Keys.KeyTop,
             damage = 10,
@@ -81,7 +82,7 @@ Character = {
             cooldown_time = 0.3
         },
 
-        -- 2. Low Sweep (Uses custom on_hit with extra heavy ground pushback)
+        -- 2. Low Sweep
         low_sweep = {
             input_trigger = Keys.KeyBottom,
             damage = 22,
@@ -93,12 +94,11 @@ Character = {
             hitStun = 0.45,
             cooldown_time = 1.2,
             on_hit = function(attacker, defender, skill)
-                -- Fixed: 0.22 (22% screen width/sec) instead of 550!
                 ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, SWEEP_KNOCKBACK_PCT)
             end
         },
 
-        -- 3. Parry Counter (Uses exposed ApplyHitForce inside on_counter)
+        -- 3. Parry Counter
         iron_parry = {
             input_trigger = Keys.KeyLeft,
             damage = 20,
@@ -115,7 +115,7 @@ Character = {
             end
         },
 
-        -- 4. Lunge Dash Punch (Custom movement logic + default 2-state hit force)
+        -- 4. Lunge Dash Punch
         lunge_punch = {
             input_trigger = Keys.KeyRight,
             damage = 28,
@@ -134,7 +134,7 @@ Character = {
             end
         },
 
-        -- 5. Guard Crush Slam (Combo: Top + Bottom + on_blockbreak using ApplyHitForce)
+        -- 5. Guard Crush Slam
         guard_crush = {
             input_trigger = Keys.KeyTop + Keys.KeyBottom,
             damage = 45,
@@ -153,7 +153,7 @@ Character = {
             end
         },
 
-        -- 6. Rising Uppercut (Combo: Top + Right + Custom Logic)
+        -- 6. Rising Uppercut
         rising_uppercut = {
             input_trigger = Keys.KeyTop + Keys.KeyRight,
             damage = 38,
@@ -174,12 +174,11 @@ Character = {
                 end
             end,
             on_hit = function(attacker, defender, skill)
-                -- Fixed: 0.08 X pct instead of 180!
                 ApplyLaunchForce(attacker, defender, skill.Damage, skill.HitStun, UPPERCUT_TARGET_LAUNCH_X_PCT, UPPERCUT_TARGET_LAUNCH_Y_PCT)
             end
         },
 
-        -- 7. Meteor Dive (3-Button Combo: Top + Bottom + Right)
+        -- 7. Meteor Dive
         meteor_dive = {
             input_trigger = Keys.KeyTop + Keys.KeyBottom + Keys.KeyRight,
             damage = 75,
@@ -210,3 +209,5 @@ Character = {
         }
     }
 }
+
+return Character

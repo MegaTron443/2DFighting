@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Numerics;
 using Raylib_cs;
 
@@ -22,9 +20,6 @@ public class KeyHandler
         _appConfig = appConfig;
     }
 
-    /// <summary>
-    /// Runs every RENDER FRAME (e.g., 144Hz/240Hz/uncapped) to catch mid-tick clicks.
-    /// </summary>
     public void PollHardwareInput(int playerIndex)
     {
         PlayerControls controls = playerIndex == 0 ? _appConfig.Controls.P1 : _appConfig.Controls.P2;
@@ -52,6 +47,7 @@ public class KeyHandler
         if (Raylib.IsKeyDown(controls.KeyBottom))    heldThisFrame |= (1 << 1);
         if (Raylib.IsKeyDown(controls.KeyLeft))      heldThisFrame |= (1 << 2);
         if (Raylib.IsKeyDown(controls.KeyRight))     heldThisFrame |= (1 << 3);
+
         _latchedHeldMask |= heldThisFrame;
 
         if (!_inputBuffers.ContainsKey(playerIndex))
@@ -63,9 +59,48 @@ public class KeyHandler
         }
     }
 
-    /// <summary>
-    /// Runs every FIXED TICK (60Hz) to apply buffered sub-tick inputs to the simulation.
-    /// </summary>
+    public bool TryConsumeTechInput(int playerIndex, out float techDirection)
+    {
+        techDirection = _latchedDir;
+        bool hasButtonPress = _latchedJumpPressed;
+
+        if (_inputBuffers.TryGetValue(playerIndex, out var buffer) && buffer.Count > 0)
+        {
+            float currentTime = (float)Raylib.GetTime();
+            float plinkWindowDuration = Timer.FixedDeltaTime * PLINK_WINDOW_FRAME_COUNT;
+            while (buffer.Count > 0 && currentTime - buffer.Peek().time > plinkWindowDuration)
+            {
+                buffer.Dequeue();
+            }
+            if (buffer.Count > 0)
+            {
+                hasButtonPress = true;
+            }
+        }
+
+        if (hasButtonPress)
+        {
+            _latchedJumpPressed = false;
+            _latchedHeldMask = 0;
+            if (_inputBuffers.TryGetValue(playerIndex, out var b)) b.Clear();
+            return true;
+        }
+
+        return false;
+    }
+
+    public void ClearBuffer(int playerIndex)
+    {
+        _latchedDir = 0f;
+        _latchedJumpPressed = false;
+        _latchedCrouch = false;
+        _latchedHeldMask = 0;
+        if (_inputBuffers.TryGetValue(playerIndex, out var buffer))
+        {
+            buffer.Clear();
+        }
+    }
+
     public bool ConsumeBufferedInput(Character currentCharacter, Player player, int playerIndex)
     {
         if (currentCharacter == null) return true;
@@ -95,7 +130,6 @@ public class KeyHandler
 
         var buffer = _inputBuffers[playerIndex];
         float currentTime = (float)Raylib.GetTime();
-
         float frameDuration = Timer.FixedDeltaTime;
         float plinkWindowDuration = frameDuration * PLINK_WINDOW_FRAME_COUNT;
         float singleButtonCommitDelay = frameDuration * COMMIT_DELAY_FRAME_COUNT;
@@ -147,7 +181,6 @@ public class KeyHandler
         bool singleButtonCommitReady = (currentTime - oldestPressTime) >= singleButtonCommitDelay;
 
         bool canExecute = false;
-
         if (currentCharacter.ActiveSkill == null)
         {
             if (isMultiButton || singleButtonCommitReady)
@@ -237,7 +270,6 @@ public class KeyHandler
     public void SimulateMaskPress(int mask, int playerIndex = 1)
     {
         if (mask == 0) return;
-
         _latchedCrouch = false;
         _latchedHeldMask |= mask;
 
@@ -245,7 +277,6 @@ public class KeyHandler
         {
             _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
         }
-
         _inputBuffers[playerIndex].Enqueue(((float)Raylib.GetTime() - 0.1f, mask));
     }
 }

@@ -7,27 +7,39 @@ public class Player
 {
     public Vector2 SpawnPosition { get; }
     public int ComboCount { get; set; } = 0;
+    public int RoundsWon { get; set; } = 0;
+
     public const int MAX_HEALTH = 200;
     public const float CROUCH_HEIGHT_RATIO = 0.65f;
+    private const float TECH_INVULNERABILITY_DURATION = 0.25f;
+    private const float TECH_POPUP_DURATION = 0.45f;
+
     private readonly string _name;
     private readonly bool _isAI;
     private readonly int _playerIndex;
     private readonly KeyHandler _keyHandler;
     private readonly PlayerAI? _aiController;
+
+    public string Name => _name;
     public float HitstunTimer { get; set; } = 0f;
+    public float InvulnerableTimer { get; set; } = 0f;
+    public float TechPopupTimer { get; set; } = 0f;
+
     public bool IsInHitstun => HitstunTimer > 0f;
+    public bool IsInvulnerable => InvulnerableTimer > 0f;
+
     public Character? CurrentCharacter { get; private set; }
     public Player? TargetOpponent { get; private set; }
 
     public Vector2 Position;
     public Vector2 PreviousPosition;
     public Vector2 Velocity;
+
     public bool IsGrounded = false;
     public bool FacingRight = true;
     public bool IsInputIdle { get; private set; } = true;
     public bool IsCrouching { get; set; } = false;
     public bool IsAirStalled { get; set; } = false;
-
     public bool IsHoldingBack { get; set; } = false;
 
     public bool IsNeutralBlocking =>
@@ -35,10 +47,9 @@ public class Player
         (IsInputIdle || IsHoldingBack || IsCrouching) &&
         CurrentCharacter?.ActiveSkill == null &&
         !IsInHitstun;
-    
+
     public int Health { get; set; } = MAX_HEALTH;
     public bool IsAlive => Health > 0;
-
     public bool IsStunned => IsInHitstun;
     public bool IsHit { get; set; } = false;
 
@@ -118,11 +129,14 @@ public class Player
         Velocity = Vector2.Zero;
         Health = MAX_HEALTH;
         HitstunTimer = 0f;
+        InvulnerableTimer = 0f;
+        TechPopupTimer = 0f;
         IsGrounded = false;
         IsCrouching = false;
         IsAirStalled = false;
         FacingRight = faceRight;
         ComboCount = 0;
+        _keyHandler.ClearBuffer(_playerIndex);
 
         if (CurrentCharacter != null)
         {
@@ -139,13 +153,12 @@ public class Player
 
     public Vector2 GetInterpolatedPosition(float alpha)
     {
-        return Vector2.Lerp(PreviousPosition, Position, alpha); // Haha larp function actually used!!!
+        return Vector2.Lerp(PreviousPosition, Position, alpha);
     }
 
     public Rectangle GetHurtbox()
     {
         if (CurrentCharacter == null) return default;
-
         float fullW = CurrentCharacter.Width;
         float fullH = CurrentCharacter.Height;
 
@@ -167,7 +180,6 @@ public class Player
     public Rectangle GetRenderHurtbox(float alpha)
     {
         if (CurrentCharacter == null) return default;
-
         Vector2 renderPos = GetInterpolatedPosition(alpha);
         float fullW = CurrentCharacter.Width;
         float fullH = CurrentCharacter.Height;
@@ -232,7 +244,6 @@ public class Player
         float hitX = FacingRight
             ? rootX + offsetX
             : rootX + CurrentCharacter.Width - offsetX - hbWidth;
-
         float hitY = rootY + offsetY;
 
         hitbox = new Rectangle(hitX, hitY, hbWidth, hbHeight);
@@ -245,6 +256,28 @@ public class Player
         if (!_isAI) _keyHandler.PollHardwareInput(_playerIndex);
     }
 
+    private void ExecuteAirTech(float techDir)
+    {
+        if (CurrentCharacter == null) return;
+
+        HitstunTimer = 0f;
+        IsAirStalled = false;
+        InvulnerableTimer = TECH_INVULNERABILITY_DURATION;
+        TechPopupTimer = TECH_POPUP_DURATION;
+
+        if (TargetOpponent != null)
+        {
+            TargetOpponent.ComboCount = 0;
+        }
+
+        float escapeDir = MathF.Abs(techDir) > 0.1f
+            ? MathF.Sign(techDir)
+            : (FacingRight ? -1f : 1f);
+
+        Velocity.X = escapeDir * CurrentCharacter.WalkSpeed * 0.85f;
+        Velocity.Y = CurrentCharacter.JumpForce * 0.55f;
+    }
+
     public void ConsumeInput()
     {
         JustExecutedAction = GameAction.None;
@@ -252,6 +285,21 @@ public class Player
         JustCompletedComboSignature = null;
 
         if (GameState.CurrentState != State.Playing || CurrentCharacter == null) return;
+
+        if (CanTech)
+        {
+            if (_isAI && _aiController != null)
+            {
+                _aiController.HandleAIInput(Timer.FixedDeltaTime);
+            }
+
+            if (_keyHandler.TryConsumeTechInput(_playerIndex, out float techDir))
+            {
+                ExecuteAirTech(techDir);
+                return;
+            }
+        }
+
         if (IsInHitstun) return;
 
         if (_isAI && _aiController != null)
@@ -260,6 +308,7 @@ public class Player
             IsInputIdle = _keyHandler.ConsumeBufferedInput(CurrentCharacter, this, _playerIndex);
             return;
         }
+
         IsInputIdle = _keyHandler.ConsumeBufferedInput(CurrentCharacter, this, _playerIndex);
     }
 
@@ -278,24 +327,30 @@ public class Player
     public void Update(float dt)
     {
         if (GameState.CurrentState != State.Playing) return;
-        if (HitstunTimer > 0f)
-        {
-            HitstunTimer -= dt;
-        }
+
+        if (HitstunTimer > 0f) HitstunTimer = MathF.Max(0f, HitstunTimer - dt);
+        if (InvulnerableTimer > 0f) InvulnerableTimer = MathF.Max(0f, InvulnerableTimer - dt);
+        if (TechPopupTimer > 0f) TechPopupTimer = MathF.Max(0f, TechPopupTimer - dt);
 
         if (CurrentCharacter == null) return;
         CurrentCharacter.Update(this, dt);
-
-        if (!IsAlive)
-        {
-            GameState.SetState(State.GameOver);
-            Console.WriteLine(_playerIndex);
-        }
     }
 
     public void Draw(float alpha)
     {
         if (CurrentCharacter == null) return;
         CurrentCharacter.Draw(this, alpha);
+
+        if (TechPopupTimer > 0f)
+        {
+            Vector2 renderPos = GetInterpolatedPosition(alpha);
+            int fontSize = Math.Max(14, (int)(Raylib.GetScreenHeight() * 0.025f));
+            string techText = "TECH!";
+            int tw = Raylib.MeasureText(techText, fontSize);
+            int tx = (int)renderPos.X - (tw / 2);
+            int ty = (int)(renderPos.Y - (CurrentCharacter.Height * 0.65f));
+            Raylib.DrawText(techText, tx + 2, ty + 2, fontSize, Color.BLACK);
+            Raylib.DrawText(techText, tx, ty, fontSize, Color.SKYBLUE);
+        }
     }
 }

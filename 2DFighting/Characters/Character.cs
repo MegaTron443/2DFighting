@@ -1,9 +1,12 @@
 using MoonSharp.Interpreter;
 using Raylib_cs;
+using System.Numerics;
 
 [MoonSharpUserData]
 public class Character
 {
+    public static bool ShowDebugBoxes { get; set; } = true;
+
     public string Name { get; private set; } = "";
 
     // --- Viewport Percentage Ratios ---
@@ -22,11 +25,16 @@ public class Character
     public float JumpForce => Raylib.GetScreenHeight() * JumpForcePct;
     public float Gravity => Raylib.GetScreenHeight() * GravityPct;
 
-    // --- Rendering Offsets ---
+    // --- Rendering & Animation ---
     public float DrawOffsetX => Width * DrawOffsetXPct;
     public float DrawOffsetY => Height * DrawOffsetYPct;
     public float DrawOffsetXPct { get; private set; } = 0f;
     public float DrawOffsetYPct { get; private set; } = 0f;
+    public int FrameWidth { get; private set; } = 128;
+    public int FrameHeight { get; private set; } = 128;
+    private Texture2D? _spriteSheet = null;
+    public Dictionary<string, AnimationClip> Animations { get; } = new();
+    public Animation Animator { get; } = new();
 
     // --- Actions & Skills ---
     public SkillData? ActiveSkill { get; set; }
@@ -64,8 +72,18 @@ public class Character
 
     private void LoadFromLua(string path, Script script)
     {
-        script.DoFile(path);
-        Table t = script.Globals.Get("Character").Table;
+        // Isolated environment per character script so globals don't collide
+        Table env = new Table(script);
+        env["Keys"] = script.Globals.Get("Keys");
+        env["ApplyHitForce"] = script.Globals.Get("ApplyHitForce");
+        env["ApplyLaunchForce"] = script.Globals.Get("ApplyLaunchForce");
+        env["NewVec2"] = script.Globals.Get("NewVec2");
+        env["math"] = script.Globals.Get("math");
+
+        string code = File.ReadAllText(path);
+        DynValue result = script.DoString(code, env, path);
+
+        Table? t = result.Type == DataType.Table ? result.Table : env.Get("Character").Table;
         if (t == null)
             throw new Exception($"Table 'Character' missing in: {path}");
 
@@ -87,6 +105,36 @@ public class Character
         {
             DrawOffsetXPct = (float)(rend.Get("draw_offset_x_pct").CastToNumber() ?? 0.0);
             DrawOffsetYPct = (float)(rend.Get("draw_offset_y_pct").CastToNumber() ?? 0.0);
+            FrameWidth = (int)(rend.Get("frame_width").CastToNumber() ?? 128);
+            FrameHeight = (int)(rend.Get("frame_height").CastToNumber() ?? 128);
+
+            string? sheetRelPath = rend.Get("sprite_sheet").String;
+            if (!string.IsNullOrEmpty(sheetRelPath))
+            {
+                string fullSheetPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, sheetRelPath);
+                if (File.Exists(fullSheetPath))
+                {
+                    _spriteSheet = Raylib.LoadTexture(fullSheetPath);
+                }
+            }
+        }
+
+        var animTable = t.Get("animations").Table;
+        if (animTable != null)
+        {
+            foreach (var pair in animTable.Pairs)
+            {
+                var clipTable = pair.Value.Table;
+                if (clipTable != null)
+                {
+                    Animations[pair.Key.String] = new AnimationClip
+                    {
+                        StartFrame = (int)(clipTable.Get("start_frame").CastToNumber() ?? 0),
+                        FrameCount = (int)(clipTable.Get("frame_count").CastToNumber() ?? 1),
+                        Speed = (float)(clipTable.Get("speed").CastToNumber() ?? 8.0)
+                    };
+                }
+            }
         }
 
         var skillsTable = t.Get("skills").Table;
@@ -96,8 +144,8 @@ public class Character
             {
                 var sTable = pair.Value.Table;
                 var hb = sTable.Get("hitbox").Table;
-                Rectangle hbPctRect = new Rectangle(0, 0, 0, 0);
 
+                Rectangle hbPctRect = new Rectangle(0, 0, 0, 0);
                 if (hb != null)
                 {
                     hbPctRect = new Rectangle(
@@ -110,7 +158,6 @@ public class Character
 
                 var triggerObj = sTable.Get("input_trigger");
                 int triggerMask = 0;
-
                 if (triggerObj.Type == DataType.Table)
                 {
                     triggerMask = (int)(triggerObj.Table.Get("value").CastToNumber() ?? 0);
@@ -251,6 +298,22 @@ public class Character
             }
         }
 
+        // Update Animation State
+        if (!p.IsAlive)
+            Animator.SetState(AnimationState.Dying);
+        else if (p.IsInHitstun)
+            Animator.SetState(AnimationState.TakingDamage);
+        else if (ActiveSkill != null)
+            Animator.SetState(AnimationState.Attacking);
+        else if (!p.IsGrounded)
+            Animator.SetState(AnimationState.Jumping);
+        else if (MathF.Abs(p.Velocity.X) > 5f)
+            Animator.SetState(AnimationState.Walking);
+        else
+            Animator.SetState(AnimationState.Idle);
+
+        Animator.Update(dt, Animations);
+
         foreach (var skill in SkillCooldowns.Keys.ToList())
         {
             if (SkillCooldowns[skill] > 0)
@@ -264,25 +327,64 @@ public class Character
     {
         Rectangle hurtbox = p.GetRenderHurtbox(alpha);
 
-        Color bodyColor = p.IsInHitstun
-            ? Color.ORANGE
-            : (p.FacingRight ? Color.DARKBLUE : Color.MAROON);
-
-        Raylib.DrawRectangleRec(hurtbox, bodyColor);
-
-        if (IsHyperArmorActive)
+        bool hasSprite = _spriteSheet is { id: > 0 };
+        if (hasSprite)
         {
-            Raylib.DrawRectangleLinesEx(hurtbox, 5, Color.GOLD);
+            Texture2D tex = _spriteSheet!.Value;
+            int cols = Math.Max(1, tex.width / FrameWidth);
+            int frameIdx = Animator.GetAtlasFrameIndex(Animations);
+            int srcX = (frameIdx % cols) * FrameWidth;
+            int srcY = (frameIdx / cols) * FrameHeight;
+
+            Rectangle srcRect = new Rectangle(
+                srcX,
+                srcY,
+                p.FacingRight ? FrameWidth : -FrameWidth,
+                FrameHeight
+            );
+
+            Rectangle destRect = new Rectangle(
+                hurtbox.x + DrawOffsetX,
+                hurtbox.y + DrawOffsetY,
+                hurtbox.width * 2f,
+                hurtbox.height * 1.15f
+            );
+
+            Color tint = p.IsInvulnerable ? Color.SKYBLUE : (p.IsInHitstun ? Color.ORANGE : Color.WHITE);
+            Raylib.DrawTexturePro(tex, srcRect, destRect, Vector2.Zero, 0f, tint);
         }
-        else
-        {
-            Raylib.DrawRectangleLinesEx(hurtbox, 2, Color.WHITE);
-        }
 
-        if (p.TryGetRenderHitbox(alpha, out Rectangle hitbox))
+        if (ShowDebugBoxes || !hasSprite)
         {
-            Raylib.DrawRectangleRec(hitbox, new Color(255, 0, 0, 160));
-            Raylib.DrawRectangleLinesEx(hitbox, 2, Color.YELLOW);
+            Color bodyColor = p.IsInvulnerable
+                ? Color.SKYBLUE
+                : (p.IsInHitstun ? Color.ORANGE : (p.FacingRight ? Color.DARKBLUE : Color.MAROON));
+
+            if (hasSprite)
+            {
+                bodyColor.a = 110;
+            }
+
+            Raylib.DrawRectangleRec(hurtbox, bodyColor);
+
+            if (IsHyperArmorActive)
+            {
+                Raylib.DrawRectangleLinesEx(hurtbox, 5, Color.GOLD);
+            }
+            else if (p.CanTech)
+            {
+                Raylib.DrawRectangleLinesEx(hurtbox, 4, Color.LIME);
+            }
+            else
+            {
+                Raylib.DrawRectangleLinesEx(hurtbox, 2, Color.WHITE);
+            }
+
+            if (p.TryGetRenderHitbox(alpha, out Rectangle hitbox))
+            {
+                Raylib.DrawRectangleRec(hitbox, new Color(255, 0, 0, 160));
+                Raylib.DrawRectangleLinesEx(hitbox, 2, Color.YELLOW);
+            }
         }
     }
 }

@@ -1,31 +1,64 @@
+public struct AnimationClip
+{
+    public int StartFrame;
+    public int FrameCount;
+    public float Speed;
+}
+
 public class Animation
 {
     public AnimationState State { get; private set; } = AnimationState.Idle;
-    public Character? Character { get; private set; } = null;
+    public int CurrentFrame { get; private set; } = 0;
+    private float _timer = 0f;
 
     public void SetState(AnimationState newState)
     {
-        State = newState;
+        if (State != newState)
+        {
+            State = newState;
+            CurrentFrame = 0;
+            _timer = 0f;
+        }
     }
 
-    public string GetAnimationFilePath()
+    public void Update(float dt, Dictionary<string, AnimationClip> clips)
     {
-        if (Character != null)
+        string key = State switch
         {
-            return State switch
-            {
-                AnimationState.Idle => $"Animations/{Character.Name}/Idle.png",
-                AnimationState.Walking => $"Animations/{Character.Name}/Walking.png",
-                AnimationState.Jumping => $"Animations/{Character.Name}/Jumping.png",
-                AnimationState.Attacking => $"Animations/{Character.Name}/Attacking.png",
-                AnimationState.TakingDamage => $"Animations/{Character.Name}/TakingDamage.png",
-                AnimationState.Dying => $"Animations/{Character.Name}/Dying.png",
-                _ => $"Animations/{Character.Name}/Unknown.png"
-            };
+            AnimationState.Walking => "walk",
+            AnimationState.Jumping => "jump",
+            AnimationState.Attacking => "attack1",
+            _ => "idle"
+        };
+
+        if (!clips.TryGetValue(key, out var clip) || clip.FrameCount <= 0)
+            return;
+
+        _timer += dt * clip.Speed;
+        if (_timer >= 1f)
+        {
+            int steps = (int)_timer;
+            _timer -= steps;
+            CurrentFrame = (CurrentFrame + steps) % clip.FrameCount;
         }
-        return "Animations/Unknown.png";
     }
-    
+
+    public int GetAtlasFrameIndex(Dictionary<string, AnimationClip> clips)
+    {
+        string key = State switch
+        {
+            AnimationState.Walking => "walk",
+            AnimationState.Jumping => "jump",
+            AnimationState.Attacking => "attack1",
+            _ => "idle"
+        };
+
+        if (clips.TryGetValue(key, out var clip) && clip.FrameCount > 0)
+        {
+            return clip.StartFrame + (CurrentFrame % clip.FrameCount);
+        }
+        return 0;
+    }
 }
 
 public enum AnimationState

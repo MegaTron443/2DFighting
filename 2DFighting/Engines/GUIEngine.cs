@@ -293,16 +293,22 @@ public static class GUIEngine
 
     private static void DrawGameOver(GameData data)
     {
-
         int titleSize = (int)(sh * 0.06f);
+        int winnerSize = (int)(sh * 0.04f);
         int subSize = (int)(sh * 0.03f);
 
         string title = "GAME OVER";
         int titleW = Raylib.MeasureText(title, titleSize);
-        Raylib.DrawText(title, (sw - titleW) / 2, (int)(sh * 0.28f), titleSize, Color.RED);
+        Raylib.DrawText(title, (sw - titleW) / 2, (int)(sh * 0.24f), titleSize, Color.RED);
+
+        if (!string.IsNullOrEmpty(PhysicsEngine.MatchWinnerText))
+        {
+            int winW = Raylib.MeasureText(PhysicsEngine.MatchWinnerText, winnerSize);
+            Raylib.DrawText(PhysicsEngine.MatchWinnerText, (sw - winW) / 2, (int)(sh * 0.33f), winnerSize, Color.DARKGREEN);
+        }
 
         string hint = "Press Enter or Click Below to Return to Menu";
         int hintW = Raylib.MeasureText(hint, subSize);
-        Raylib.DrawText(hint, (sw - hintW) / 2, (int)(sh * 0.38f), subSize, Color.DARKGRAY);
+        Raylib.DrawText(hint, (sw - hintW) / 2, (int)(sh * 0.41f), subSize, Color.DARKGRAY);
     }
 }

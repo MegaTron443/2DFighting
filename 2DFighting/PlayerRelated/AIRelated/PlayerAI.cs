@@ -154,6 +154,16 @@ public class PlayerAI
         ObserveOpponentBehavior();
         EvaluateActiveSkillOutcome();
 
+        if (_self.CanTech)
+        {
+            if (CanAdaptByDifficulty())
+            {
+                _keyHandler.SimulateDirection(GetAwayDirection());
+                _keyHandler.SimulateMaskPress(1 << 0, _playerIndex);
+            }
+            return;
+        }
+
         if (_self.IsStunned || _self.IsHit)
         {
             _currentMovement = GameDirection.None;

@@ -70,6 +70,11 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
 void HandlePauseInput()
 {
+    if (Raylib.IsKeyPressed(KeyboardKey.KEY_F1))
+    {
+        Character.ShowDebugBoxes = !Character.ShowDebugBoxes;
+    }
+
     if (Raylib.IsKeyPressed(config.Controls.Pause))
     {
         if (GameState.CurrentState == State.Playing)
