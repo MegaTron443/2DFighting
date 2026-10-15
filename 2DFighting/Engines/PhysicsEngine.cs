@@ -22,7 +22,9 @@ public class PhysicsEngine
     private const float DEFAULT_COUNTER_KNOCKBACK_PCT = 0.21f;
     private const float DEFAULT_BLOCK_KNOCKBACK_PCT = 0.23f;
     private const float DEFAULT_CLEAN_KNOCKBACK_PCT = 0.18f;
-    private const float BLOCK_CHIP_DAMAGE_MULTIPLIER = 0.20f;
+    private const float BLOCK_CHIP_DAMAGE_MULTIPLIER = 0.10f;
+    private const float COMBO_SCALING_PER_HIT = 0.12f;
+    private const float MIN_COMBO_SCALING = 0.40f;
     private const float BLOCK_STUN_MULTIPLIER = 0.40f;
     private const float ROUND_TRANSITION_DURATION = 2.0f;
 
@@ -168,9 +170,17 @@ public class PhysicsEngine
         };
     }
 
+    private static int CalculateScaledDamage(Player source, int baseDamage)
+    {
+        if (baseDamage <= 0) return 0;
+        float scale = MathF.Max(MIN_COMBO_SCALING, 1.0f - (source.ComboCount * COMBO_SCALING_PER_HIT));
+        return Math.Max(1, (int)MathF.Round(baseDamage * scale));
+    }
+
     public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackPct)
     {
-        target.Health = Math.Max(0, target.Health - damage);
+        int scaledDamage = CalculateScaledDamage(source, damage);
+        target.Health = Math.Max(0, target.Health - scaledDamage);
         Character? targetChar = target.CurrentCharacter;
 
         if (targetChar != null && targetChar.IsHyperArmorActive)
@@ -196,7 +206,7 @@ public class PhysicsEngine
             target.SetVelocity(0f, 0f);
         }
 
-        if (damage > 0 && stun > 0f)
+        if (scaledDamage > 0 && stun > 0f)
         {
             source.ComboCount++;
         }
@@ -204,7 +214,8 @@ public class PhysicsEngine
 
     public static void ApplyLaunchForce(Player source, Player target, int damage, float stun, float launchXPct, float launchYPct)
     {
-        target.Health = Math.Max(0, target.Health - damage);
+        int scaledDamage = CalculateScaledDamage(source, damage);
+        target.Health = Math.Max(0, target.Health - scaledDamage);
         Character? targetChar = target.CurrentCharacter;
 
         if (targetChar != null && targetChar.IsHyperArmorActive)
@@ -225,10 +236,22 @@ public class PhysicsEngine
         float vy = launchYPct * Raylib.GetScreenHeight();
         target.SetVelocity(vx, vy);
 
-        if (damage > 0 && stun > 0f)
+        if (scaledDamage > 0 && stun > 0f)
         {
             source.ComboCount++;
         }
+    }
+
+    private void ApplyBlockedHit(Player attacker, Player defender, SkillData skill)
+    {
+        int rawChip = (int)(skill.Damage * BLOCK_CHIP_DAMAGE_MULTIPLIER);
+        // Chip damage cannot K.O. a player (leaves them at 1 HP minimum)
+        int nonLethalChip = Math.Max(0, Math.Min(rawChip, defender.Health - 1));
+        float blockStun = skill.HitStun * BLOCK_STUN_MULTIPLIER;
+
+        int prevCombo = attacker.ComboCount;
+        ApplyHitForce(attacker, defender, nonLethalChip, blockStun, DEFAULT_BLOCK_KNOCKBACK_PCT);
+        attacker.ComboCount = prevCombo; // Blocked hits shouldn't inflate combo counter
     }
 
     public static void ResetMatch(Player p1, Player p2)
@@ -404,13 +427,6 @@ public class PhysicsEngine
             ApplyHitForce(defender, attacker, counterSkill.Damage, counterSkill.HitStun, DEFAULT_COUNTER_KNOCKBACK_PCT);
         }
         return true;
-    }
-
-    private void ApplyBlockedHit(Player attacker, Player defender, SkillData skill)
-    {
-        int chipDamage = (int)(skill.Damage * BLOCK_CHIP_DAMAGE_MULTIPLIER);
-        float blockStun = skill.HitStun * BLOCK_STUN_MULTIPLIER;
-        ApplyHitForce(attacker, defender, chipDamage, blockStun, DEFAULT_BLOCK_KNOCKBACK_PCT);
     }
 
     private void ApplyCleanHit(Player attacker, Player defender, SkillData skill)

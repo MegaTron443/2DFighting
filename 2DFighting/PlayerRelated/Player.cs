@@ -9,7 +9,7 @@ public class Player
     public int ComboCount { get; set; } = 0;
     public int RoundsWon { get; set; } = 0;
 
-    public const int MAX_HEALTH = 200;
+    public const int MAX_HEALTH = 350;
     public const float CROUCH_HEIGHT_RATIO = 0.65f;
     private const float TECH_INVULNERABILITY_DURATION = 0.25f;
     private const float TECH_POPUP_DURATION = 0.45f;

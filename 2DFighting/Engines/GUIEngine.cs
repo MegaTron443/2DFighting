@@ -7,7 +7,7 @@ public static class GUIEngine
 {
     private static readonly Dictionary<State, List<Button>> ButtonsByState = new();
     private static readonly Dictionary<string, Texture2D> RosterThumbnails = new();
-    private static readonly string[] AvailableFighters = new[] { "brawler" };
+    private static readonly string[] AvailableFighters = new[] { "brawler", "lancer", "titan" };
     private static int sw => Raylib.GetScreenWidth();
     private static int sh => Raylib.GetScreenHeight();
 
