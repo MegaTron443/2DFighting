@@ -321,6 +321,10 @@ public class Player
         Position.X += dx;
         Position.Y += dy;
     }
+    public void NotifyRoundEnd(bool wonRound)
+    {
+        _aiController?.OnRoundEnd(wonRound);
+    }  
 
     public void SetVelocity(float vx, float vy)
     {
@@ -355,6 +359,15 @@ public class Player
             int ty = (int)(renderPos.Y - (CurrentCharacter.Height * 0.65f));
             Raylib.DrawText(techText, tx + 2, ty + 2, fontSize, Color.BLACK);
             Raylib.DrawText(techText, tx, ty, fontSize, Color.SKYBLUE);
+        }
+
+        if (_isAI && _aiController != null && Character.ShowDebugBoxes && CurrentCharacter != null)
+        {
+            Vector2 renderPos = GetInterpolatedPosition(alpha);
+            string aiText = $"AI: {_aiController.CurrentMacroTactic}";
+            int fontSize = Math.Max(12, (int)(Raylib.GetScreenHeight() * 0.018f));
+            int tw = Raylib.MeasureText(aiText, fontSize);
+            Raylib.DrawText(aiText, (int)renderPos.X - (tw / 2), (int)(renderPos.Y - (CurrentCharacter.Height * 0.85f)), fontSize, Color.DARKGREEN);
         }
     }
 }
