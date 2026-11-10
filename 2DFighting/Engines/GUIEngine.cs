@@ -5,6 +5,7 @@ using Raylib_cs;
 
 public static class GUIEngine
 {
+    public static string[] RosterIds => AvailableFighters;
     private static readonly Dictionary<State, List<Button>> ButtonsByState = new();
     private static readonly Dictionary<string, Texture2D> RosterThumbnails = new();
     private static readonly string[] AvailableFighters = new[] { "brawler", "lancer", "pyromancer", "phantom", "titan", "chronomancer" };
@@ -48,34 +49,50 @@ public static class GUIEngine
         {
             Button.Create("Player vs AI")
                 .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.40f)
-                .Action(ctx => SetupGame(ctx, isAI: true)),
-
+                .At(0.5f, 0.36f)
+                .Action(ctx => { PhysicsEngine.IsTrainingMode = false; SetupGame(ctx, p1AI: false, p2AI: true); }),
             Button.Create("Player vs Player")
                 .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.48f)
-                .Action(ctx => SetupGame(ctx, isAI: false)),
-
+                .At(0.5f, 0.44f)
+                .Action(ctx => { PhysicsEngine.IsTrainingMode = false; SetupGame(ctx, p1AI: false, p2AI: false); }),
+            Button.Create("AI vs AI (Turbo Train)")
+                .WithSize(0.28f, 0.07f)
+                .At(0.5f, 0.52f)
+                .Action(ctx =>
+                {
+                    PhysicsEngine.IsTrainingMode = true;
+                    SetupGame(ctx, p1AI: true, p2AI: true);
+                }),
             Button.Create("Exit")
                 .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.56f)
+                .At(0.5f, 0.60f)
                 .Action(_ => GameState.SetState(State.Exit))
         };
 
-        void SetupGame(ButtonContext ctx, bool isAI)
+        void SetupGame(ButtonContext ctx, bool p1AI, bool p2AI)
         {
             Vector2 spawn_p1 = new Vector2(sw * 0.1f, PhysicsEngine.GroundY * 0.9f);
             Vector2 spawn_p2 = new Vector2(sw * 0.9f, PhysicsEngine.GroundY * 0.9f);
-
-            Player p1 = Player.Create("Player 1", 0, spawn_p1, ctx.Data.AppConfig, isAI: false);
-            Player p2 = Player.Create("Player 2", 1, spawn_p2, ctx.Data.AppConfig, isAI: isAI);
-
+            Player p1 = Player.Create("Player 1", 0, spawn_p1, ctx.Data.AppConfig, isAI: p1AI);
+            Player p2 = Player.Create("Player 2", 1, spawn_p2, ctx.Data.AppConfig, isAI: p2AI);
             p1.SetOpponent(p2);
             p2.SetOpponent(p1);
 
+            if (PhysicsEngine.IsTrainingMode)
+            {
+                var rng = Random.Shared;
+                p1.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)]));
+                p2.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)]));
+                PhysicsEngine.ResetMatch(p1, p2);
+                GameState.SetState(State.Playing);
+            }
+            else
+            {
+                GameState.SetState(State.ChoiceMenu);
+            }
+
             ctx.SetP1(p1);
             ctx.SetP2(p2);
-            GameState.SetState(State.ChoiceMenu);
         }
 
         var choiceButtons = new List<Button>();
