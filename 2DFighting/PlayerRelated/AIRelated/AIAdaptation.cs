@@ -7,7 +7,8 @@ public enum OpponentPattern
     LowAttackSpam,
     HighOverheadSpam,
     GuardBreakSpam,
-    FastPokeSpam
+    FastPokeSpam,
+    ProjectileSpam
 }
 
 public struct RecordedAction
@@ -41,6 +42,7 @@ public class OpponentPatternTracker
 
     public OpponentPattern DetectSpamPattern()
     {
+        if (CountAction(GameAction.ProjectileAttack) >= 2) return OpponentPattern.ProjectileSpam;
         if (CountAction(GameAction.Jump) >= SPAM_THRESHOLD) return OpponentPattern.JumpInSpam;
         if (CountAction(GameAction.LowAttack) >= SPAM_THRESHOLD) return OpponentPattern.LowAttackSpam;
         if (CountAction(GameAction.OverheadAttack) >= SPAM_THRESHOLD) return OpponentPattern.HighOverheadSpam;
@@ -48,7 +50,7 @@ public class OpponentPatternTracker
         if (CountAction(GameAction.FastPoke) >= SPAM_THRESHOLD + 1) return OpponentPattern.FastPokeSpam;
         return OpponentPattern.None;
     }
-
+    
     private int CountAction(GameAction targetAction)
     {
         int count = 0;
