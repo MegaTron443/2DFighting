@@ -5,7 +5,8 @@ using System.Numerics;
 [MoonSharpUserData]
 public class Character
 {
-    public static bool ShowDebugBoxes { get; set; } = true;
+    public string RawLuaCode { get; private set; } = "";
+    public static bool ShowDebugBoxes { get; set; } = false;
 
     public string Name { get; private set; } = "";
 
@@ -90,6 +91,7 @@ public class Character
         env["math"] = script.Globals.Get("math");
 
         string code = File.ReadAllText(path);
+        RawLuaCode = code;
         DynValue result = script.DoString(code, env, path);
 
         Table? t = result.Type == DataType.Table ? result.Table : env.Get("Character").Table;
