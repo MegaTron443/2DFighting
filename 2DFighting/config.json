@@ -1,7 +1,10 @@
 {
+  "Sound": {
+    "Volume": 100
+  },
   "Display": {
-    "ScreenWidth": 1920,
-    "ScreenHeight": 1080,
+    "ScreenWidth": 800,
+    "ScreenHeight": 600,
     "TargetFps": 60,
     "Title": "2D Fighting Game"
   },
