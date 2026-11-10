@@ -4,6 +4,7 @@ using MoonSharp.Interpreter;
 [MoonSharpUserData]
 public class PhysicsEngine
 {
+    public static bool IsTrainingMode { get; set; } = false;
     public const int ROUNDS_TO_WIN = 2;
     public static int CurrentRound { get; private set; } = 1;
     public static float RoundTimer { get; set; } = 99f;
@@ -54,10 +55,21 @@ public class PhysicsEngine
             {
                 if (data.Player1.RoundsWon >= ROUNDS_TO_WIN || data.Player2.RoundsWon >= ROUNDS_TO_WIN)
                 {
-                    MatchWinnerText = data.Player1.RoundsWon > data.Player2.RoundsWon
-                        ? $"{data.Player1.Name} ({data.Player1.CurrentCharacter.Name}) WINS!"
-                        : $"{data.Player2.Name} ({data.Player2.CurrentCharacter.Name}) WINS!";
-                    GameState.SetState(State.GameOver);
+                    if (IsTrainingMode)
+                    {
+                        string[] roster = GUIEngine.RosterIds;
+                        var rng = Random.Shared;
+                        data.Player1.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)]));
+                        data.Player2.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)]));
+                        ResetMatch(data.Player1, data.Player2);
+                    }
+                    else
+                    {
+                        MatchWinnerText = data.Player1.RoundsWon > data.Player2.RoundsWon
+                            ? $"{data.Player1.Name} ({data.Player1.CurrentCharacter.Name}) WINS!"
+                            : $"{data.Player2.Name} ({data.Player2.CurrentCharacter.Name}) WINS!";
+                        GameState.SetState(State.GameOver);
+                    }
                 }
                 else
                 {
@@ -82,6 +94,15 @@ public class PhysicsEngine
         data.Player1.Update(dt);
         data.Player2.Update(dt);
 
+        if (data.Player1.CurrentCharacter?.ActiveSkill != null && data.Player1.CurrentCharacter.CurrentActionFrame == 1)
+        {
+            data.SoundHandler?.PlaySkillSound(data.Player1, data.Player1.CurrentCharacter.ActiveSkill.Name);
+        }
+        if (data.Player2.CurrentCharacter?.ActiveSkill != null && data.Player2.CurrentCharacter.CurrentActionFrame == 1)
+        {
+            data.SoundHandler?.PlaySkillSound(data.Player2, data.Player2.CurrentCharacter.ActiveSkill.Name);
+        }
+
         ClampPlayer(data.Player1);
         ClampPlayer(data.Player2);
 
@@ -90,8 +111,7 @@ public class PhysicsEngine
         UpdateAutoFacing(data.Player1, data.Player2);
         UpdateAutoFacing(data.Player2, data.Player1);
 
-        // Simultaneous Hit Detection (Prevents P1 Priority Bias)
-        ResolveSimultaneousHits(data.Player1, data.Player2);
+        ResolveSimultaneousHits(data, data.Player1, data.Player2);
 
         UpdateProjectiles(dt, data.Player1, data.Player2);
 
@@ -100,14 +120,17 @@ public class PhysicsEngine
         if (!data.Player1.IsInHitstun) data.Player2.ComboCount = 0;
         if (!data.Player2.IsInHitstun) data.Player1.ComboCount = 0;
 
-        CheckRoundEndCondition(data.Player1, data.Player2);
+        CheckRoundEndCondition(data, data.Player1, data.Player2);
     }
 
-    private void CheckRoundEndCondition(Player p1, Player p2)
+    private void CheckRoundEndCondition(GameData data, Player p1, Player p2)
     {
         bool p1Dead = !p1.IsAlive;
         bool p2Dead = !p2.IsAlive;
         bool timeOut = RoundTimer <= 0f;
+
+        if (p1Dead) data.SoundHandler?.PlaySound(p1, SoundType.Death);
+        if (p2Dead) data.SoundHandler?.PlaySound(p2, SoundType.Death);
 
         if (!p1Dead && !p2Dead && !timeOut)
             return;
@@ -146,7 +169,13 @@ public class PhysicsEngine
             }
         }
 
-        RoundTransitionTimer = ROUND_TRANSITION_DURATION;
+        bool p1WonRound = p2Dead || (timeOut && p1.Health > p2.Health);
+        bool p2WonRound = p1Dead || (timeOut && p2.Health > p1.Health);
+
+        p1.NotifyRoundEnd(p1WonRound);
+        p2.NotifyRoundEnd(p2WonRound);
+
+        RoundTransitionTimer = IsTrainingMode ? 0.05f : ROUND_TRANSITION_DURATION;
     }
 
     private void UpdateAutoFacing(Player player, Player opponent)
@@ -245,7 +274,7 @@ public class PhysicsEngine
         }
     }
 
-    private void ApplyBlockedHit(Player attacker, Player defender, SkillData skill)
+    private void ApplyBlockedHit(GameData gamedata, Player attacker, Player defender, SkillData skill)
     {
         int rawChip = (int)(skill.Damage * BLOCK_CHIP_DAMAGE_MULTIPLIER);
         // Chip damage cannot K.O. a player (leaves them at 1 HP minimum)
@@ -254,6 +283,7 @@ public class PhysicsEngine
 
         int prevCombo = attacker.ComboCount;
         ApplyHitForce(attacker, defender, nonLethalChip, blockStun, DEFAULT_BLOCK_KNOCKBACK_PCT);
+        gamedata.SoundHandler?.PlaySound(defender, SoundType.Block);
         attacker.ComboCount = prevCombo; // Blocked hits shouldn't inflate combo counter
     }
 
@@ -336,7 +366,7 @@ public class PhysicsEngine
         return Raylib.CheckCollisionRecs(hitbox, defHurtbox);
     }
 
-    private void ResolveSimultaneousHits(Player p1, Player p2)
+    private void ResolveSimultaneousHits(GameData gamedata, Player p1, Player p2)
     {
         bool p1HitsP2 = CheckHitCollision(p1, p2);
         bool p2HitsP1 = CheckHitCollision(p2, p1);
@@ -346,33 +376,31 @@ public class PhysicsEngine
             SkillData s1 = p1.CurrentCharacter!.ActiveSkill!;
             SkillData s2 = p2.CurrentCharacter!.ActiveSkill!;
 
-            // Active Counter beats normal attack
             if (s1.IsCounter && !s2.IsCounter)
             {
-                ResolveHitInteraction(p2, p1, s2);
+                ResolveHitInteraction(gamedata, p2, p1, s2);
                 return;
             }
             if (s2.IsCounter && !s1.IsCounter)
             {
-                ResolveHitInteraction(p1, p2, s1);
+                ResolveHitInteraction(gamedata, p1, p2, s1);
                 return;
             }
 
-            // Otherwise, simultaneous trade: cache skills before either resets ActiveSkill
-            ResolveHitInteraction(p1, p2, s1);
-            ResolveHitInteraction(p2, p1, s2);
+            ResolveHitInteraction(gamedata, p1, p2, s1);
+            ResolveHitInteraction(gamedata, p2, p1, s2);
         }
         else if (p1HitsP2)
         {
-            ResolveHitInteraction(p1, p2, p1.CurrentCharacter!.ActiveSkill!);
+            ResolveHitInteraction(gamedata, p1, p2, p1.CurrentCharacter!.ActiveSkill!);
         }
         else if (p2HitsP1)
         {
-            ResolveHitInteraction(p2, p1, p2.CurrentCharacter!.ActiveSkill!);
+            ResolveHitInteraction(gamedata, p2, p1, p2.CurrentCharacter!.ActiveSkill!);
         }
     }
 
-    private void ResolveHitInteraction(Player attacker, Player defender, SkillData attackSkill)
+    private void ResolveHitInteraction(GameData gamedata, Player attacker, Player defender, SkillData attackSkill)
     {
         if (attacker.CurrentCharacter != null)
         {
@@ -384,12 +412,12 @@ public class PhysicsEngine
             : LIGHT_HITSTOP_DURATION;
         HitstopTimer = MathF.Max(HitstopTimer, hitstop);
 
-        if (TryResolveCounter(attacker, defender, attackSkill))
+        if (TryResolveCounter(gamedata, attacker, defender, attackSkill))
             return;
 
         if (CanBlockAttack(defender, attackSkill))
         {
-            ApplyBlockedHit(attacker, defender, attackSkill);
+            ApplyBlockedHit(gamedata, attacker, defender, attackSkill);
             return;
         }
 
@@ -401,15 +429,16 @@ public class PhysicsEngine
             }
             else
             {
-                ApplyCleanHit(attacker, defender, attackSkill);
+                ApplyCleanHit(gamedata, attacker, defender, attackSkill);
             }
+            gamedata.SoundHandler?.PlaySound(defender, SoundType.BlockBreak);
             return;
         }
 
-        ApplyCleanHit(attacker, defender, attackSkill);
+        ApplyCleanHit(gamedata, attacker, defender, attackSkill);
     }
 
-    private bool TryResolveCounter(Player attacker, Player defender, SkillData attackSkill)
+    private bool TryResolveCounter(GameData gamedata, Player attacker, Player defender, SkillData attackSkill)
     {
         Character? defChar = defender.CurrentCharacter;
         if (defChar?.ActiveSkill == null || !defChar.ActiveSkill.IsCounter || !defChar.IsHitboxActive)
@@ -430,6 +459,7 @@ public class PhysicsEngine
         {
             ApplyHitForce(defender, attacker, counterSkill.Damage, counterSkill.HitStun, DEFAULT_COUNTER_KNOCKBACK_PCT);
         }
+        gamedata.SoundHandler?.PlaySound(defender, SoundType.OnCounter);
         return true;
     }
 
@@ -531,13 +561,16 @@ public class PhysicsEngine
         }
     }
 
-    private void ApplyCleanHit(Player attacker, Player defender, SkillData skill)
+    private void ApplyCleanHit(GameData gamedata, Player attacker, Player defender, SkillData skill)
     {
         if (skill.OnHit?.Function != null)
         {
             skill.OnHit.Function.Call(attacker, defender, skill);
+
+            gamedata.SoundHandler?.PlaySound(defender, SoundType.CustomOnHit);
             return;
         }
+        gamedata.SoundHandler?.PlaySound(defender, SoundType.Hurt);
         ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, DEFAULT_CLEAN_KNOCKBACK_PCT);
     }
 }
