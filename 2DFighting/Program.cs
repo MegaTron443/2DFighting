@@ -7,7 +7,7 @@ int sh = config.Display.ScreenHeight;
 
 Raylib.InitWindow(sw, sh, config.Display.Title);
 Raylib.SetTargetFPS(config.Display.TargetFps);
-
+Raylib.InitAudioDevice();
 PhysicsEngine physics = new PhysicsEngine();
 Timer timer = new Timer();
 LuaEngine lua = new LuaEngine();
@@ -18,39 +18,59 @@ lua.Initialize();
 
 Player? p1 = null;
 Player? p2 = null;
+SoundHandler? soundHandler = null;
 
 GameState.SetState(State.MainMenu);
 
 while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
-
-    if (GameState.CurrentState == State.GameOver && (p1 != null || p2 != null))
+    if ((GameState.CurrentState == State.GameOver || GameState.CurrentState == State.MainMenu) &&
+        (p1 != null || p2 != null || soundHandler != null))
     {
+        soundHandler?.Dispose();
+        soundHandler = null;
         p1 = null;
         p2 = null;
     }
 
-    GameData data = new GameData(p1, p2, timer, lua, config);
+    GameData data = new GameData(p1, p2, timer, lua, config, soundHandler);
 
     GUIEngine.Update(ref p1, ref p2, data);
+    data = new GameData(p1, p2, timer, lua, config, soundHandler);
+
+    if (GameState.CurrentState == State.Playing && soundHandler == null)
+    {
+        if (p1?.CurrentCharacter != null && p2?.CurrentCharacter != null)
+        {
+            soundHandler = new SoundHandler(data);
+            soundHandler.PlaySound(SoundType.RoundStart);
+            data = new GameData(p1, p2, timer, lua, config, soundHandler);
+        }
+    }
+
     HandlePauseInput();
 
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
         timer.Update(dt);
-
         p1.PollInput();
         p2.PollInput();
 
+        int subSteps = PhysicsEngine.IsTrainingMode ? 1000 : 1;
         while (timer.CheckFixedTick())
         {
-            if (PhysicsEngine.HitstopTimer <= 0f)
+            for (int step = 0; step < subSteps; step++)
             {
-                p1.ConsumeInput();
-                p2.ConsumeInput();
+                if (GameState.CurrentState != State.Playing) break;
+
+                if (PhysicsEngine.HitstopTimer <= 0f)
+                {
+                    p1.ConsumeInput();
+                    p2.ConsumeInput();
+                }
+                physics.Update(data);
             }
-            physics.Update(data);
         }
     }
 
@@ -61,23 +81,22 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
     {
         p1.Draw(timer.Alpha);
         p2.Draw(timer.Alpha);
+        PhysicsEngine.DrawProjectiles(timer.Alpha);
 
-        if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
+        if (PhysicsEngine.IsTrainingMode)
         {
-            p1.Draw(timer.Alpha);
-            p2.Draw(timer.Alpha);
-            PhysicsEngine.DrawProjectiles(timer.Alpha);
+            string trainText = $"Episodes Learned: {MacroTacticalModel.SharedInstance.EpisodesTrained}";
+            Raylib.DrawText(trainText, 20, Raylib.GetScreenHeight() - 40, 22, Color.DARKGREEN);
         }
     }
 
     GUIEngine.Draw(data);
-
     Raylib.EndDrawing();
 }
 
 void HandlePauseInput()
 {
-    if (Raylib.IsKeyPressed(KeyboardKey.KEY_F1))
+    if (Raylib.IsKeyPressed(KeyboardKey.KEY_CAPS_LOCK))
     {
         Character.ShowDebugBoxes = !Character.ShowDebugBoxes;
     }
@@ -91,4 +110,6 @@ void HandlePauseInput()
     }
 }
 
+soundHandler?.Dispose();
+Raylib.CloseAudioDevice();
 Raylib.CloseWindow();
