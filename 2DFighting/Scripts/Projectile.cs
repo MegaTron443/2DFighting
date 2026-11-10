@@ -52,6 +52,7 @@ public class Projectile
         PreviousPosition = spawnPos;
         Velocity = initialVelocity;
         FacingRight = owner.FacingRight;
+        owner.JustExecutedAction = GameAction.ProjectileAttack;
     }
 
     public void SavePreviousState()
