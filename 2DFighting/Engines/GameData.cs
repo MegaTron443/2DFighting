@@ -5,14 +5,15 @@ public readonly struct GameData
     public Timer Timer { get; }
     public LuaEngine LuaEngine { get; }
     public AppConfig AppConfig { get; }
+    public SoundHandler? SoundHandler { get; }
 
-
-    public GameData(Player player1, Player player2, Timer gameTimer, LuaEngine LuaEngineInstance, AppConfig appConfig )
+    public GameData(Player player1, Player player2, Timer gameTimer, LuaEngine LuaEngineInstance, AppConfig appConfig, SoundHandler? soundHandler)
     {
         Player1 = player1;
         Player2 = player2;
         Timer = gameTimer;
         LuaEngine = LuaEngineInstance;
         AppConfig = appConfig;
+        SoundHandler = soundHandler;
     }
 }
