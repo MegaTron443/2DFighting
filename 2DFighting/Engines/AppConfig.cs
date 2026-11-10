@@ -7,6 +7,7 @@ public class AppConfig
 {
     public DisplaySettings Display { get; set; } = new();
     public ControlSettings Controls { get; set; } = new();
+    public SoundSettings Sound { get; set; } = new();
 
     public static AppConfig Load(string path)
     {
@@ -43,6 +44,11 @@ public class AppConfig
         string json = JsonSerializer.Serialize(config, options);
         File.WriteAllText(path, json);
     }
+}
+
+public class SoundSettings
+{
+    public int Volume { get; set; } = 100;
 }
 
 public class DisplaySettings
