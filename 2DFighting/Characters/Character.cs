@@ -48,6 +48,28 @@ public class Character
     public Color SecondaryColor { get; private set; } = Color.MAROON;
     public DynValue? OnPassive { get; private set; }
     public Dictionary<string, float> CustomData { get; } = new();
+    public string ScriptHash { get; private set; } = "";
+
+    private static readonly Dictionary<string, Texture2D> _textureCache = new(StringComparer.OrdinalIgnoreCase);
+
+    private static Texture2D GetOrLoadSpriteSheet(string fullPath)
+    {
+        if (_textureCache.TryGetValue(fullPath, out Texture2D cached))
+            return cached;
+
+        Texture2D loaded = Raylib.LoadTexture(fullPath);
+        _textureCache[fullPath] = loaded;
+        return loaded;
+    }
+
+    public static void UnloadAllSpriteSheets()
+    {
+        foreach (var tex in _textureCache.Values)
+        {
+            Raylib.UnloadTexture(tex);
+        }
+        _textureCache.Clear();
+    }
 
     public Character(string luaFilePath, Script script)
     {
@@ -92,6 +114,7 @@ public class Character
 
         string code = File.ReadAllText(path);
         RawLuaCode = code;
+        ScriptHash = ModManager.ComputeStringHash(RawLuaCode);
         DynValue result = script.DoString(code, env, path);
 
         Table? t = result.Type == DataType.Table ? result.Table : env.Get("Character").Table;
@@ -126,7 +149,7 @@ public class Character
                 string? fullSheetPath = ModManager.ResolveFile(sheetRelPath);
                 if (fullSheetPath != null && File.Exists(fullSheetPath))
                 {
-                    _spriteSheet = Raylib.LoadTexture(fullSheetPath);
+                    _spriteSheet = GetOrLoadSpriteSheet(fullSheetPath);
                 }
             }
 
@@ -219,7 +242,8 @@ public class Character
                     OnCounter = sTable.Get("on_counter"),
                     CustomLogic = sTable.Get("is_customlogic").CastToBool(),
                     OnCustomLogic = sTable.Get("on_customlogic"),
-                    OnHit = sTable.Get("on_hit")
+                    OnHit = sTable.Get("on_hit"),
+                    ShortLabel = pair.Key.String.Length > 5 ? pair.Key.String[..5].ToUpperInvariant() : pair.Key.String.ToUpperInvariant()
                 };
             }
         }
@@ -342,11 +366,11 @@ public class Character
             OnPassive.Function.Call(p, this, dt);
         }
 
-        foreach (var skill in SkillCooldowns.Keys.ToList())
+        foreach (string skill in Skills.Keys)
         {
-            if (SkillCooldowns[skill] > 0)
+            if (SkillCooldowns.TryGetValue(skill, out float cd) && cd > 0f)
             {
-                SkillCooldowns[skill] = MathF.Max(0f, SkillCooldowns[skill] - dt);
+                SkillCooldowns[skill] = MathF.Max(0f, cd - dt);
             }
         }
     }
