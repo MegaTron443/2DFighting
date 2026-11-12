@@ -113,6 +113,10 @@ void HandlePauseInput()
     }
 }
 
+
+MacroTacticalModel.SharedInstance.SaveWeights();
+GUIEngine.Dispose();
+Character.UnloadAllSpriteSheets();
 soundHandler?.Dispose();
 Raylib.CloseAudioDevice();
 Raylib.CloseWindow();
