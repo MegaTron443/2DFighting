@@ -1,8 +1,6 @@
-using System;
-using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using MoonSharp.Interpreter;
-using Raylib_cs;
 
 [Flags]
 public enum MoveTacticalTags
@@ -29,12 +27,31 @@ public enum MoveTacticalTags
     AerialDive       = 1 << 18
 }
 
+public class MoveSemanticCacheEntry
+{
+    public string SkillName { get; set; } = "";
+    public MoveTacticalTags Tags { get; set; } = MoveTacticalTags.None;
+    public float MinEffectiveRangePct { get; set; }
+    public float MaxEffectiveRangePct { get; set; }
+    public float OptimalRangePct { get; set; }
+    public float SelfAdvanceDeltaPct { get; set; }
+    public float SelfVerticalDeltaPct { get; set; }
+    public float TargetKnockbackPct { get; set; }
+}
+
+public class CharacterSemanticsCacheFile
+{
+    public string CharacterName { get; set; } = "";
+    public string ScriptHash { get; set; } = "";
+    public CharacterTacticalSummary Summary { get; set; } = new();
+    public Dictionary<string, MoveSemanticCacheEntry> Moves { get; set; } = new();
+}
+
 public class TranslatedMoveSemantic
 {
     public SkillData Skill { get; }
     public MoveTacticalTags Tags { get; set; } = MoveTacticalTags.None;
 
-    // Automatically deduced spatial metrics (in screen width %)
     public float MinEffectiveRangePct { get; set; }
     public float MaxEffectiveRangePct { get; set; }
     public float OptimalRangePct { get; set; }
@@ -54,6 +71,29 @@ public class TranslatedMoveSemantic
     {
         Skill = skill;
     }
+
+    public MoveSemanticCacheEntry ToCacheEntry() => new()
+    {
+        SkillName = Skill.Name,
+        Tags = Tags,
+        MinEffectiveRangePct = MinEffectiveRangePct,
+        MaxEffectiveRangePct = MaxEffectiveRangePct,
+        OptimalRangePct = OptimalRangePct,
+        SelfAdvanceDeltaPct = SelfAdvanceDeltaPct,
+        SelfVerticalDeltaPct = SelfVerticalDeltaPct,
+        TargetKnockbackPct = TargetKnockbackPct
+    };
+
+    public static TranslatedMoveSemantic FromCacheEntry(SkillData skill, MoveSemanticCacheEntry entry) => new(skill)
+    {
+        Tags = entry.Tags,
+        MinEffectiveRangePct = entry.MinEffectiveRangePct,
+        MaxEffectiveRangePct = entry.MaxEffectiveRangePct,
+        OptimalRangePct = entry.OptimalRangePct,
+        SelfAdvanceDeltaPct = entry.SelfAdvanceDeltaPct,
+        SelfVerticalDeltaPct = entry.SelfVerticalDeltaPct,
+        TargetKnockbackPct = entry.TargetKnockbackPct
+    };
 
     public void RecordOutcome(bool hit, bool wasInterrupted, float distanceUsedPct)
     {
@@ -91,14 +131,163 @@ public class CharacterTacticalSummary
 
 public static class LuaMoveTranslator
 {
+    private static readonly Dictionary<string, CharacterSemanticsCacheFile> _memoryCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    /// <summary>
+    /// Scans all vanilla and modded characters at game startup.
+    /// Verifies SHA-256 hashes against Cache/<Character>_Semantics.json and regenerates only if changed.
+    /// </summary>
+    public static void InitializeCache(LuaEngine luaEngine)
+    {
+        Directory.CreateDirectory(ModManager.CacheDir);
+        _memoryCache.Clear();
+
+        foreach (var (charId, scriptPath) in ModManager.CharacterScripts)
+        {
+            try
+            {
+                string rawLua = File.ReadAllText(scriptPath);
+                string currentHash = ModManager.ComputeStringHash(rawLua);
+                string cacheFilePath = GetCacheFilePath(charId);
+
+                CharacterSemanticsCacheFile? cached = TryLoadCacheFromDisk(cacheFilePath);
+                if (cached != null && string.Equals(cached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    _memoryCache[cached.CharacterName] = cached;
+                    _memoryCache[charId] = cached;
+                    continue;
+                }
+
+                Character tempChar = luaEngine.CreateCharacter(charId);
+                CharacterSemanticsCacheFile generated = BuildSemanticsCache(tempChar, currentHash);
+
+                SaveCacheToDisk(cacheFilePath, generated);
+
+                string namedCachePath = GetCacheFilePath(tempChar.Name);
+                if (!string.Equals(cacheFilePath, namedCachePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    SaveCacheToDisk(namedCachePath, generated);
+                }
+
+                _memoryCache[tempChar.Name] = generated;
+                _memoryCache[charId] = generated;
+
+                DiagnosticsLogger.LogSilentIssueOnce(
+                    $"semantics_cached_{charId}",
+                    $"Generated AI semantics cache: Cache/{Path.GetFileName(cacheFilePath)} (Hash: {currentHash[..8]})",
+                    LogSeverity.Info
+                );
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsLogger.LogSilentIssueOnce(
+                    $"semantics_err_{charId}",
+                    $"Failed to generate semantics cache for '{charId}': {ex.Message}",
+                    LogSeverity.Error
+                );
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fast runtime lookup: loads directly from the pre-verified cache (or builds on the fly if hot-loaded).
+    /// </summary>
     public static Dictionary<string, TranslatedMoveSemantic> AnalyzeCharacter(
         Character character,
         out CharacterTacticalSummary summary)
     {
-        var semantics = new Dictionary<string, TranslatedMoveSemantic>();
-        summary = new CharacterTacticalSummary();
+        string currentHash = ModManager.ComputeStringHash(character.RawLuaCode);
 
-        // Extract per-skill raw Lua blocks for behavioral static & sandbox analysis
+        if (_memoryCache.TryGetValue(character.Name, out var cached) &&
+            string.Equals(cached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
+        {
+            summary = cached.Summary;
+            return HydrateFromCache(character, cached);
+        }
+
+        string diskPath = GetCacheFilePath(character.Name);
+        var diskCached = TryLoadCacheFromDisk(diskPath);
+        if (diskCached != null && string.Equals(diskCached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
+        {
+            _memoryCache[character.Name] = diskCached;
+            summary = diskCached.Summary;
+            return HydrateFromCache(character, diskCached);
+        }
+
+        var generated = BuildSemanticsCache(character, currentHash);
+        SaveCacheToDisk(diskPath, generated);
+        _memoryCache[character.Name] = generated;
+
+        summary = generated.Summary;
+        return HydrateFromCache(character, generated);
+    }
+
+    private static string GetCacheFilePath(string identifier)
+    {
+        string safeName = string.Join("_", identifier.Split(Path.GetInvalidFileNameChars()));
+        return Path.Combine(ModManager.CacheDir, $"{safeName}_Semantics.json");
+    }
+
+    private static CharacterSemanticsCacheFile? TryLoadCacheFromDisk(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            string json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<CharacterSemanticsCacheFile>(json, _jsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void SaveCacheToDisk(string path, CharacterSemanticsCacheFile data)
+    {
+        try
+        {
+            string json = JsonSerializer.Serialize(data, _jsonOptions);
+            File.WriteAllText(path, json);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsLogger.LogSilentIssueOnce(
+                $"cache_write_err_{path}",
+                $"Could not write semantics cache '{path}': {ex.Message}",
+                LogSeverity.Warning
+            );
+        }
+    }
+
+    private static Dictionary<string, TranslatedMoveSemantic> HydrateFromCache(
+        Character character,
+        CharacterSemanticsCacheFile cache)
+    {
+        var result = new Dictionary<string, TranslatedMoveSemantic>();
+        foreach (var skill in character.Skills.Values)
+        {
+            if (skill.TriggerMask == 0) continue;
+
+            if (cache.Moves.TryGetValue(skill.Name, out var entry))
+            {
+                result[skill.Name] = TranslatedMoveSemantic.FromCacheEntry(skill, entry);
+            }
+        }
+        return result;
+    }
+
+    private static CharacterSemanticsCacheFile BuildSemanticsCache(Character character, string scriptHash)
+    {
+        var summary = new CharacterTacticalSummary();
+        var moves = new Dictionary<string, MoveSemanticCacheEntry>();
+
         Dictionary<string, string> skillLuaBlocks = ExtractSkillSourceBlocks(character.RawLuaCode);
 
         int zonerPoints = 0;
@@ -115,9 +304,8 @@ public static class LuaMoveTranslator
             luaSnippet ??= "";
 
             TranslateSkillMechanics(character, skill, luaSnippet, translated);
-            semantics[skill.Name] = translated;
+            moves[skill.Name] = translated.ToCacheEntry();
 
-            // Tally archetype affinities
             if (translated.HasTag(MoveTacticalTags.ProjectileFast) || translated.HasTag(MoveTacticalTags.ProjectileHoming))
                 zonerPoints += 2;
             if (translated.HasTag(MoveTacticalTags.RetreatingEvade))
@@ -148,7 +336,6 @@ public static class LuaMoveTranslator
         summary.GrapplerArmorAffinity = armorPoints / total;
         summary.TricksterTrapAffinity = trapPoints / total;
 
-        // Calculate optimal neutral spacing from the character's translated toolkit
         if (summary.ZonerAffinity >= 0.35f)
             summary.PreferredNeutralDistancePct = 0.42f;
         else if (summary.TricksterTrapAffinity >= 0.35f)
@@ -158,7 +345,13 @@ public static class LuaMoveTranslator
         else
             summary.PreferredNeutralDistancePct = 0.11f;
 
-        return semantics;
+        return new CharacterSemanticsCacheFile
+        {
+            CharacterName = character.Name,
+            ScriptHash = scriptHash,
+            Summary = summary,
+            Moves = moves
+        };
     }
 
     private static void TranslateSkillMechanics(
@@ -175,7 +368,6 @@ public static class LuaMoveTranslator
         dest.MaxEffectiveRangePct = baseReach;
         dest.TargetKnockbackPct = 0.18f;
 
-        // 1. Inspect core C# SkillData properties
         if (skill.StartupFrames > 0 && skill.StartupFrames <= 5 && !skill.IsCounter)
             dest.Tags |= MoveTacticalTags.FastPoke;
 
@@ -199,10 +391,8 @@ public static class LuaMoveTranslator
         if (skill.HitStun >= 1.15f)
             dest.Tags |= MoveTacticalTags.HardFreezeStun;
 
-        // 2. Inspect Lua source & closures without requiring any modder annotations
         AnalyzeLuaBehaviorBlock(character, skill, luaBlock, dest);
 
-        // 3. Finalize optimal range calculation
         dest.OptimalRangePct = (dest.MinEffectiveRangePct + dest.MaxEffectiveRangePct) * 0.65f;
     }
 
@@ -214,7 +404,6 @@ public static class LuaMoveTranslator
     {
         if (string.IsNullOrWhiteSpace(lua)) return;
 
-        // A. Detect Projectile Creation (CreateProjectile or create_projectile)
         bool spawnsProjectile = lua.Contains("CreateProjectile") || lua.Contains("create_projectile");
         if (spawnsProjectile)
         {
@@ -222,8 +411,13 @@ public static class LuaMoveTranslator
             float offsetX = ExtractFloatProperty(lua, "x_offset_pct", 0.06f);
             float lifetime = ExtractFloatProperty(lua, "lifetime", 3.0f);
 
-            // Check if it's a stationary trap/pillar/mine (speed_x_pct == 0)
-            if (MathF.Abs(speedX) < 0.02f)
+            if (lua.Contains("opponent.PosX") || lua.Contains("TargetOpponent"))
+            {
+                dest.Tags |= MoveTacticalTags.ProjectileFast | MoveTacticalTags.BlockBreaker;
+                dest.MinEffectiveRangePct = 0.05f;
+                dest.MaxEffectiveRangePct = 0.85f;
+            }
+            else if (MathF.Abs(speedX) < 0.02f)
             {
                 dest.Tags |= MoveTacticalTags.ProjectileTrap;
                 dest.MinEffectiveRangePct = Math.Max(0.04f, offsetX - 0.05f);
@@ -249,12 +443,10 @@ public static class LuaMoveTranslator
             }
         }
 
-        // B. Detect Movement / Teleport / Lunge / Retreat inside on_customlogic
         if (skill.CustomLogic)
         {
-            if (lua.Contains("TargetOpponent") && lua.Contains("NewVec2"))
+            if (lua.Contains("TargetOpponent") && lua.Contains("NewVec2") && !spawnsProjectile)
             {
-                // Teleports directly to opponent
                 dest.Tags |= MoveTacticalTags.TeleportBlink | MoveTacticalTags.AerialDive;
                 dest.MinEffectiveRangePct = 0.05f;
                 dest.MaxEffectiveRangePct = 0.85f;
@@ -267,7 +459,7 @@ public static class LuaMoveTranslator
                     dest.Tags |= MoveTacticalTags.RetreatingEvade;
                     dest.SelfAdvanceDeltaPct = -character.WalkSpeedPct * 0.25f;
                 }
-                else
+                else if (!spawnsProjectile)
                 {
                     dest.Tags |= MoveTacticalTags.AdvancingDash;
                     float mult = 1.6f;
@@ -284,13 +476,11 @@ public static class LuaMoveTranslator
             }
         }
 
-        // C. Detect On-Hit / On-Counter / Passive Effects
         if (lua.Contains("ApplyLaunchForce"))
         {
             dest.Tags |= MoveTacticalTags.ComboLauncher;
         }
 
-        // Detect Vacuum Pull
         var hitForceMatch = Regex.Match(lua, @"ApplyHitForce\s*\([^,]+,[^,]+,[^,]+,[^,]+,\s*(-?[0-9.]+|[A-Z_]+)");
         if (hitForceMatch.Success)
         {
@@ -309,13 +499,11 @@ public static class LuaMoveTranslator
             }
         }
 
-        // Detect Self-Heal
         if (lua.Contains(".Health +") || lua.Contains("HEAL"))
         {
             dest.Tags |= MoveTacticalTags.SelfHeal;
         }
 
-        // Detect Cooldown Reset
         if (lua.Contains("SkillCooldowns") && lua.Contains("= 0"))
         {
             dest.Tags |= MoveTacticalTags.CooldownReset;
@@ -349,14 +537,12 @@ public static class LuaMoveTranslator
             while (i < rawLua.Length && (char.IsWhiteSpace(rawLua[i]) || rawLua[i] == ',')) i++;
             if (i >= rawLua.Length || rawLua[i] == '}') break;
 
-            // Skip comments
             if (i + 1 < rawLua.Length && rawLua[i] == '-' && rawLua[i + 1] == '-')
             {
                 while (i < rawLua.Length && rawLua[i] != '\n') i++;
                 continue;
             }
 
-            // Read skill identifier
             int nameStart = i;
             while (i < rawLua.Length && (char.IsLetterOrDigit(rawLua[i]) || rawLua[i] == '_')) i++;
             string skillName = rawLua[nameStart..i].Trim();

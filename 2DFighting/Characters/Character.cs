@@ -123,8 +123,8 @@ public class Character
             string? sheetRelPath = rend.Get("sprite_sheet").String;
             if (!string.IsNullOrEmpty(sheetRelPath))
             {
-                string fullSheetPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, sheetRelPath);
-                if (File.Exists(fullSheetPath))
+                string? fullSheetPath = ModManager.ResolveFile(sheetRelPath);
+                if (fullSheetPath != null && File.Exists(fullSheetPath))
                 {
                     _spriteSheet = Raylib.LoadTexture(fullSheetPath);
                 }

@@ -41,23 +41,23 @@ public class Character_Sounds : IDisposable
 
     private string? GetCharacterFolder()
     {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string[] candidatePaths =
+        string[][] candidateSegments =
         {
-            Path.Combine(baseDir, "Assets", "Sounds", CharacterName),
-            Path.Combine(baseDir, "Characters", "assets", CharacterName.ToLowerInvariant(), "sounds"),
-            Path.Combine(baseDir, "Mods", "Assets", "Sounds", CharacterName)
+            new[] { "Assets", "Sounds", CharacterName },
+            new[] { "Assets", "Sounds", CharacterName.ToLowerInvariant() },
+            new[] { "Characters", "assets", CharacterName.ToLowerInvariant(), "sounds" }
         };
 
-        foreach (string path in candidatePaths)
+        foreach (string[] segments in candidateSegments)
         {
-            if (Directory.Exists(path))
-                return path;
+            var matches = ModManager.ResolveDirectories(segments);
+            if (matches.Count > 0)
+                return matches[0];
         }
 
         DiagnosticsLogger.LogSilentIssueOnce(
             $"sound_folder_missing_{CharacterName}",
-            $"No dedicated sound folder found for '{CharacterName}'. Will use SharedSoundBank fallbacks. (Checked: Assets/Sounds/{CharacterName})",
+            $"No dedicated sound folder found for '{CharacterName}'. Will use SharedSoundBank fallbacks. (Checked: Assets/Sounds/{CharacterName} in Base & Mods)",
             LogSeverity.Info
         );
         return null;
@@ -65,19 +65,19 @@ public class Character_Sounds : IDisposable
 
     private static string? GetSharedFolder()
     {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string[] candidatePaths =
+        string[][] candidateSegments =
         {
-            Path.Combine(baseDir, "Assets", "Sounds", "Shared"),
-            Path.Combine(baseDir, "Assets", "Sounds", "Default"),
-            Path.Combine(baseDir, "Assets", "Sounds"),
-            Path.Combine(baseDir, "Characters", "assets", "shared", "sounds")
+            new[] { "Assets", "Sounds", "Shared" },
+            new[] { "Assets", "Sounds", "Default" },
+            new[] { "Assets", "Sounds" },
+            new[] { "Characters", "assets", "shared", "sounds" }
         };
 
-        foreach (string path in candidatePaths)
+        foreach (string[] segments in candidateSegments)
         {
-            if (Directory.Exists(path))
-                return path;
+            var matches = ModManager.ResolveDirectories(segments);
+            if (matches.Count > 0)
+                return matches[0];
         }
 
         DiagnosticsLogger.LogSilentIssueOnce(

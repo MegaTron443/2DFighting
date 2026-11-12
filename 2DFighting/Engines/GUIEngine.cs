@@ -8,30 +8,28 @@ public static class GUIEngine
     public static string[] RosterIds => AvailableFighters;
     private static readonly Dictionary<State, List<Button>> ButtonsByState = new();
     private static readonly Dictionary<string, Texture2D> RosterThumbnails = new();
-    private static readonly string[] AvailableFighters = new[] { "brawler", "lancer", "pyromancer", "phantom", "titan", "chronomancer" };
+    private static string[] AvailableFighters => ModManager.AvailableFighters.Length > 0
+        ? ModManager.AvailableFighters
+        : new[] { "brawler", "lancer", "pyromancer", "phantom", "titan", "chronomancer", "gravity" };
+
     private static int sw => Raylib.GetScreenWidth();
     private static int sh => Raylib.GetScreenHeight();
 
-    static GUIEngine()
+    public static void Initialize()
     {
+        ButtonsByState.Clear();
         LoadRosterThumbnails();
         InitializeButtons();
     }
-    
+
     private static void LoadRosterThumbnails()
     {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-
         foreach (var fighter in AvailableFighters)
         {
-            string path = Path.Combine(baseDir, "Characters", "assets", fighter, "Roaster.png");
-            
-            if (!File.Exists(path))
-            {
-                path = Path.Combine(baseDir, "Assets", "Characters", fighter, "Roaster.png");
-            }
+            string? path = ModManager.ResolveFile("Assets", "Characters", fighter, "Roaster.png")
+                        ?? ModManager.ResolveFile("Characters", "assets", fighter, "Roaster.png");
 
-            if (File.Exists(path))
+            if (path != null && File.Exists(path) && !RosterThumbnails.ContainsKey(fighter))
             {
                 RosterThumbnails[fighter] = Raylib.LoadTexture(path);
             }

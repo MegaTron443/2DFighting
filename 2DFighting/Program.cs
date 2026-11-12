@@ -1,5 +1,4 @@
-﻿using System.Numerics;
-using Raylib_cs;
+﻿using Raylib_cs;
 
 AppConfig config = AppConfig.Load("config.json");
 int sw = config.Display.ScreenWidth;
@@ -15,6 +14,10 @@ LuaEngine lua = new LuaEngine();
 physics.Initialize();
 timer.Initialize();
 lua.Initialize();
+
+ModManager.Initialize();
+LuaMoveTranslator.InitializeCache(lua);
+GUIEngine.Initialize();
 
 Player? p1 = null;
 Player? p2 = null;

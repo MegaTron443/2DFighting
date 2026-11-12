@@ -130,16 +130,18 @@ public class LuaEngine
 
     public Character CreateCharacter(string characterId)
     {
-        string path = Path.Combine(RootPath, "Scripts", "characters", $"{characterId}.lua");
-        if (!File.Exists(path))
+        string? resolvedPath = ModManager.ResolveCharacterScript(characterId);
+        if (resolvedPath != null)
         {
-            path = Path.Combine(RootPath, "Scripts", "lua", $"{characterId}.lua");
+            return new Character(resolvedPath, ScriptRuntime);
         }
-        if (!File.Exists(path))
+
+        string fallbackPath = Path.Combine(RootPath, "Scripts", "characters", $"{characterId}.lua");
+        if (!File.Exists(fallbackPath))
         {
-            throw new FileNotFoundException($"Character script '{characterId}.lua' not found in Scripts/characters/ or Scripts/lua/");
+            throw new FileNotFoundException($"Character script '{characterId}.lua' not found in Scripts/characters/ or Mods/.");
         }
-        return new Character(path, ScriptRuntime);
+        return new Character(fallbackPath, ScriptRuntime);
     }
 
     public void Update(float deltaTime) { }
