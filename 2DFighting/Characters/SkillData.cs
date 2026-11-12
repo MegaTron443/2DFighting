@@ -22,6 +22,7 @@ public class SkillData
     public bool CustomLogic { get; set; }
     public DynValue? OnCustomLogic { get; set; }
     public DynValue? OnHit { get; set; }
+    public string ShortLabel { get; set; } = "";
 }
 
 public enum AttackHeight

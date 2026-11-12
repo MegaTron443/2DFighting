@@ -203,7 +203,7 @@ public static class LuaMoveTranslator
         Character character,
         out CharacterTacticalSummary summary)
     {
-        string currentHash = ModManager.ComputeStringHash(character.RawLuaCode);
+        string currentHash = character.ScriptHash;
 
         if (_memoryCache.TryGetValue(character.Name, out var cached) &&
             string.Equals(cached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
