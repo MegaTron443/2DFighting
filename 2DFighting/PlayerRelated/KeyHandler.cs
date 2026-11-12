@@ -14,6 +14,7 @@ public class KeyHandler
     private bool _latchedJumpPressed = false;
     private bool _latchedCrouch = false;
     private int _latchedHeldMask = 0;
+    private float _simTime = 0f;
 
     public KeyHandler(AppConfig appConfig)
     {
@@ -55,7 +56,7 @@ public class KeyHandler
 
         if (pressedThisFrame != 0)
         {
-            _inputBuffers[playerIndex].Enqueue(((float)Raylib.GetTime(), pressedThisFrame));
+            _inputBuffers[playerIndex].Enqueue((_simTime, pressedThisFrame));
         }
     }
 
@@ -66,7 +67,7 @@ public class KeyHandler
 
         if (_inputBuffers.TryGetValue(playerIndex, out var buffer) && buffer.Count > 0)
         {
-            float currentTime = (float)Raylib.GetTime();
+            float currentTime = _simTime;
             float plinkWindowDuration = Timer.FixedDeltaTime * PLINK_WINDOW_FRAME_COUNT;
             while (buffer.Count > 0 && currentTime - buffer.Peek().time > plinkWindowDuration)
             {
@@ -129,7 +130,8 @@ public class KeyHandler
             _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
 
         var buffer = _inputBuffers[playerIndex];
-        float currentTime = (float)Raylib.GetTime();
+        _simTime += Timer.FixedDeltaTime;
+        float currentTime = _simTime;
         float frameDuration = Timer.FixedDeltaTime;
         float plinkWindowDuration = frameDuration * PLINK_WINDOW_FRAME_COUNT;
         float singleButtonCommitDelay = frameDuration * COMMIT_DELAY_FRAME_COUNT;
@@ -277,6 +279,6 @@ public class KeyHandler
         {
             _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
         }
-        _inputBuffers[playerIndex].Enqueue(((float)Raylib.GetTime() - 0.1f, mask));
+        _inputBuffers[playerIndex].Enqueue((_simTime - (Timer.FixedDeltaTime * COMMIT_DELAY_FRAME_COUNT), mask));
     }
 }
