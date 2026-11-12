@@ -17,6 +17,8 @@ public class LuaEngine
 {
     private static readonly string RootPath = AppDomain.CurrentDomain.BaseDirectory;
     public Script ScriptRuntime { get; }
+    private readonly Dictionary<string, Character> _characterCache = new(StringComparer.OrdinalIgnoreCase);
+
 
     public LuaEngine()
     {
@@ -128,20 +130,27 @@ public class LuaEngine
         ScriptRuntime.DoString(helperScript);
     }
 
-    public Character CreateCharacter(string characterId)
+    public Character CreateCharacter(string characterId, int slot = 0)
     {
-        string? resolvedPath = ModManager.ResolveCharacterScript(characterId);
-        if (resolvedPath != null)
+        string cacheKey = $"{characterId}_{slot}";
+        if (_characterCache.TryGetValue(cacheKey, out Character? cached))
         {
-            return new Character(resolvedPath, ScriptRuntime);
+            cached.ActiveSkill = null;
+            cached.HasHit = false;
+            cached.SkillCooldowns.Clear();
+            cached.CustomData.Clear();
+            return cached;
         }
 
-        string fallbackPath = Path.Combine(RootPath, "Scripts", "characters", $"{characterId}.lua");
-        if (!File.Exists(fallbackPath))
-        {
-            throw new FileNotFoundException($"Character script '{characterId}.lua' not found in Scripts/characters/ or Mods/.");
-        }
-        return new Character(fallbackPath, ScriptRuntime);
+        string? resolvedPath = ModManager.ResolveCharacterScript(characterId)
+            ?? Path.Combine(RootPath, "Scripts", "characters", $"{characterId}.lua");
+
+        if (!File.Exists(resolvedPath))
+            throw new FileNotFoundException($"Character script '{characterId}.lua' not found.");
+
+        var character = new Character(resolvedPath, ScriptRuntime);
+        _characterCache[cacheKey] = character;
+        return character;
     }
 
     public void Update(float deltaTime) { }

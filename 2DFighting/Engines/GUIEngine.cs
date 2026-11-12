@@ -79,8 +79,8 @@ public static class GUIEngine
             if (PhysicsEngine.IsTrainingMode)
             {
                 var rng = Random.Shared;
-                p1.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)]));
-                p2.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)]));
+                p1.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)], slot: 0));
+                p2.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)], slot: 1));
                 PhysicsEngine.ResetMatch(p1, p2);
                 GameState.SetState(State.Playing);
             }
@@ -104,7 +104,7 @@ public static class GUIEngine
             {
                 if (ctx.Data.Player1 != null)
                 {
-                    Character character = ctx.Data.LuaEngine.CreateCharacter(id);
+                    Character character = ctx.Data.LuaEngine.CreateCharacter(id, slot: 1);
                     ctx.Data.Player1.ChangeCharacter(character);
                 }
             }, GetThumbnail(id));
@@ -325,5 +325,14 @@ public static class GUIEngine
         string hint = "Press Enter or Click Below to Return to Menu";
         int hintW = Raylib.MeasureText(hint, subSize);
         Raylib.DrawText(hint, (sw - hintW) / 2, (int)(sh * 0.41f), subSize, Color.DARKGRAY);
+    }
+
+    public static void Dispose()
+    {
+        foreach (var tex in RosterThumbnails.Values)
+        {
+            Raylib.UnloadTexture(tex);
+        }
+        RosterThumbnails.Clear();
     }
 }

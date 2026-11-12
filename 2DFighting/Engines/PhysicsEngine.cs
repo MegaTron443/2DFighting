@@ -59,8 +59,8 @@ public class PhysicsEngine
                     {
                         string[] roster = GUIEngine.RosterIds;
                         var rng = Random.Shared;
-                        data.Player1.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)]));
-                        data.Player2.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)]));
+                        data.Player1.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)], slot: 0));
+                        data.Player2.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)], slot: 1));
                         ResetMatch(data.Player1, data.Player2);
                     }
                     else
@@ -130,7 +130,7 @@ public class PhysicsEngine
         bool timeOut = RoundTimer <= 0f;
 
         if (p1Dead) data.SoundHandler?.PlaySound(p1, SoundType.Death);
-        if (p2Dead) data.SoundHandler?.PlaySound(p2, SoundType.Death);
+        else if (p2Dead) data.SoundHandler?.PlaySound(p2, SoundType.Death);
 
         if (!p1Dead && !p2Dead && !timeOut)
             return;
