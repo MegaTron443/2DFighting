@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -33,23 +34,30 @@ public struct MacroStateVector
     public float GrapplerAffinity;         // [12]
     public float TricksterTrapAffinity;    // [13]
 
-    public float[] ToArray() => new float[]
+    public readonly void CopyTo(Span<float> destination)
     {
-        DistancePct,
-        SelfHealthRatio,
-        OpponentHealthRatio,
-        OpponentAirborne,
-        OpponentBlocking,
-        OpponentCrouching,
-        OpponentInRecovery,
-        IncomingProjectileThreat,
-        SelfCornered,
-        OpponentCornered,
-        ZonerAffinity,
-        RushdownAffinity,
-        GrapplerAffinity,
-        TricksterTrapAffinity
-    };
+        destination[0]  = DistancePct;
+        destination[1]  = SelfHealthRatio;
+        destination[2]  = OpponentHealthRatio;
+        destination[3]  = OpponentAirborne;
+        destination[4]  = OpponentBlocking;
+        destination[5]  = OpponentCrouching;
+        destination[6]  = OpponentInRecovery;
+        destination[7]  = IncomingProjectileThreat;
+        destination[8]  = SelfCornered;
+        destination[9]  = OpponentCornered;
+        destination[10] = ZonerAffinity;
+        destination[11] = RushdownAffinity;
+        destination[12] = GrapplerAffinity;
+        destination[13] = TricksterTrapAffinity;
+    }
+
+    public readonly float[] ToArray()
+    {
+        float[] arr = new float[14];
+        CopyTo(arr);
+        return arr;
+    }
 }
 
 public class MacroModelWeights
@@ -79,6 +87,8 @@ public class MacroTacticalModel
 
     private readonly string _modelPath;
     private readonly MacroModelWeights _weights;
+    private readonly float[] _flatW1;
+    private readonly float[] _flatW2;
     private readonly Random _rng = new();
     private float _baselineReturn = 0f;
 
@@ -88,89 +98,64 @@ public class MacroTacticalModel
     {
         _modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "AI", "macro_policy.json");
         _weights = LoadOrCreatePretrainedWeights(_modelPath);
+
+        _flatW1 = Flatten(_weights.W1, _weights.HiddenSize, _weights.InputSize);
+        _flatW2 = Flatten(_weights.W2, _weights.OutputSize, _weights.HiddenSize);
     }
 
+    /// <summary>
+    /// Zero-allocation inference for standard gameplay (no training trace recorded).
+    /// </summary>
+    public MacroTactic SampleTactic(
+        in MacroStateVector state,
+        AIDifficulty difficulty,
+        OpponentPattern spamPattern)
+    {
+        int I = _weights.InputSize;
+        int H = _weights.HiddenSize;
+        int O = _weights.OutputSize;
+
+        Span<float> x = stackalloc float[I];
+        Span<float> hidden = stackalloc float[H];
+        Span<float> logits = stackalloc float[O];
+        Span<float> probs = stackalloc float[O];
+
+        state.CopyTo(x);
+        int chosen = ForwardPass(x, hidden, logits, probs, difficulty, spamPattern, state.SelfCornered > 0.5f);
+        return (MacroTactic)chosen;
+    }
+
+    /// <summary>
+    /// Pooled-allocation forward pass for RL training episodes.
+    /// Arrays are automatically returned to ArrayPool when TrainOnEpisode or DiscardTrajectory is called.
+    /// </summary>
     public MacroTactic SampleTacticWithTrace(
-        MacroStateVector state,
+        in MacroStateVector state,
         AIDifficulty difficulty,
         OpponentPattern spamPattern,
         out ExperienceStep stepTrace)
     {
-        float[] x = state.ToArray();
+        int I = _weights.InputSize;
         int H = _weights.HiddenSize;
         int O = _weights.OutputSize;
 
-        float[] hidden = new float[H];
-        for (int h = 0; h < H; h++)
-        {
-            float sum = _weights.B1[h];
-            float[] row = _weights.W1[h];
-            for (int i = 0; i < x.Length; i++)
-            {
-                sum += row[i] * x[i];
-            }
-            hidden[h] = MathF.Tanh(sum);
-        }
+        float[] xArr = ArrayPool<float>.Shared.Rent(I);
+        float[] hiddenArr = ArrayPool<float>.Shared.Rent(H);
+        float[] probsArr = ArrayPool<float>.Shared.Rent(O);
+        Span<float> logits = stackalloc float[O];
 
-        float[] logits = new float[O];
-        for (int o = 0; o < O; o++)
-        {
-            float sum = _weights.B2[o];
-            float[] row = _weights.W2[o];
-            for (int h = 0; h < H; h++)
-            {
-                sum += row[h] * hidden[h];
-            }
-            logits[o] = sum;
-        }
+        Span<float> x = xArr.AsSpan(0, I);
+        Span<float> hidden = hiddenArr.AsSpan(0, H);
+        Span<float> probs = probsArr.AsSpan(0, O);
 
-        ApplySpamAdaptationBias(logits, spamPattern, state.SelfCornered > 0.5f);
-
-        float temperature = difficulty switch
-        {
-            AIDifficulty.Hard   => 0.28f,
-            AIDifficulty.Medium => 0.55f,
-            _                   => 1.05f
-        };
-
-        float maxLogit = float.MinValue;
-        for (int o = 0; o < O; o++)
-        {
-            logits[o] /= temperature;
-            if (logits[o] > maxLogit) maxLogit = logits[o];
-        }
-
-        float[] probs = new float[O];
-        float sumExp = 0f;
-        for (int o = 0; o < O; o++)
-        {
-            probs[o] = MathF.Exp(logits[o] - maxLogit);
-            sumExp += probs[o];
-        }
-
-        for (int o = 0; o < O; o++)
-        {
-            probs[o] /= sumExp;
-        }
-
-        float roll = (float)_rng.NextDouble();
-        float cumulative = 0f;
-        int chosen = 0;
-        for (int o = 0; o < O; o++)
-        {
-            cumulative += probs[o];
-            if (roll <= cumulative)
-            {
-                chosen = o;
-                break;
-            }
-        }
+        state.CopyTo(x);
+        int chosen = ForwardPass(x, hidden, logits, probs, difficulty, spamPattern, state.SelfCornered > 0.5f);
 
         stepTrace = new ExperienceStep
         {
-            Input = x,
-            Hidden = hidden,
-            Probs = probs,
+            Input = xArr,
+            Hidden = hiddenArr,
+            Probs = probsArr,
             ChosenAction = chosen,
             Reward = 0f
         };
@@ -178,86 +163,205 @@ public class MacroTacticalModel
         return (MacroTactic)chosen;
     }
 
+    private int ForwardPass(
+        ReadOnlySpan<float> x,
+        Span<float> hidden,
+        Span<float> logits,
+        Span<float> probs,
+        AIDifficulty difficulty,
+        OpponentPattern spamPattern,
+        bool selfCornered)
+    {
+        int I = _weights.InputSize;
+        int H = _weights.HiddenSize;
+        int O = _weights.OutputSize;
+
+        for (int h = 0; h < H; h++)
+        {
+            float sum = _weights.B1[h];
+            int rowOffset = h * I;
+            for (int i = 0; i < I; i++)
+            {
+                sum += _flatW1[rowOffset + i] * x[i];
+            }
+            hidden[h] = MathF.Tanh(sum);
+        }
+
+        for (int o = 0; o < O; o++)
+        {
+            float sum = _weights.B2[o];
+            int rowOffset = o * H;
+            for (int h = 0; h < H; h++)
+            {
+                sum += _flatW2[rowOffset + h] * hidden[h];
+            }
+            logits[o] = sum;
+        }
+
+        ApplySpamAdaptationBias(logits, spamPattern, selfCornered);
+
+        float invTemp = difficulty switch
+        {
+            AIDifficulty.Hard   => 1f / 0.28f,
+            AIDifficulty.Medium => 1f / 0.55f,
+            _                   => 1f / 1.05f
+        };
+
+        float maxLogit = float.MinValue;
+        for (int o = 0; o < O; o++)
+        {
+            logits[o] *= invTemp;
+            if (logits[o] > maxLogit) maxLogit = logits[o];
+        }
+
+        float sumExp = 0f;
+        for (int o = 0; o < O; o++)
+        {
+            probs[o] = MathF.Exp(logits[o] - maxLogit);
+            sumExp += probs[o];
+        }
+
+        float invSumExp = 1f / sumExp;
+        float roll = (float)_rng.NextDouble();
+        float cumulative = 0f;
+        int chosen = O - 1;
+        bool picked = false;
+
+        for (int o = 0; o < O; o++)
+        {
+            probs[o] *= invSumExp;
+            if (!picked)
+            {
+                cumulative += probs[o];
+                if (roll <= cumulative)
+                {
+                    chosen = o;
+                    picked = true;
+                }
+            }
+        }
+
+        return chosen;
+    }
+
     /// <summary>
     /// REINFORCE Policy-Gradient update with discounted returns & baseline subtraction.
-    /// Penalizes getting cornered or hit by projectiles; rewards advancing, parrying, and dealing damage.
+    /// Automatically recycles pooled buffers from the trajectory and clears the list.
     /// </summary>
     public void TrainOnEpisode(List<ExperienceStep> trajectory, float terminalReward, float learningRate = 0.012f, float gamma = 0.94f)
     {
-        if (trajectory.Count == 0) return;
-
         int T = trajectory.Count;
-        float[] returns = new float[T];
-        float runningG = terminalReward;
+        if (T == 0) return;
 
-        for (int t = T - 1; t >= 0; t--)
+        float[] returns = ArrayPool<float>.Shared.Rent(T);
+        Span<float> dLogits = stackalloc float[_weights.OutputSize];
+        Span<float> dHidden = stackalloc float[_weights.HiddenSize];
+
+        try
         {
-            runningG = trajectory[t].Reward + (gamma * runningG);
-            returns[t] = runningG;
-        }
-
-        int H = _weights.HiddenSize;
-        int O = _weights.OutputSize;
-        int I = _weights.InputSize;
-
-        for (int t = 0; t < T; t++)
-        {
-            var step = trajectory[t];
-            float G = returns[t];
-            _baselineReturn = (0.98f * _baselineReturn) + (0.02f * G);
-            float advantage = Math.Clamp(G - _baselineReturn, -3.5f, 3.5f);
-
-            // Output layer gradients: dLogit[o] = advantage * (1(o == a) - P(o))
-            Span<float> dLogits = stackalloc float[O];
-            for (int o = 0; o < O; o++)
+            float runningG = terminalReward;
+            for (int t = T - 1; t >= 0; t--)
             {
-                float indicator = (o == step.ChosenAction) ? 1f : 0f;
-                dLogits[o] = advantage * (indicator - step.Probs[o]);
+                runningG = trajectory[t].Reward + (gamma * runningG);
+                returns[t] = runningG;
             }
 
-            // Backprop into Hidden before updating W2
-            Span<float> dHidden = stackalloc float[H];
-            for (int h = 0; h < H; h++)
+            int H = _weights.HiddenSize;
+            int O = _weights.OutputSize;
+            int I = _weights.InputSize;
+            float stepLr = learningRate / MathF.Sqrt(T);
+
+            for (int t = 0; t < T; t++)
             {
-                float gradH = 0f;
+                ExperienceStep step = trajectory[t];
+                float G = returns[t];
+                _baselineReturn = (0.98f * _baselineReturn) + (0.02f * G);
+                float advantage = Math.Clamp(G - _baselineReturn, -3.5f, 3.5f);
+
+                // Output layer gradients: dLogit[o] = advantage * (1(o == a) - P(o))
                 for (int o = 0; o < O; o++)
                 {
-                    gradH += _weights.W2[o][h] * dLogits[o];
+                    float indicator = (o == step.ChosenAction) ? 1f : 0f;
+                    dLogits[o] = advantage * (indicator - step.Probs[o]);
                 }
-                // Derivative of tanh(z) = 1 - tanh^2(z)
-                dHidden[h] = gradH * (1f - (step.Hidden[h] * step.Hidden[h]));
-            }
 
-            // Update W2 and B2
-            float stepLr = learningRate / MathF.Sqrt(T);
-            for (int o = 0; o < O; o++)
-            {
-                _weights.B2[o] = Math.Clamp(_weights.B2[o] + (stepLr * dLogits[o]), -6f, 6f);
+                // Backprop into Hidden before updating W2
                 for (int h = 0; h < H; h++)
                 {
-                    _weights.W2[o][h] = Math.Clamp(_weights.W2[o][h] + (stepLr * dLogits[o] * step.Hidden[h]), -6f, 6f);
+                    float gradH = 0f;
+                    for (int o = 0; o < O; o++)
+                    {
+                        gradH += _flatW2[(o * H) + h] * dLogits[o];
+                    }
+                    dHidden[h] = gradH * (1f - (step.Hidden[h] * step.Hidden[h]));
+                }
+
+                // Update W2 and B2
+                for (int o = 0; o < O; o++)
+                {
+                    _weights.B2[o] = Math.Clamp(_weights.B2[o] + (stepLr * dLogits[o]), -6f, 6f);
+                    int rowOffset = o * H;
+                    float lrDLogit = stepLr * dLogits[o];
+                    for (int h = 0; h < H; h++)
+                    {
+                        _flatW2[rowOffset + h] = Math.Clamp(_flatW2[rowOffset + h] + (lrDLogit * step.Hidden[h]), -6f, 6f);
+                    }
+                }
+
+                // Update W1 and B1
+                for (int h = 0; h < H; h++)
+                {
+                    _weights.B1[h] = Math.Clamp(_weights.B1[h] + (stepLr * dHidden[h]), -6f, 6f);
+                    int rowOffset = h * I;
+                    float lrDHidden = stepLr * dHidden[h];
+                    for (int i = 0; i < I; i++)
+                    {
+                        _flatW1[rowOffset + i] = Math.Clamp(_flatW1[rowOffset + i] + (lrDHidden * step.Input[i]), -6f, 6f);
+                    }
                 }
             }
 
-            // Update W1 and B1
-            for (int h = 0; h < H; h++)
+            _weights.EpisodesTrained++;
+            if (!PhysicsEngine.IsTrainingMode)
             {
-                _weights.B1[h] = Math.Clamp(_weights.B1[h] + (stepLr * dHidden[h]), -6f, 6f);
-                for (int i = 0; i < I; i++)
-                {
-                    _weights.W1[h][i] = Math.Clamp(_weights.W1[h][i] + (stepLr * dHidden[h] * step.Input[i]), -6f, 6f);
-                }
+                SaveWeights();
             }
         }
+        finally
+        {
+            ArrayPool<float>.Shared.Return(returns);
+            ReturnTrajectoryBuffers(trajectory);
+            trajectory.Clear();
+        }
+    }
 
-        _weights.EpisodesTrained++;
-        SaveWeights();
+    /// <summary>
+    /// Call this if an episode is aborted/reset without calling TrainOnEpisode so pooled buffers are not leaked.
+    /// </summary>
+    public static void DiscardTrajectory(List<ExperienceStep> trajectory)
+    {
+        if (trajectory.Count == 0) return;
+        ReturnTrajectoryBuffers(trajectory);
+        trajectory.Clear();
+    }
+
+    private static void ReturnTrajectoryBuffers(List<ExperienceStep> trajectory)
+    {
+        for (int t = 0; t < trajectory.Count; t++)
+        {
+            var step = trajectory[t];
+            if (step.Input != null) ArrayPool<float>.Shared.Return(step.Input);
+            if (step.Hidden != null) ArrayPool<float>.Shared.Return(step.Hidden);
+            if (step.Probs != null) ArrayPool<float>.Shared.Return(step.Probs);
+        }
     }
 
     public void SaveWeights()
     {
         try
         {
+            SyncFlatToJagged();
+
             string? dir = Path.GetDirectoryName(_modelPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
@@ -268,39 +372,61 @@ public class MacroTacticalModel
         catch { }
     }
 
-    private static void ApplySpamAdaptationBias(float[] logits, OpponentPattern pattern, bool selfCornered)
+    private static float[] Flatten(float[][] jagged, int rows, int cols)
+    {
+        float[] flat = new float[rows * cols];
+        for (int r = 0; r < rows; r++)
+        {
+            Array.Copy(jagged[r], 0, flat, r * cols, cols);
+        }
+        return flat;
+    }
+
+    private void SyncFlatToJagged()
+    {
+        for (int h = 0; h < _weights.HiddenSize; h++)
+        {
+            Array.Copy(_flatW1, h * _weights.InputSize, _weights.W1[h], 0, _weights.InputSize);
+        }
+
+        for (int o = 0; o < _weights.OutputSize; o++)
+        {
+            Array.Copy(_flatW2, o * _weights.HiddenSize, _weights.W2[o], 0, _weights.HiddenSize);
+        }
+    }
+
+    private static void ApplySpamAdaptationBias(Span<float> logits, OpponentPattern pattern, bool selfCornered)
     {
         if (selfCornered)
         {
-            // Never retreat or turtle passively when already backed into the corner!
-            logits[(int)MacroTactic.ZoningKeepaway] -= 3.5f;
+            logits[(int)MacroTactic.ZoningKeepaway]      -= 3.5f;
             logits[(int)MacroTactic.DefensiveTurtleParry] -= 2.2f;
-            logits[(int)MacroTactic.AntiZoningCounter] += 2.4f;
-            logits[(int)MacroTactic.RushdownPressure] += 2.0f;
+            logits[(int)MacroTactic.AntiZoningCounter]    += 2.4f;
+            logits[(int)MacroTactic.RushdownPressure]     += 2.0f;
         }
 
         switch (pattern)
         {
             case OpponentPattern.ProjectileSpam:
-                logits[(int)MacroTactic.AntiZoningCounter] += 3.6f;
-                logits[(int)MacroTactic.RushdownPressure] += 1.8f;
-                logits[(int)MacroTactic.ZoningKeepaway] -= 2.5f;
+                logits[(int)MacroTactic.AntiZoningCounter]    += 3.6f;
+                logits[(int)MacroTactic.RushdownPressure]     += 1.8f;
+                logits[(int)MacroTactic.ZoningKeepaway]       -= 2.5f;
                 logits[(int)MacroTactic.DefensiveTurtleParry] -= 2.0f;
                 break;
             case OpponentPattern.JumpInSpam:
-                logits[(int)MacroTactic.AntiAirIntercept] += 3.0f;
+                logits[(int)MacroTactic.AntiAirIntercept]     += 3.0f;
                 break;
             case OpponentPattern.LowAttackSpam:
             case OpponentPattern.HighOverheadSpam:
                 logits[(int)MacroTactic.DefensiveTurtleParry] += 1.8f;
-                logits[(int)MacroTactic.WhiffPunishCounter] += 1.8f;
+                logits[(int)MacroTactic.WhiffPunishCounter]   += 1.8f;
                 break;
             case OpponentPattern.FastPokeSpam:
                 logits[(int)MacroTactic.DefensiveTurtleParry] += 2.2f;
-                logits[(int)MacroTactic.WhiffPunishCounter] += 2.0f;
+                logits[(int)MacroTactic.WhiffPunishCounter]   += 2.0f;
                 break;
             case OpponentPattern.GuardBreakSpam:
-                logits[(int)MacroTactic.RushdownPressure] += 2.5f;
+                logits[(int)MacroTactic.RushdownPressure]     += 2.5f;
                 break;
         }
     }
@@ -313,7 +439,11 @@ public class MacroTacticalModel
             {
                 string json = File.ReadAllText(path);
                 var loaded = JsonSerializer.Deserialize<MacroModelWeights>(json);
-                if (loaded != null && loaded.W1.Length == 12 && loaded.OutputSize == 9)
+                if (loaded != null &&
+                    loaded.W1 != null && loaded.W1.Length == loaded.HiddenSize &&
+                    loaded.W2 != null && loaded.W2.Length == loaded.OutputSize &&
+                    loaded.B1 != null && loaded.B1.Length == loaded.HiddenSize &&
+                    loaded.B2 != null && loaded.B2.Length == loaded.OutputSize)
                 {
                     return loaded;
                 }
