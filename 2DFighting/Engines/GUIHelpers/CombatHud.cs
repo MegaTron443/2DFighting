@@ -148,8 +148,7 @@ public static class CombatHUD
 
             UIRenderer.DrawProgressBar(slotRect, readyPct, style);
 
-            string label = skill.Name.Length > 5 ? skill.Name[..5].ToUpper() : skill.Name.ToUpper();
-            Raylib.DrawText(label, (int)slotRect.x + 4, (int)slotRect.y + 2, fontSize, Color.WHITE);
+            Raylib.DrawText(skill.ShortLabel, (int)slotRect.x + 4, (int)slotRect.y + 2, fontSize, Color.WHITE);
 
             index++;
         }
