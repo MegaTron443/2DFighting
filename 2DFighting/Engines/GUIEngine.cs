@@ -104,7 +104,7 @@ public static class GUIEngine
             {
                 if (ctx.Data.Player1 != null)
                 {
-                    Character character = ctx.Data.LuaEngine.CreateCharacter(id, slot: 1);
+                    Character character = ctx.Data.LuaEngine.CreateCharacter(id, slot: 0);
                     ctx.Data.Player1.ChangeCharacter(character);
                 }
             }, GetThumbnail(id));
@@ -119,7 +119,7 @@ public static class GUIEngine
             {
                 if (ctx.Data.Player2 != null)
                 {
-                    Character character = ctx.Data.LuaEngine.CreateCharacter(id);
+                    Character character = ctx.Data.LuaEngine.CreateCharacter(id, slot: 2);
                     ctx.Data.Player2.ChangeCharacter(character);
                 }
             }, GetThumbnail(id));
