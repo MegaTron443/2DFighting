@@ -85,6 +85,7 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
         p1.Draw(timer.Alpha);
         p2.Draw(timer.Alpha);
         PhysicsEngine.DrawProjectiles(timer.Alpha);
+        VFXManager.Draw();
 
         if (PhysicsEngine.IsTrainingMode)
         {
@@ -116,6 +117,7 @@ void HandlePauseInput()
 
 MacroTacticalModel.SharedInstance.SaveWeights();
 GUIEngine.Dispose();
+VFXManager.Dispose();
 Character.UnloadAllSpriteSheets();
 soundHandler?.Dispose();
 Raylib.CloseAudioDevice();

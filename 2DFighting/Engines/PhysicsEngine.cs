@@ -114,6 +114,7 @@ public class PhysicsEngine
         ResolveSimultaneousHits(data, data.Player1, data.Player2);
 
         UpdateProjectiles(dt, data.Player1, data.Player2);
+        VFXManager.Update(dt);
 
         RoundTimer = MathF.Max(0f, RoundTimer - dt);
 
@@ -285,6 +286,7 @@ public class PhysicsEngine
         ApplyHitForce(attacker, defender, nonLethalChip, blockStun, DEFAULT_BLOCK_KNOCKBACK_PCT);
         gamedata.SoundHandler?.PlaySound(defender, SoundType.Block);
         attacker.ComboCount = prevCombo; // Blocked hits shouldn't inflate combo counter
+        VFXManager.SpawnPreset(VFXPreset.BlockSpark, defender.Position, defender.FacingRight);
     }
 
     public static void ResetMatch(Player p1, Player p2)
@@ -305,6 +307,7 @@ public class PhysicsEngine
         RoundAnnouncement = "";
         p1.ResetState(faceRight: true);
         p2.ResetState(faceRight: false);
+        VFXManager.Clear();
     }
 
     private void ClampPlayer(Player p)
@@ -431,6 +434,7 @@ public class PhysicsEngine
             {
                 ApplyCleanHit(gamedata, attacker, defender, attackSkill);
             }
+            VFXManager.SpawnPreset(VFXPreset.BlockBreak, defender.Position, defender.FacingRight);
             gamedata.SoundHandler?.PlaySound(defender, SoundType.BlockBreak);
             return;
         }
@@ -460,6 +464,7 @@ public class PhysicsEngine
             ApplyHitForce(defender, attacker, counterSkill.Damage, counterSkill.HitStun, DEFAULT_COUNTER_KNOCKBACK_PCT);
         }
         gamedata.SoundHandler?.PlaySound(defender, SoundType.OnCounter);
+        VFXManager.SpawnPreset(VFXPreset.CounterFlash, defender.Position, defender.FacingRight);
         return true;
     }
 
@@ -543,6 +548,8 @@ public class PhysicsEngine
                     }
                 }
 
+                VFXManager.SpawnPreset(blocked ? VFXPreset.BlockSpark : VFXPreset.HitSpark, proj.Position, proj.FacingRight);
+
                 if (proj.DestroyOnHit)
                 {
                     proj.Destroy();
@@ -570,6 +577,8 @@ public class PhysicsEngine
             gamedata.SoundHandler?.PlaySound(defender, SoundType.CustomOnHit);
             return;
         }
+        VFXPreset spark = skill.Damage >= HEAVY_HITSTOP_DAMAGE_THRESHOLD ? VFXPreset.HeavyHitSpark : VFXPreset.HitSpark;
+        VFXManager.SpawnPreset(spark, defender.Position, attacker.FacingRight);
         gamedata.SoundHandler?.PlaySound(defender, SoundType.Hurt);
         ApplyHitForce(attacker, defender, skill.Damage, skill.HitStun, DEFAULT_CLEAN_KNOCKBACK_PCT);
     }

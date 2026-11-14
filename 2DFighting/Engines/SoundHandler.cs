@@ -4,6 +4,7 @@ using Raylib_cs;
 
 public class SoundHandler : IDisposable
 {
+    public static SoundHandler? Current { get; private set; }
     private float _volume = 1.0f;
     private readonly List<Character_Sounds> _activeSoundBanks = new();
     private Character_Sounds? _sharedSoundBank;
@@ -30,6 +31,7 @@ public class SoundHandler : IDisposable
         {
             _activeSoundBanks.Add(new Character_Sounds(data.Player2.CurrentCharacter));
         }
+        Current = this;
     }
 
     private void LoadSharedSoundBanks()
@@ -164,6 +166,22 @@ public class SoundHandler : IDisposable
         }
     }
 
+    public static void PlayFromLua(Player? player, string soundNameOrType)
+    {
+        if (Current == null || PhysicsEngine.IsTrainingMode || string.IsNullOrEmpty(soundNameOrType))
+            return;
+
+        if (Enum.TryParse<SoundType>(soundNameOrType, ignoreCase: true, out var soundType) &&
+            soundType != SoundType.Skill)
+        {
+            Current.PlaySound(player, soundType);
+        }
+        else
+        {
+            Current.PlaySkillSound(player, soundNameOrType);
+        }
+    }
+
     public void Dispose()
     {
         foreach (var bank in _activeSoundBanks)
@@ -174,5 +192,6 @@ public class SoundHandler : IDisposable
 
         _sharedSoundBank?.Dispose();
         _sharedSoundBank = null;
+        if (Current == this) Current = null;
     }
 }

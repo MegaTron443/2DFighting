@@ -38,6 +38,9 @@ public class LuaEngine
 
         ScriptRuntime.Globals["create_projectile"] = (Func<Player, Vector2, Vector2, DynValue?, DynValue?, Projectile>)ProjectileFactory.CreateShorthand;
         ScriptRuntime.Globals["CreateProjectile"] = (Func<Player, Table, Projectile>)ProjectileFactory.CreateFromTable;
+
+        ScriptRuntime.Globals["PlaySound"] = (Action<Player?, string>)SoundHandler.PlayFromLua;
+        ScriptRuntime.Globals["SpawnVFX"] = (Action<Player, Table>)VFXManager.SpawnFromLua;
     }
 
     public void Initialize()

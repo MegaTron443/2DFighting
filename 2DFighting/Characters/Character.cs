@@ -111,6 +111,8 @@ public class Character
         env["PhysicsEngine"] = script.Globals.Get("PhysicsEngine");
         env["NewVec2"] = script.Globals.Get("NewVec2");
         env["math"] = script.Globals.Get("math");
+        env["PlaySound"] = script.Globals.Get("PlaySound");
+        env["SpawnVFX"] = script.Globals.Get("SpawnVFX");
 
         string code = File.ReadAllText(path);
         RawLuaCode = code;
