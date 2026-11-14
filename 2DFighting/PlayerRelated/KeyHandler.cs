@@ -3,9 +3,9 @@ using Raylib_cs;
 
 public class KeyHandler
 {
-    private const int PLINK_WINDOW_FRAME_COUNT = 4;
-    private const int COMMIT_DELAY_FRAME_COUNT = 2;
-    private const int DEFAULT_MAX_OVERRIDE_FRAMES = 5;
+    private const int PLINK_WINDOW_FRAME_COUNT = 5;
+    private const int CHORD_COMMIT_FRAME_COUNT = 3;
+    private const int DEFAULT_MAX_OVERRIDE_FRAMES = 4;
 
     private readonly AppConfig _appConfig;
     private readonly Dictionary<int, Queue<(float time, int mask)>> _inputBuffers = new();
@@ -13,7 +13,6 @@ public class KeyHandler
     private float _latchedDir = 0f;
     private bool _latchedJumpPressed = false;
     private bool _latchedCrouch = false;
-    private int _latchedHeldMask = 0;
     private float _simTime = 0f;
 
     public KeyHandler(AppConfig appConfig)
@@ -42,14 +41,6 @@ public class KeyHandler
         if (Raylib.IsKeyPressed(controls.KeyBottom)) pressedThisFrame |= (1 << 1);
         if (Raylib.IsKeyPressed(controls.KeyLeft))   pressedThisFrame |= (1 << 2);
         if (Raylib.IsKeyPressed(controls.KeyRight))  pressedThisFrame |= (1 << 3);
-
-        int heldThisFrame = 0;
-        if (Raylib.IsKeyDown(controls.KeyTop))       heldThisFrame |= (1 << 0);
-        if (Raylib.IsKeyDown(controls.KeyBottom))    heldThisFrame |= (1 << 1);
-        if (Raylib.IsKeyDown(controls.KeyLeft))      heldThisFrame |= (1 << 2);
-        if (Raylib.IsKeyDown(controls.KeyRight))     heldThisFrame |= (1 << 3);
-
-        _latchedHeldMask |= heldThisFrame;
 
         if (!_inputBuffers.ContainsKey(playerIndex))
             _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
@@ -82,7 +73,6 @@ public class KeyHandler
         if (hasButtonPress)
         {
             _latchedJumpPressed = false;
-            _latchedHeldMask = 0;
             if (_inputBuffers.TryGetValue(playerIndex, out var b)) b.Clear();
             return true;
         }
@@ -95,7 +85,6 @@ public class KeyHandler
         _latchedDir = 0f;
         _latchedJumpPressed = false;
         _latchedCrouch = false;
-        _latchedHeldMask = 0;
         if (_inputBuffers.TryGetValue(playerIndex, out var buffer))
         {
             buffer.Clear();
@@ -123,9 +112,6 @@ public class KeyHandler
 
         currentCharacter.Move(player, dir);
 
-        int heldMask = _latchedHeldMask;
-        _latchedHeldMask = 0;
-
         if (!_inputBuffers.ContainsKey(playerIndex))
             _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
 
@@ -134,14 +120,14 @@ public class KeyHandler
         float currentTime = _simTime;
         float frameDuration = Timer.FixedDeltaTime;
         float plinkWindowDuration = frameDuration * PLINK_WINDOW_FRAME_COUNT;
-        float singleButtonCommitDelay = frameDuration * COMMIT_DELAY_FRAME_COUNT;
+        float chordCommitDelay = frameDuration * CHORD_COMMIT_FRAME_COUNT;
 
         while (buffer.Count > 0 && currentTime - buffer.Peek().time > plinkWindowDuration)
         {
             buffer.Dequeue();
         }
 
-        int combinedMask = heldMask;
+        int combinedMask = 0;
         foreach (var entry in buffer)
         {
             combinedMask |= entry.mask;
@@ -153,14 +139,21 @@ public class KeyHandler
             return !hasInput;
         }
 
+        float oldestPressTime = buffer.Peek().time;
+        bool commitWindowElapsed = (currentTime - oldestPressTime) >= chordCommitDelay;
+        int totalPressedBits = BitOperations.PopCount((uint)combinedMask);
+
+        if (!commitWindowElapsed && totalPressedBits < 3)
+        {
+            return !hasInput;
+        }
+
         SkillData? bestSkill = null;
         int bestBitCount = 0;
 
         foreach (var skill in currentCharacter.Skills.Values)
         {
             if (skill.TriggerMask == 0) continue;
-            if (currentCharacter.SkillCooldowns.TryGetValue(skill.Name, out float cd) && cd > 0f)
-                continue;
 
             if ((combinedMask & skill.TriggerMask) == skill.TriggerMask)
             {
@@ -175,20 +168,20 @@ public class KeyHandler
 
         if (bestSkill == null)
         {
+            buffer.Clear();
             return !hasInput;
         }
 
-        float oldestPressTime = buffer.Count > 0 ? buffer.Peek().time : currentTime;
-        bool isMultiButton = bestBitCount > 1;
-        bool singleButtonCommitReady = (currentTime - oldestPressTime) >= singleButtonCommitDelay;
+        if (currentCharacter.SkillCooldowns.TryGetValue(bestSkill.Name, out float cd) && cd > 0f)
+        {
+            buffer.Clear();
+            return !hasInput;
+        }
 
         bool canExecute = false;
         if (currentCharacter.ActiveSkill == null)
         {
-            if (isMultiButton || singleButtonCommitReady)
-            {
-                canExecute = true;
-            }
+            canExecute = true;
         }
         else
         {
@@ -199,11 +192,6 @@ public class KeyHandler
                 if (currentCharacter.CurrentActionFrame <= maxAllowedFrame)
                 {
                     canExecute = true;
-                }
-                else
-                {
-                    buffer.Clear();
-                    return !hasInput;
                 }
             }
         }
@@ -216,9 +204,9 @@ public class KeyHandler
             }
             currentCharacter.ActiveSkill = null;
             currentCharacter.ExecuteSkill(player, bestSkill.Name);
-            buffer.Clear();
         }
 
+        buffer.Clear();
         return !hasInput;
     }
 
@@ -273,12 +261,11 @@ public class KeyHandler
     {
         if (mask == 0) return;
         _latchedCrouch = false;
-        _latchedHeldMask |= mask;
 
         if (!_inputBuffers.ContainsKey(playerIndex))
         {
             _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
         }
-        _inputBuffers[playerIndex].Enqueue((_simTime - (Timer.FixedDeltaTime * COMMIT_DELAY_FRAME_COUNT), mask));
+        _inputBuffers[playerIndex].Enqueue((_simTime - (Timer.FixedDeltaTime * CHORD_COMMIT_FRAME_COUNT), mask));
     }
 }
