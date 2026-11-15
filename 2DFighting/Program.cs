@@ -5,6 +5,7 @@ int sw = config.Display.ScreenWidth;
 int sh = config.Display.ScreenHeight;
 
 Raylib.InitWindow(sw, sh, config.Display.Title);
+Raylib.SetExitKey(KeyboardKey.KEY_NULL);
 Raylib.SetTargetFPS(config.Display.TargetFps);
 Raylib.InitAudioDevice();
 PhysicsEngine physics = new PhysicsEngine();

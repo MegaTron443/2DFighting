@@ -3,6 +3,8 @@ using Raylib_cs;
 
 public class Button
 {
+    private static double _lastGlobalClickTime = -1.0;
+    private const double ClickCooldown = 0.05;
     public float XPct { get; set; }
     public float YPct { get; set; }
     public float WidthPct { get; set; }
@@ -89,7 +91,13 @@ public class Button
 
         if (IsHovered && Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
         {
-            OnClick?.Invoke(context);
+            double now = Raylib.GetTime();
+
+            if (_lastGlobalClickTime < 0.0 || (now - _lastGlobalClickTime) >= ClickCooldown)
+            {
+                _lastGlobalClickTime = now;
+                OnClick?.Invoke(context);
+            }
         }
     }
 

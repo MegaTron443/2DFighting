@@ -90,7 +90,10 @@ public class Player
 
         if (_isAI)
         {
-            _aiController = new PlayerAI(this, _keyHandler, playerIndex, TargetOpponent);
+            _aiController = new PlayerAI(this, _keyHandler, playerIndex, TargetOpponent)
+            {
+                Difficulty = appConfig.AIDifficulty
+            };
         }
     }
 

@@ -20,6 +20,7 @@ public static class GUIEngine
         ButtonsByState.Clear();
         LoadRosterThumbnails();
         InitializeButtons();
+        SettingsMenu.Initialize();
     }
 
     private static void LoadRosterThumbnails()
@@ -47,23 +48,31 @@ public static class GUIEngine
         {
             Button.Create("Player vs AI")
                 .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.36f)
+                .At(0.5f, 0.33f)
                 .Action(ctx => { PhysicsEngine.IsTrainingMode = false; SetupGame(ctx, p1AI: false, p2AI: true); }),
+
             Button.Create("Player vs Player")
                 .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.44f)
+                .At(0.5f, 0.41f)
                 .Action(ctx => { PhysicsEngine.IsTrainingMode = false; SetupGame(ctx, p1AI: false, p2AI: false); }),
+
             Button.Create("AI vs AI (Turbo Train)")
                 .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.52f)
+                .At(0.5f, 0.49f)
                 .Action(ctx =>
                 {
                     PhysicsEngine.IsTrainingMode = true;
                     SetupGame(ctx, p1AI: true, p2AI: true);
                 }),
+
+            Button.Create("Settings")
+                .WithSize(0.28f, 0.07f)
+                .At(0.5f, 0.57f)
+                .Action(_ => GameState.SetState(State.Settings)),
+
             Button.Create("Exit")
                 .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.60f)
+                .At(0.5f, 0.65f)
                 .Action(_ => GameState.SetState(State.Exit))
         };
 
@@ -148,18 +157,18 @@ public static class GUIEngine
         {
             Button.Create("Resume")
                   .WithSize(0.25f, 0.08f)
-                  .At(0.5f, 0.41f)
-                  .Action(ctx =>
-                  {
-                      GameState.SetState(State.Playing);
-                  }), 
+                  .At(0.5f, 0.38f)
+                  .Action(_ => GameState.SetState(State.Playing)),
+
+            Button.Create("Settings")
+                  .WithSize(0.25f, 0.08f)
+                  .At(0.5f, 0.48f)
+                  .Action(_ => GameState.SetState(State.Settings)),
+
             Button.Create("Quit to Menu")
                   .WithSize(0.25f, 0.08f)
-                  .At(0.5f, 0.5f)
-                  .Action(ctx =>
-                  {
-                      GameState.SetState(State.MainMenu);
-                  })
+                  .At(0.5f, 0.58f)
+                  .Action(_ => GameState.SetState(State.MainMenu))
         };
 
         ButtonsByState[State.GameOver] = new List<Button>
@@ -184,6 +193,13 @@ public static class GUIEngine
                 MainMenu(ref p1, ref p2, data);
                 break;
             case State.ChoiceMenu:
+                break;
+            case State.Settings:
+                Player? cP1 = p1;
+                Player? cP2 = p2;
+                SettingsMenu.Update(new ButtonContext(data, newP1 => cP1 = newP1, newP2 => cP2 = newP2));
+                p1 = cP1;
+                p2 = cP2;
                 break;
             case State.Playing:
                 break;
@@ -239,6 +255,9 @@ public static class GUIEngine
                 break;
             case State.Playing:
                 DrawPlaying(data);
+                break;
+            case State.Settings:
+                SettingsMenu.Draw(data);
                 break;
             case State.ChoiceMenu:
                 DrawChoiceMenu(data);

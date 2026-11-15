@@ -8,6 +8,7 @@ public class AppConfig
     public DisplaySettings Display { get; set; } = new();
     public ControlSettings Controls { get; set; } = new();
     public SoundSettings Sound { get; set; } = new();
+    public AIDifficulty AIDifficulty { get; set; } = AIDifficulty.Medium;
 
     public static AppConfig Load(string path)
     {
