@@ -80,6 +80,8 @@ public class PhysicsEngine
             return;
         }
 
+        data.SoundHandler?.UpdateTick(dt);
+
         if (HitstopTimer > 0f)
         {
             data.Player1.SavePreviousState();
