@@ -81,6 +81,7 @@ public class PhysicsEngine
         }
 
         data.SoundHandler?.UpdateTick(dt);
+        PostFXManager.UpdateTick(dt);
 
         if (HitstopTimer > 0f)
         {
@@ -309,6 +310,7 @@ public class PhysicsEngine
         RoundAnnouncement = "";
         p1.ResetState(faceRight: true);
         p2.ResetState(faceRight: false);
+        PostFXManager.ResetAll();
         VFXManager.Clear();
     }
 
@@ -528,7 +530,6 @@ public class PhysicsEngine
                     AttackHeight.Overhead => !defender.IsCrouching,
                     _                     => true
                 });
-
                 if (blocked)
                 {
                     int rawChip = (int)(proj.Damage * BLOCK_CHIP_DAMAGE_MULTIPLIER);
@@ -542,7 +543,14 @@ public class PhysicsEngine
                     HitstopTimer = MathF.Max(HitstopTimer, LIGHT_HITSTOP_DURATION);
                     if (proj.OnHit != null && proj.OnHit.Type == DataType.Function)
                     {
-                        proj.OnHit.Function.Call(proj.Owner, defender, proj);
+                        try
+                        {
+                            proj.OnHit.Function.Call(proj.Owner, defender, proj);
+                        }
+                        catch (MoonSharp.Interpreter.ScriptRuntimeException ex)
+                        {
+                            Console.WriteLine($"Error executing projectile OnHit function: {ex.DecoratedMessage}");
+                        }
                     }
                     else
                     {

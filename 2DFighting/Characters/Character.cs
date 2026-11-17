@@ -102,6 +102,9 @@ public class Character
     {
         // Isolated environment per character script so globals don't collide
         Table env = new Table(script);
+        Table meta = new Table(script);
+        meta["__index"] = script.Globals;
+        env.MetaTable = meta;
         env["Keys"] = script.Globals.Get("Keys");
         env["Trajectories"] = script.Globals.Get("Trajectories");
         env["ApplyHitForce"] = script.Globals.Get("ApplyHitForce");

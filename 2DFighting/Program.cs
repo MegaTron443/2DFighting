@@ -16,6 +16,8 @@ physics.Initialize();
 timer.Initialize();
 lua.Initialize();
 
+ShaderManager.Initialize();
+PostFXManager.Initialize();
 ModManager.Initialize();
 LuaMoveTranslator.InitializeCache(lua);
 GUIEngine.Initialize();
@@ -78,18 +80,31 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
         }
     }
 
+    if (GameState.CurrentState == State.Playing && p1 != null && p2 != null && !PhysicsEngine.IsTrainingMode)
+    {
+        PostFXManager.BeginSceneCapture();
+        Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, Raylib.GetScreenWidth(), (int)PhysicsEngine.GroundY, Color.BLACK);
+        p1.Draw(timer.Alpha);
+        p2.Draw(timer.Alpha);
+        PhysicsEngine.DrawProjectiles(timer.Alpha);
+        VFXManager.Draw();
+    }
+
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.RAYWHITE);
 
     if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
     {
-        p1.Draw(timer.Alpha);
-        p2.Draw(timer.Alpha);
-        PhysicsEngine.DrawProjectiles(timer.Alpha);
-        VFXManager.Draw();
-
-        if (PhysicsEngine.IsTrainingMode)
+        if (!PhysicsEngine.IsTrainingMode)
         {
+            PostFXManager.EndSceneCaptureAndPresent();
+        }
+        else
+        {
+            p1.Draw(timer.Alpha);
+            p2.Draw(timer.Alpha);
+            PhysicsEngine.DrawProjectiles(timer.Alpha);
+            VFXManager.Draw();
             string trainText = $"Episodes Learned: {MacroTacticalModel.SharedInstance.EpisodesTrained}";
             Raylib.DrawText(trainText, 20, Raylib.GetScreenHeight() - 40, 22, Color.DARKGREEN);
         }
@@ -119,6 +134,8 @@ void HandlePauseInput()
 MacroTacticalModel.SharedInstance.SaveWeights();
 GUIEngine.Dispose();
 VFXManager.Dispose();
+PostFXManager.Dispose();
+ShaderManager.Dispose();
 Character.UnloadAllSpriteSheets();
 soundHandler?.Dispose();
 Raylib.CloseAudioDevice();

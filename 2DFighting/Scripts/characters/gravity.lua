@@ -32,7 +32,6 @@ local Character = {
                 if character.CurrentActionFrame == 5 and player.TargetOpponent ~= nil then
                     local opponent = player.TargetOpponent
                     local screen_h = character.Height / character.HeightPct
-
                     local proj = CreateProjectile(player, {
                         x_offset_pct = 0.0,
                         y_offset_pct = 0.0,
@@ -50,6 +49,17 @@ local Character = {
                             ApplyHitForce(owner, hit_player, projectile.Damage, projectile.HitStun, 0.0)
                             hit_player.IsAirStalled = false
                             hit_player:SetVelocity(0.0, screen_h * 1.5)
+                            
+                            SetHitstop(6.0)
+                            TriggerImpactFrame(5, 1)
+
+                            TriggerScreenShake(0, 18, 14)
+
+                            TriggerPaletteShift(145, 35, 255, 0.75, 10, 0.45)
+
+                            local normX = hit_player.PosX / (character.Width / character.WidthPct)
+                            local normY = hit_player.PosY / screen_h
+                            TriggerGravityPinch(0.42, 8, 0.35, normX, normY)
                         end
                     })
 
