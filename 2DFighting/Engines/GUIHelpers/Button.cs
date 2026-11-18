@@ -5,6 +5,7 @@ public class Button
 {
     private static double _lastGlobalClickTime = -1.0;
     private const double ClickCooldown = 0.05;
+
     public float XPct { get; set; }
     public float YPct { get; set; }
     public float WidthPct { get; set; }
@@ -12,7 +13,6 @@ public class Button
     public string Text { get; set; }
     public float FontSizePct { get; set; } = 0.025f;
     public Action<ButtonContext>? OnClick { get; set; }
-
     public Texture2D? Icon { get; set; } = null;
     public bool IsSelected { get; set; } = false;
 
@@ -20,9 +20,11 @@ public class Button
     public Color HoverColor { get; set; } = new Color(70, 70, 70, 240);
     public Color SelectedColor { get; set; } = Color.GOLD;
     public Color TextColor { get; set; } = Color.WHITE;
+    public Vector3 AccentColor { get; set; } = new Vector3(0.45f, 0.78f, 1.0f);
     public TextAlignment Alignment { get; set; } = TextAlignment.Center;
 
     public bool IsHovered { get; private set; }
+    private float _hoverLerp = 0f;
 
     public Button(float xPct, float yPct, float widthPct, float heightPct, string text, Action<ButtonContext>? onClick = null, Texture2D? icon = null, bool isCentered = false)
     {
@@ -57,6 +59,14 @@ public class Button
         return this;
     }
 
+    public Button WithAccent(float r, float g, float b)
+    {
+        AccentColor = (r > 1f || g > 1f || b > 1f)
+            ? new Vector3(r / 255f, g / 255f, b / 255f)
+            : new Vector3(r, g, b);
+        return this;
+    }
+
     public Button Action(Action<ButtonContext> action)
     {
         OnClick = action;
@@ -67,7 +77,6 @@ public class Button
     {
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
-
         return new Rectangle(
             (int)(sw * XPct),
             (int)(sh * YPct),
@@ -89,10 +98,13 @@ public class Button
 
         IsHovered = Raylib.CheckCollisionPointRec(mousePos, bounds);
 
+        float dt = Raylib.GetFrameTime();
+        float targetHover = IsHovered ? 1f : 0f;
+        _hoverLerp = Math.Clamp(_hoverLerp + ((targetHover - _hoverLerp) * Math.Min(1f, dt * 14f)), 0f, 1f);
+
         if (IsHovered && Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
         {
             double now = Raylib.GetTime();
-
             if (_lastGlobalClickTime < 0.0 || (now - _lastGlobalClickTime) >= ClickCooldown)
             {
                 _lastGlobalClickTime = now;
@@ -106,35 +118,41 @@ public class Button
         Rectangle bounds = GetPixelBounds();
         int fontSize = Math.Max(12, (int)(Raylib.GetScreenHeight() * FontSizePct));
 
-        Color bg = IsHovered ? HoverColor : NormalColor;
-        Raylib.DrawRectangleRec(bounds, bg);
+        if (ShaderManager.TryGetShader("ui_button", out Shader btnShader))
+        {
+            Raylib.BeginShaderMode(btnShader);
+            ShaderManager.SetVec2(btnShader, "u_Size", new Vector2(bounds.width, bounds.height));
+            ShaderManager.SetFloat(btnShader, "u_Time", (float)Raylib.GetTime());
+            ShaderManager.SetFloat(btnShader, "u_Hover", _hoverLerp);
+            ShaderManager.SetFloat(btnShader, "u_Selected", IsSelected ? 1.0f : 0.0f);
+            ShaderManager.SetVec3(btnShader, "u_AccentColor", AccentColor);
+
+            Texture2D defaultTex = new Texture2D { id = 1, width = 1, height = 1, mipmaps = 1, format = PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+            Raylib.DrawTexturePro(defaultTex, new Rectangle(0, 0, 1, 1), bounds, Vector2.Zero, 0f, Color.WHITE);
+
+            Raylib.EndShaderMode();
+        }
+        else
+        {
+            Color bg = IsHovered ? HoverColor : NormalColor;
+            Raylib.DrawRectangleRec(bounds, bg);
+            Raylib.DrawRectangleLinesEx(bounds, IsSelected ? 3 : (IsHovered ? 2 : 1), IsSelected ? SelectedColor : (IsHovered ? Color.SKYBLUE : Color.GRAY));
+        }
 
         if (Icon.HasValue && Icon.Value.id > 0)
         {
             Texture2D tex = Icon.Value;
             Rectangle srcRect = new Rectangle(0, 0, tex.width, tex.height);
-            
+
             float bottomPadding = (Alignment == TextAlignment.Bottom) ? (fontSize + 8f) : 4f;
             Rectangle destRect = new Rectangle(
-                bounds.x + 2, 
-                bounds.y + 2, 
-                bounds.width - 4, 
-                Math.Max(4, bounds.height - bottomPadding - 2)
+                bounds.x + 4,
+                bounds.y + 4,
+                bounds.width - 8,
+                Math.Max(4, bounds.height - bottomPadding - 4)
             );
-            Raylib.DrawTexturePro(tex, srcRect, destRect, Vector2.Zero, 0f, Color.WHITE);
-        }
 
-        if (IsSelected)
-        {
-            Raylib.DrawRectangleLinesEx(bounds, 3, SelectedColor);
-        }
-        else if (IsHovered)
-        {
-            Raylib.DrawRectangleLinesEx(bounds, 2, Color.SKYBLUE);
-        }
-        else
-        {
-            Raylib.DrawRectangleLinesEx(bounds, 1, Color.GRAY);
+            Raylib.DrawTexturePro(tex, srcRect, destRect, Vector2.Zero, 0f, Color.WHITE);
         }
 
         int textWidth = Raylib.MeasureText(Text, fontSize);
@@ -148,9 +166,12 @@ public class Button
             _                    => (int)(bounds.y + (bounds.height - fontSize) / 2f)
         };
 
-        Raylib.DrawText(Text, textX, textY, fontSize, TextColor);
+        Raylib.DrawText(Text, textX + 1, textY + 1, fontSize, Color.BLACK);
+        Color finalTextCol = IsHovered ? Color.GOLD : TextColor;
+        Raylib.DrawText(Text, textX, textY, fontSize, finalTextCol);
     }
 }
+
 public class ButtonContext
 {
     public GameData Data { get; }

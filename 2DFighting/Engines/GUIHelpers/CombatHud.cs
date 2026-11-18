@@ -50,16 +50,42 @@ public static class CombatHUD
         DrawRoundAnnouncement();
     }
 
+    private static float _p1TrailPct = 1.0f;
+    private static float _p2TrailPct = 1.0f;
+
     private static void DrawHealthBars(Player p1, Player p2)
     {
-        float p1Pct = p1.Health / (float)Player.MAX_HEALTH;
-        float p2Pct = p2.Health / (float)Player.MAX_HEALTH;
+        float p1Pct = Math.Clamp(p1.Health / (float)Player.MAX_HEALTH, 0f, 1f);
+        float p2Pct = Math.Clamp(p2.Health / (float)Player.MAX_HEALTH, 0f, 1f);
+
+        float dt = Raylib.GetFrameTime();
+
+        if (p1Pct > _p1TrailPct) _p1TrailPct = p1Pct;
+        else if (!p1.IsInHitstun && _p1TrailPct > p1Pct)
+            _p1TrailPct = MathF.Max(p1Pct, _p1TrailPct - (dt * 0.45f));
+
+        if (p2Pct > _p2TrailPct) _p2TrailPct = p2Pct;
+        else if (!p2.IsInHitstun && _p2TrailPct > p2Pct)
+            _p2TrailPct = MathF.Max(p2Pct, _p2TrailPct - (dt * 0.45f));
 
         Rectangle p1Rect = UIRenderer.GetPctRect(0.10f, 0.05f, 0.32f, 0.045f);
         Rectangle p2Rect = UIRenderer.GetPctRect(0.58f, 0.05f, 0.32f, 0.045f);
 
-        UIRenderer.DrawProgressBar(p1Rect, p1Pct, P1HealthStyle);
-        UIRenderer.DrawProgressBar(p2Rect, p2Pct, P2HealthStyle);
+        var p1TrailStyle = P1HealthStyle;
+        p1TrailStyle.FillColor = new Color(255, 215, 90, 255);
+        UIRenderer.DrawProgressBar(p1Rect, _p1TrailPct, p1TrailStyle);
+
+        var p2TrailStyle = P2HealthStyle;
+        p2TrailStyle.FillColor = new Color(255, 215, 90, 255);
+        UIRenderer.DrawProgressBar(p2Rect, _p2TrailPct, p2TrailStyle);
+
+        var p1LiveStyle = P1HealthStyle;
+        p1LiveStyle.BackgroundColor = new Color(0, 0, 0, 0);
+        UIRenderer.DrawProgressBar(p1Rect, p1Pct, p1LiveStyle);
+
+        var p2LiveStyle = P2HealthStyle;
+        p2LiveStyle.BackgroundColor = new Color(0, 0, 0, 0);
+        UIRenderer.DrawProgressBar(p2Rect, p2Pct, p2LiveStyle);
     }
 
     private static void DrawRoundPips(Player p1, Player p2)

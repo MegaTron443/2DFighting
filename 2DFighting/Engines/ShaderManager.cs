@@ -213,6 +213,73 @@ void main()
 
         _shaders["postfx_cosmic"] = Raylib.LoadShaderFromMemory(null, postFxFrag);
         _shaders["sprite_lut"] = Raylib.LoadShaderFromMemory(null, spriteFrag);
+
+    string uiButtonFrag = @"#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+out vec4 finalColor;
+
+uniform vec2 u_Size;          // Button width and height in pixels
+uniform float u_Time;         // Elapsed time for animations
+uniform float u_Hover;        // 0.0 = Idle, 1.0 = Hovered (smoothly lerped)
+uniform float u_Selected;     // 0.0 = Normal, 1.0 = Selected
+uniform vec3 u_AccentColor;   // Border/glow highlight color
+
+float sdRoundedBox(vec2 p, vec2 b, float r)
+{
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+}
+
+void main()
+{
+    vec2 size = max(u_Size, vec2(16.0, 16.0));
+    vec2 pixelPos = (fragTexCoord - 0.5) * size;
+    vec2 halfSize = size * 0.5;
+
+    float radius = min(8.0, min(halfSize.x, halfSize.y) * 0.38);
+    float dist = sdRoundedBox(pixelPos, halfSize - vec2(1.5), radius);
+
+    // Anti-aliased outer cutout
+    float outerAlpha = 1.0 - smoothstep(-0.75, 0.75, dist);
+    if (outerAlpha <= 0.01) discard;
+
+    // Base dark metallic gradient
+    vec3 bgTop = mix(vec3(0.16, 0.16, 0.20), vec3(0.24, 0.22, 0.34), u_Hover);
+    vec3 bgBot = mix(vec3(0.09, 0.09, 0.12), vec3(0.14, 0.12, 0.22), u_Hover);
+    vec3 col = mix(bgTop, bgBot, fragTexCoord.y);
+
+    // Subtle horizontal scanlines
+    float scanline = 0.5 + 0.5 * sin(fragTexCoord.y * size.y * 1.6);
+    col -= vec3(0.025) * scanline;
+
+    // Animated diagonal hover sheen
+    if (u_Hover > 0.01)
+    {
+        float sweepPos = mod(u_Time * 1.4, 2.6) - 0.8;
+        float diag = (fragTexCoord.x * 0.85) + (fragTexCoord.y * 0.35);
+        float sheen = smoothstep(0.18, 0.0, abs(diag - sweepPos)) * u_Hover * 0.28;
+        col += u_AccentColor * sheen;
+    }
+
+    // Crisp SDF border + inner glow
+    float borderThickness = mix(1.6, 2.6, max(u_Hover, u_Selected));
+    float borderMask = 1.0 - smoothstep(0.0, 1.2, abs(dist + borderThickness * 0.5) - borderThickness * 0.5);
+
+    vec3 idleBorder = vec3(0.45, 0.46, 0.52);
+    vec3 activeBorder = (u_Selected > 0.5) ? vec3(1.0, 0.84, 0.15) : u_AccentColor;
+    vec3 borderCol = mix(idleBorder, activeBorder, max(u_Hover, u_Selected));
+
+    // Soft inner rim glow on hover/select
+    float innerGlow = exp(dist * 0.22) * 0.32 * max(u_Hover, u_Selected);
+    col += activeBorder * innerGlow;
+
+    col = mix(col, borderCol, borderMask);
+
+    finalColor = vec4(col, outerAlpha * 0.95);
+}";
+
+        _shaders["ui_button"] = Raylib.LoadShaderFromMemory(null, uiButtonFrag);
     }
 
     public static void Dispose()
