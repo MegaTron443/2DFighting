@@ -2,6 +2,8 @@
 -- CHROMATIC INQUISITOR PRIEST (Dynamic Grayscale LUT + Auras)
 -- ============================================================
 
+local VIOLET_WARP_VEL_X_PCT = 1.15
+
 local function SetAura(character, auraId)
     character.CustomData["aura"] = auraId
     if auraId == 0 then
@@ -215,7 +217,7 @@ local Character = {
                     PlaySound(player, { sound = "cosmic_light_slash", pitch = 1.65, volume = 0.85 })
                 elseif character.CurrentActionFrame == 5 then
                     local dir = player.FacingRight and 1 or -1
-                    player:SetVelocity(dir * 1300, 0)
+                    player:SetVelocityPct(dir * VIOLET_WARP_VEL_X_PCT, 0)
                     character:SpawnAfterimage(200, 100, 255)
                 end
             end

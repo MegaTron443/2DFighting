@@ -2,6 +2,8 @@
 -- CHRONOMANCER (Time Manipulation & Homing)
 -- ==========================================
 
+local TIME_SKIP_DASH_PCT = 0.25
+
 local Character = {
     name = "Chronomancer",
 
@@ -114,7 +116,8 @@ local Character = {
             on_customlogic = function(player, character, dt)
                 if character.CurrentActionFrame == 4 then
                     local dir = player.FacingRight and 1 or -1
-                    player:Translate(dir * 210, 0)
+                    player:TranslatePct(dir * TIME_SKIP_DASH_PCT, 0)
+                    player:SavePreviousState()
                 end
             end
         },

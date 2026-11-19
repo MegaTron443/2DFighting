@@ -2,7 +2,8 @@
 -- TITAN (Armored Grappler & Juggernaut)
 -- ==========================================
 
-local regenAcc = 0.0
+local REGEN_INTERVAL_SEC = 1.5
+local REGEN_HP_AMOUNT    = 1
 
 local Character = {
     name = "Titan",
@@ -26,11 +27,12 @@ local Character = {
     -- Passive: Titan regenerates 1 HP every 1.5 seconds while grounded and idle!
     on_passive = function(player, character, dt)
         if player.IsGrounded and not player.IsInHitstun and player.Health > 0 and player.Health < player.MAX_HEALTH then
-            regenAcc = regenAcc + dt
-            if regenAcc >= 1.5 then
+            local regenAcc = (character.CustomData["regenAcc"] or 0.0) + dt
+            if regenAcc >= REGEN_INTERVAL_SEC then
                 regenAcc = 0.0
-                player.Health = math.min(player.MAX_HEALTH, player.Health + 1)
+                player.Health = math.min(player.MAX_HEALTH, player.Health + REGEN_HP_AMOUNT)
             end
+            character.CustomData["regenAcc"] = regenAcc
         end
     end,
 

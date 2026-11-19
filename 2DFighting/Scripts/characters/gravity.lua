@@ -2,6 +2,12 @@
 -- GRAVITY ODACHI SAMURAI (Compound Shader + Stance Switcher)
 -- ============================================================
 
+local SPLIT_SLAM_VEL_Y_PCT      = 1.35
+local COUNTER_SLAM_VEL_Y_PCT    = 1.55
+local WELLSPRING_PULL_VEL_X_PCT = 0.50
+local WELLSPRING_PULL_VEL_Y_PCT = -0.18
+local COLLAPSE_DASH_VEL_X_PCT   = 1.05
+
 local function SetStance(character, stance)
     character.CustomData["stance"] = stance
     if stance == 0 then
@@ -180,7 +186,7 @@ local Character = {
                     TriggerPaletteShift(140, 40, 255, 0.45, 6, 0.35)
                 else
                     hit_player.IsAirStalled = false
-                    hit_player:SetVelocity(0, 900)
+                    hit_player:SetVelocityPct(0, SPLIT_SLAM_VEL_Y_PCT)
                     SetHitstop(4)
                     TriggerScreenShake(0, 16, 12)
                     PlaySound(owner, { sound = "cosmic_sub_drop", pitch = 1.05, duck_world = 0.15, duck_frames = 8, duck_recovery = 0.4 })
@@ -243,7 +249,7 @@ local Character = {
                     duck_recovery = 0.65
                 })
                 ApplyHitForce(owner, attacker, 24, 0.65, 0.15)
-                attacker:SetVelocity(0, 1100)
+                attacker:SetVelocityPct(0, COUNTER_SLAM_VEL_Y_PCT)
             end
         },
 
@@ -288,7 +294,7 @@ local Character = {
             hitbox          = { x_offset_pct = 0.80, y_offset_pct = 0.10, width_pct = 1.60, height_pct = 0.55 },
             on_hit          = function(owner, hit_player, skill)
                 local dir = owner.FacingRight and -1 or 1
-                hit_player:SetVelocity(dir * 520, -120)
+                hit_player:SetVelocityPct(dir * WELLSPRING_PULL_VEL_X_PCT, WELLSPRING_PULL_VEL_Y_PCT)
                 TriggerGravityPinch(0.28, 6, 0.25, 0.5, 0.5)
                 PlaySound(owner, { sound = "cosmic_recall", pitch = 0.85, volume = 0.8 })
             end
@@ -314,7 +320,7 @@ local Character = {
             on_customlogic    = function(player, character, dt)
                 if character.CurrentActionFrame >= 4 and character.CurrentActionFrame <= 12 then
                     local dir = player.FacingRight and 1 or -1
-                    player:SetVelocity(dir * 1150, 0)
+                    player:SetVelocityPct(dir * COLLAPSE_DASH_VEL_X_PCT, 0)
                     character:SpawnAfterimage(160, 35, 255)
                 end
             end,

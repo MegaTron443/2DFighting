@@ -7,6 +7,7 @@ local SWEEP_KNOCKBACK_PCT        = 0.28
 local DEFLECT_COUNTER_DAMAGE     = 20
 local DEFLECT_COUNTER_STUN       = 0.95
 local DEFLECT_KNOCKBACK_PCT      = 0.35
+local DEFLECT_BACKSTEP_VEL_X_PCT = 0.32
 
 local IMPALE_BREAK_DAMAGE        = 35
 local IMPALE_BREAK_STUN          = 1.15
@@ -91,7 +92,7 @@ local Character = {
             is_counter = true,
             on_counter = function(defender, attacker)
                 local backDir = defender.FacingRight and -1 or 1
-                defender:SetVelocity(backDir * 280, 0)
+                defender:SetVelocityPct(backDir * DEFLECT_BACKSTEP_VEL_X_PCT, 0)
                 ApplyHitForce(defender, attacker, DEFLECT_COUNTER_DAMAGE, DEFLECT_COUNTER_STUN, DEFLECT_KNOCKBACK_PCT)
             end
         },

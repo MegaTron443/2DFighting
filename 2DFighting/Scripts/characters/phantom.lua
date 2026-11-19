@@ -2,6 +2,9 @@
 -- PHANTOM (Boomerang & Teleport Trickster)
 -- ==========================================
 
+local SUBSTITUTION_BEHIND_PCT = 0.11
+local IZUNA_HEIGHT_PCT        = 0.40
+
 local Character = {
     name = "Phantom",
 
@@ -85,9 +88,10 @@ local Character = {
             cooldown_time = 3.0,
             is_counter = true,
             on_counter = function(defender, attacker)
-                local behindOffset = attacker.FacingRight and -110 or 110
+                local behindOffset = (attacker.FacingRight and -SUBSTITUTION_BEHIND_PCT or SUBSTITUTION_BEHIND_PCT) * defender.ScreenWidth
                 defender.Position = NewVec2(attacker.PosX + behindOffset, attacker.PosY)
                 defender.FacingRight = attacker.FacingRight
+                defender:SavePreviousState()
                 ApplyLaunchForce(defender, attacker, 20, 0.85, 0.05, -0.68)
             end
         },
@@ -179,7 +183,8 @@ local Character = {
                 local f = character.CurrentActionFrame
                 if f == 5 and player.TargetOpponent ~= nil then
                     player.IsGrounded = false
-                    player.Position = NewVec2(player.TargetOpponent.PosX, player.TargetOpponent.PosY - 260)
+                    player.Position = NewVec2(player.TargetOpponent.PosX, player.TargetOpponent.PosY - (player.ScreenHeight * IZUNA_HEIGHT_PCT))
+                    player:SavePreviousState()
                     player:SetVelocity(0, 0)
                 elseif f >= 8 and f < 17 then
                     player:Translate(0, character.WalkSpeed * 3.1 * dt)

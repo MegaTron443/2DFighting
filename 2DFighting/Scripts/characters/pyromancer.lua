@@ -2,6 +2,8 @@
 -- PYROMANCER (Artillery & Trap Zoner)
 -- ==========================================
 
+local CINDER_BLINK_RETREAT_PCT = 0.30
+
 local Character = {
     name = "Pyromancer",
 
@@ -106,7 +108,8 @@ local Character = {
                     color = { 255, 60, 0 }
                 })
                 local retreatDir = defender.FacingRight and -1 or 1
-                defender:Translate(retreatDir * 350, 0)
+                defender:TranslatePct(retreatDir * CINDER_BLINK_RETREAT_PCT, 0)
+                defender:SavePreviousState()
             end
         },
 
