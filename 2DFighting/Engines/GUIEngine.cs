@@ -1,357 +1,65 @@
-using System;
 using System.Collections.Generic;
-using System.Numerics;
-using Raylib_cs;
 
 public static class GUIEngine
 {
-    public static string[] RosterIds => AvailableFighters;
-    private static readonly Dictionary<State, List<Button>> ButtonsByState = new();
-    private static readonly Dictionary<string, Texture2D> RosterThumbnails = new();
+    private static readonly Dictionary<State, IUIScreen> _screens = new();
+
     private static string[] AvailableFighters => ModManager.AvailableFighters.Length > 0
         ? ModManager.AvailableFighters
-        : new[] { "brawler", "lancer", "pyromancer", "phantom", "titan", "chronomancer", "gravity" };
+        : EngineServices.DefaultFighters;
 
-    private static int sw => Raylib.GetScreenWidth();
-    private static int sh => Raylib.GetScreenHeight();
+    public static string[] RosterIds => AvailableFighters;
 
     public static void Initialize()
     {
-        ButtonsByState.Clear();
-        LoadRosterThumbnails();
-        InitializeButtons();
-        SettingsMenu.Initialize();
-    }
+        Dispose();
 
-    private static void LoadRosterThumbnails()
-    {
-        foreach (var fighter in AvailableFighters)
+        _screens[State.MainMenu]   = new MainMenuScreen();
+        _screens[State.ChoiceMenu] = new CharacterSelectScreen();
+        _screens[State.Settings]   = new SettingsScreen();
+        _screens[State.Playing]    = new PlayingHudScreen();
+        _screens[State.Paused]     = new PauseOverlay();
+        _screens[State.GameOver]   = new GameOverScreen();
+
+        foreach (var screen in _screens.Values)
         {
-            string? path = ModManager.ResolveFile("Assets", "Characters", fighter, "Roaster.png")
-                        ?? ModManager.ResolveFile("Characters", "assets", fighter, "Roaster.png");
-
-            if (path != null && File.Exists(path) && !RosterThumbnails.ContainsKey(fighter))
-            {
-                RosterThumbnails[fighter] = Raylib.LoadTexture(path);
-            }
+            screen.Initialize();
         }
-    }
-
-    private static Texture2D? GetThumbnail(string characterKey)
-    {
-        return RosterThumbnails.TryGetValue(characterKey, out var tex) ? tex : null;
-    }
-
-    private static void InitializeButtons()
-    {
-        ButtonsByState[State.MainMenu] = new List<Button>
-        {
-            Button.Create("Player vs AI")
-                .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.33f)
-                .Action(ctx => { PhysicsEngine.IsTrainingMode = false; SetupGame(ctx, p1AI: false, p2AI: true); }),
-
-            Button.Create("Player vs Player")
-                .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.41f)
-                .Action(ctx => { PhysicsEngine.IsTrainingMode = false; SetupGame(ctx, p1AI: false, p2AI: false); }),
-
-            Button.Create("AI vs AI (Turbo Train)")
-                .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.49f)
-                .Action(ctx =>
-                {
-                    PhysicsEngine.IsTrainingMode = true;
-                    SetupGame(ctx, p1AI: true, p2AI: true);
-                }),
-
-            Button.Create("Settings")
-                .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.57f)
-                .Action(_ => GameState.SetState(State.Settings)),
-
-            Button.Create("Exit")
-                .WithSize(0.28f, 0.07f)
-                .At(0.5f, 0.65f)
-                .Action(_ => GameState.SetState(State.Exit))
-        };
-
-        void SetupGame(ButtonContext ctx, bool p1AI, bool p2AI)
-        {
-            Vector2 spawn_p1 = new Vector2(sw * 0.1f, PhysicsEngine.GroundY * 0.9f);
-            Vector2 spawn_p2 = new Vector2(sw * 0.9f, PhysicsEngine.GroundY * 0.9f);
-            Player p1 = Player.Create("Player 1", 0, spawn_p1, ctx.Data.AppConfig, isAI: p1AI);
-            Player p2 = Player.Create("Player 2", 1, spawn_p2, ctx.Data.AppConfig, isAI: p2AI);
-            p1.SetOpponent(p2);
-            p2.SetOpponent(p1);
-
-            if (PhysicsEngine.IsTrainingMode)
-            {
-                var rng = Random.Shared;
-                p1.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)], slot: 0));
-                p2.ChangeCharacter(ctx.Data.LuaEngine.CreateCharacter(AvailableFighters[rng.Next(AvailableFighters.Length)], slot: 1));
-                PhysicsEngine.ResetMatch(p1, p2);
-                GameState.SetState(State.Playing);
-            }
-            else
-            {
-                GameState.SetState(State.ChoiceMenu);
-            }
-
-            ctx.SetP1(p1);
-            ctx.SetP2(p2);
-        }
-
-        var choiceButtons = new List<Button>();
-
-        var p1Grid = new UIGrid(xPct: 0.05f, yPct: 0.20f, widthPct: 0.4f, heightPct: 0.6f, columns: 6, rows: 5)
-            .WithAlignment(TextAlignment.Bottom);
-        foreach (var fighter in AvailableFighters)
-        {
-            string id = fighter;
-            p1Grid.Add(char.ToUpper(id[0]) + id[1..], ctx =>
-            {
-                if (ctx.Data.Player1 != null)
-                {
-                    Character character = ctx.Data.LuaEngine.CreateCharacter(id, slot: 0);
-                    ctx.Data.Player1.ChangeCharacter(character);
-                }
-            }, GetThumbnail(id));
-        }
-
-        var p2Grid = new UIGrid(xPct: 0.55f, yPct: 0.20f, widthPct: 0.4f, heightPct: 0.6f, columns: 6, rows: 5)
-            .WithAlignment(TextAlignment.Bottom);
-        foreach (var fighter in AvailableFighters)
-        {
-            string id = fighter;
-            p2Grid.Add(char.ToUpper(id[0]) + id[1..], ctx =>
-            {
-                if (ctx.Data.Player2 != null)
-                {
-                    Character character = ctx.Data.LuaEngine.CreateCharacter(id, slot: 1);
-                    ctx.Data.Player2.ChangeCharacter(character);
-                }
-            }, GetThumbnail(id));
-        }
-
-        choiceButtons.AddRange(p1Grid.Build());
-        choiceButtons.AddRange(p2Grid.Build());
-
-        choiceButtons.Add(
-            Button.Create("START MATCH")
-                  .WithSize(0.22f, 0.08f)
-                  .At(0.5f, 0.85f)
-                  .Action(ctx =>
-                  {
-                      if (ctx.Data.Player1?.CurrentCharacter != null && ctx.Data.Player2?.CurrentCharacter != null)
-                      {
-                          PhysicsEngine.ResetMatch(ctx.Data.Player1, ctx.Data.Player2);
-                          GameState.SetState(State.Playing);
-                      }
-                  })
-        );
-
-        ButtonsByState[State.ChoiceMenu] = choiceButtons;
-
-        ButtonsByState[State.Paused] = new List<Button>
-        {
-            Button.Create("Resume")
-                  .WithSize(0.25f, 0.08f)
-                  .At(0.5f, 0.38f)
-                  .Action(_ => GameState.SetState(State.Playing)),
-
-            Button.Create("Settings")
-                  .WithSize(0.25f, 0.08f)
-                  .At(0.5f, 0.48f)
-                  .Action(_ => GameState.SetState(State.Settings)),
-
-            Button.Create("Quit to Menu")
-                  .WithSize(0.25f, 0.08f)
-                  .At(0.5f, 0.58f)
-                  .Action(_ => GameState.SetState(State.MainMenu))
-        };
-
-        ButtonsByState[State.GameOver] = new List<Button>
-        {
-            Button.Create("Main Menu")
-                  .WithSize(0.25f, 0.08f)
-                  .At(0.5f, 0.5f)
-                  .Action(ctx =>
-                  {
-                      GameState.SetState(State.MainMenu);
-                  })
-        };
     }
 
     public static void Update(ref Player? p1, ref Player? p2, GameData data)
     {
-        HandleButtons(ref p1, ref p2, data);
+        if (!_screens.TryGetValue(GameState.CurrentState, out IUIScreen? screen))
+            return;
 
-        switch (GameState.CurrentState)
-        {
-            case State.MainMenu:
-                MainMenu(ref p1, ref p2, data);
-                break;
-            case State.ChoiceMenu:
-                break;
-            case State.Settings:
-                Player? cP1 = p1;
-                Player? cP2 = p2;
-                SettingsMenu.Update(new ButtonContext(data, newP1 => cP1 = newP1, newP2 => cP2 = newP2));
-                p1 = cP1;
-                p2 = cP2;
-                break;
-            case State.Playing:
-                break;
-            case State.Paused:
-                break;
-            case State.GameOver:
-                GameOver();
-                break;
-        }
-    }
+        Player? currentP1 = p1;
+        Player? currentP2 = p2;
+        ButtonContext context = new ButtonContext(
+            data,
+            newP1 => currentP1 = newP1,
+            newP2 => currentP2 = newP2
+        );
 
-    private static void HandleButtons(ref Player? p1, ref Player? p2, GameData data)
-    {
-        if (ButtonsByState.TryGetValue(GameState.CurrentState, out var buttons))
-        {
-            Player? currentP1 = p1;
-            Player? currentP2 = p2;
-            ButtonContext context = new ButtonContext(
-                data,
-                (newP1) => currentP1 = newP1,
-                (newP2) => currentP2 = newP2
-            );
+        screen.Update(context);
 
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                buttons[i].Update(context);
-            }
-
-            p1 = currentP1;
-            p2 = currentP2;
-        }
-    }
-
-    private static void MainMenu(ref Player? p1, ref Player? p2, GameData data)
-    {
-
-    }
-
-    public static void GameOver()
-    {
-        if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER))
-        {
-            GameState.SetState(State.MainMenu);
-        }
+        p1 = currentP1;
+        p2 = currentP2;
     }
 
     public static void Draw(GameData data)
     {
-        switch (GameState.CurrentState)
+        if (_screens.TryGetValue(GameState.CurrentState, out IUIScreen? screen))
         {
-            case State.MainMenu:
-                DrawMainMenu(data);
-                break;
-            case State.Playing:
-                DrawPlaying(data);
-                break;
-            case State.Settings:
-                SettingsMenu.Draw(data);
-                break;
-            case State.ChoiceMenu:
-                DrawChoiceMenu(data);
-                break;
-            case State.Paused:
-                DrawPause(data);
-                break;
-            case State.GameOver:
-                DrawGameOver(data);
-                break;
+            screen.Draw(data);
         }
-
-        if (ButtonsByState.TryGetValue(GameState.CurrentState, out var buttons))
-        {
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                buttons[i].Draw();
-            }
-        }
-    }
-
-    private static void DrawMainMenu(GameData data)
-    {
-        
-    }
-
-    private static void DrawChoiceMenu(GameData data)
-    {
-        int headerSize = (int)(sh * 0.04f);
-        int infoSize = (int)(sh * 0.03f);
-        float p2_text_margin = 0.2f*sh;
-
-        string p1Name = data.Player1?.CurrentCharacter?.Name ?? "None";
-        string p2Name = data.Player2?.CurrentCharacter?.Name ?? "None";
-
-        Raylib.DrawText($"P1: {p1Name}", (int)(sw * 0.05f), (int)(sh * 0.1f), infoSize, Color.DARKGRAY);
-        Raylib.DrawText($"P2: {p2Name}", (int)((sw * 0.95f)-p2_text_margin), (int)(sh * 0.1f), infoSize, Color.DARKGRAY);
-
-        if (data.Player1?.CurrentCharacter != null && data.Player2?.CurrentCharacter != null)
-        {
-            string readyMsg = "FIGHTERS READY!";
-            int w = Raylib.MeasureText(readyMsg, headerSize);
-            Raylib.DrawText(readyMsg, (sw - w) / 2, (int)(sh * 0.76f), headerSize, Color.DARKGREEN);
-        }
-    }
-
-    private static void DrawPlaying(GameData data)
-    {
-        CombatHUD.Draw(data);
-        Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, sw, (int)PhysicsEngine.GroundY, Color.BLACK);
-    }
-
-    private static void DrawPause(GameData data)
-    {
-
-        int titleSize = (int)(sh * 0.05f);
-        int subSize = (int)(sh * 0.03f);
-
-        string title = "Game Paused";
-        int titleW = Raylib.MeasureText(title, titleSize);
-        Raylib.DrawText(title, (sw - titleW) / 2, (int)(sh * 0.25f), titleSize, Color.BLACK);
-
-        string hint = $"Press {data.AppConfig.Controls.Pause} to resume";
-        int hintW = Raylib.MeasureText(hint, subSize);
-        Raylib.DrawText(hint, (sw - hintW) / 2, (int)(sh * 0.34f), subSize, Color.DARKGRAY);
-    }
-
-    private static void DrawGameOver(GameData data)
-    {
-        int titleSize = (int)(sh * 0.06f);
-        int winnerSize = (int)(sh * 0.04f);
-        int subSize = (int)(sh * 0.03f);
-
-        string title = "GAME OVER";
-        int titleW = Raylib.MeasureText(title, titleSize);
-        Raylib.DrawText(title, (sw - titleW) / 2, (int)(sh * 0.24f), titleSize, Color.RED);
-
-        if (!string.IsNullOrEmpty(PhysicsEngine.MatchWinnerText))
-        {
-            int winW = Raylib.MeasureText(PhysicsEngine.MatchWinnerText, winnerSize);
-            Raylib.DrawText(PhysicsEngine.MatchWinnerText, (sw - winW) / 2, (int)(sh * 0.33f), winnerSize, Color.DARKGREEN);
-        }
-
-        string hint = "Press Enter or Click Below to Return to Menu";
-        int hintW = Raylib.MeasureText(hint, subSize);
-        Raylib.DrawText(hint, (sw - hintW) / 2, (int)(sh * 0.41f), subSize, Color.DARKGRAY);
     }
 
     public static void Dispose()
     {
-        foreach (var tex in RosterThumbnails.Values)
+        foreach (var screen in _screens.Values)
         {
-            Raylib.UnloadTexture(tex);
+            screen.Dispose();
         }
-        RosterThumbnails.Clear();
+        _screens.Clear();
     }
 }

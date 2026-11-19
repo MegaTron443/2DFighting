@@ -1,4 +1,6 @@
-﻿using Raylib_cs;
+using Raylib_cs;
+
+const int TrainingModeSubSteps = 1000;
 
 AppConfig config = AppConfig.Load("config.json");
 int sw = config.Display.ScreenWidth;
@@ -8,103 +10,76 @@ Raylib.InitWindow(sw, sh, config.Display.Title);
 Raylib.SetExitKey(KeyboardKey.KEY_NULL);
 Raylib.SetTargetFPS(config.Display.TargetFps);
 Raylib.InitAudioDevice();
-PhysicsEngine physics = new PhysicsEngine();
-Timer timer = new Timer();
-LuaEngine lua = new LuaEngine();
 
-physics.Initialize();
-timer.Initialize();
-lua.Initialize();
-
-ShaderManager.Initialize();
-PostFXManager.Initialize();
-ModManager.Initialize();
-LuaMoveTranslator.InitializeCache(lua);
-GUIEngine.Initialize();
-
-Player? p1 = null;
-Player? p2 = null;
-SoundHandler? soundHandler = null;
+EngineServices services = new EngineServices(config);
+services.InitializeAll();
 
 GameState.SetState(State.MainMenu);
 
 while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
-    if ((GameState.CurrentState == State.GameOver || GameState.CurrentState == State.MainMenu) &&
-        (p1 != null || p2 != null || soundHandler != null))
-    {
-        soundHandler?.Dispose();
-        soundHandler = null;
-        p1 = null;
-        p2 = null;
-    }
+    services.CleanupMatchSession();
 
-    GameData data = new GameData(p1, p2, timer, lua, config, soundHandler);
+    GameData data = services.CreateGameData();
+    Player? p1 = services.Player1;
+    Player? p2 = services.Player2;
 
     GUIEngine.Update(ref p1, ref p2, data);
-    data = new GameData(p1, p2, timer, lua, config, soundHandler);
+    services.Player1 = p1;
+    services.Player2 = p2;
 
-    if (GameState.CurrentState == State.Playing && soundHandler == null)
-    {
-        if (p1?.CurrentCharacter != null && p2?.CurrentCharacter != null)
-        {
-            soundHandler = new SoundHandler(data);
-            soundHandler.PlaySound(SoundType.RoundStart);
-            data = new GameData(p1, p2, timer, lua, config, soundHandler);
-        }
-    }
+    services.EnsureMatchSoundHandler();
+    data = services.CreateGameData();
 
     HandlePauseInput();
 
-    if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
-    {
-        timer.Update(dt);
-        p1.PollInput();
-        p2.PollInput();
+    bool isPlaying = GameState.CurrentState == State.Playing && p1 != null && p2 != null;
+    bool isTraining = services.Match.IsTrainingMode;
 
-        int subSteps = PhysicsEngine.IsTrainingMode ? 1000 : 1;
-        while (timer.CheckFixedTick())
+    if (isPlaying)
+    {
+        services.Timer.Update(dt);
+        p1!.PollInput();
+        p2!.PollInput();
+
+        int subSteps = isTraining ? TrainingModeSubSteps : 1;
+        while (services.Timer.CheckFixedTick())
         {
             for (int step = 0; step < subSteps; step++)
             {
                 if (GameState.CurrentState != State.Playing) break;
 
-                if (PhysicsEngine.HitstopTimer <= 0f)
+                if (services.Match.HitstopTimer <= 0f)
                 {
                     p1.ConsumeInput();
                     p2.ConsumeInput();
                 }
-                physics.Update(data);
+                services.Physics.Update(data);
             }
         }
     }
 
-    if (GameState.CurrentState == State.Playing && p1 != null && p2 != null && !PhysicsEngine.IsTrainingMode)
+    float alpha = services.Timer.Alpha;
+
+    if (isPlaying && !isTraining)
     {
         PostFXManager.BeginSceneCapture();
-        Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, Raylib.GetScreenWidth(), (int)PhysicsEngine.GroundY, Color.BLACK);
-        p1.Draw(timer.Alpha);
-        p2.Draw(timer.Alpha);
-        PhysicsEngine.DrawProjectiles(timer.Alpha);
-        VFXManager.Draw();
+        DrawArenaScene(p1!, p2!, services.Projectiles, alpha);
     }
 
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.RAYWHITE);
 
-    if (GameState.CurrentState == State.Playing && p1 != null && p2 != null)
+    if (isPlaying)
     {
-        if (!PhysicsEngine.IsTrainingMode)
+        if (!isTraining)
         {
             PostFXManager.EndSceneCaptureAndPresent();
         }
         else
         {
-            p1.Draw(timer.Alpha);
-            p2.Draw(timer.Alpha);
-            PhysicsEngine.DrawProjectiles(timer.Alpha);
-            VFXManager.Draw();
+            DrawArenaScene(p1!, p2!, services.Projectiles, alpha);
             string trainText = $"Episodes Learned: {MacroTacticalModel.SharedInstance.EpisodesTrained}";
             Raylib.DrawText(trainText, 20, Raylib.GetScreenHeight() - 40, 22, Color.DARKGREEN);
         }
@@ -112,6 +87,15 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     GUIEngine.Draw(data);
     Raylib.EndDrawing();
+}
+
+void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, float alpha)
+{
+    Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, Raylib.GetScreenWidth(), (int)PhysicsEngine.GroundY, Color.BLACK);
+    p1.Draw(alpha);
+    p2.Draw(alpha);
+    projectiles.Draw(alpha);
+    VFXManager.Draw();
 }
 
 void HandlePauseInput()
@@ -130,13 +114,6 @@ void HandlePauseInput()
     }
 }
 
-
-MacroTacticalModel.SharedInstance.SaveWeights();
-GUIEngine.Dispose();
-VFXManager.Dispose();
-PostFXManager.Dispose();
-ShaderManager.Dispose();
-Character.UnloadAllSpriteSheets();
-soundHandler?.Dispose();
+services.DisposeAll();
 Raylib.CloseAudioDevice();
 Raylib.CloseWindow();

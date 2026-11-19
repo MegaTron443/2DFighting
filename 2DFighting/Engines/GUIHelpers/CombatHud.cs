@@ -40,14 +40,16 @@ public static class CombatHUD
     {
         if (data.Player1 == null || data.Player2 == null) return;
 
+        MatchManager? match = data.Services?.Match;
+
         DrawHealthBars(data.Player1, data.Player2);
         DrawRoundPips(data.Player1, data.Player2);
-        DrawRoundTimer();
+        DrawRoundTimer(match);
         DrawSkillCooldowns(data.Player1, xPct: 0.10f, rightAlign: false);
         DrawSkillCooldowns(data.Player2, xPct: 0.90f, rightAlign: true);
         DrawComboCounter(data.Player1, xPct: 0.10f, rightAlign: false);
         DrawComboCounter(data.Player2, xPct: 0.90f, rightAlign: true);
-        DrawRoundAnnouncement();
+        DrawRoundAnnouncement(match);
     }
 
     private static float _p1TrailPct = 1.0f;
@@ -96,7 +98,7 @@ public static class CombatHUD
         int y = (int)(sh * 0.03f);
         int spacing = (int)(radius * 2.6f);
 
-        for (int i = 0; i < PhysicsEngine.ROUNDS_TO_WIN; i++)
+        for (int i = 0; i < MatchManager.RoundsToWin; i++)
         {
             int p1PipX = (int)(sw * 0.41f) - (i * spacing);
             Color p1Col = i < p1.RoundsWon ? Color.GOLD : Color.DARKGRAY;
@@ -110,7 +112,7 @@ public static class CombatHUD
         }
     }
 
-    private static void DrawRoundTimer()
+    private static void DrawRoundTimer(MatchManager? match)
     {
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
@@ -119,30 +121,34 @@ public static class CombatHUD
         Raylib.DrawRectangleRec(box, new Color(40, 40, 40, 230));
         Raylib.DrawRectangleLinesEx(box, 2f, Color.GOLD);
 
-        string timeText = ((int)MathF.Ceiling(PhysicsEngine.RoundTimer)).ToString("00");
+        float roundTimer = match?.RoundTimer ?? PhysicsEngine.RoundTimer;
+        int currentRound = match?.CurrentRound ?? PhysicsEngine.CurrentRound;
+
+        string timeText = ((int)MathF.Ceiling(roundTimer)).ToString("00");
         int fontSize = (int)(sh * 0.045f);
         int textW = Raylib.MeasureText(timeText, fontSize);
         Raylib.DrawText(timeText, (sw - textW) / 2, (int)(box.y + (box.height - fontSize) / 2f), fontSize, Color.WHITE);
 
         int roundFont = Math.Max(12, (int)(sh * 0.02f));
-        string roundLabel = $"ROUND {PhysicsEngine.CurrentRound}";
+        string roundLabel = $"ROUND {currentRound}";
         int rw = Raylib.MeasureText(roundLabel, roundFont);
         Raylib.DrawText(roundLabel, (sw - rw) / 2, (int)(box.y + box.height + 6), roundFont, Color.DARKGRAY);
     }
 
-    private static void DrawRoundAnnouncement()
+    private static void DrawRoundAnnouncement(MatchManager? match)
     {
-        if (string.IsNullOrEmpty(PhysicsEngine.RoundAnnouncement)) return;
+        string announcement = match?.RoundAnnouncement ?? PhysicsEngine.RoundAnnouncement;
+        if (string.IsNullOrEmpty(announcement)) return;
 
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
         int fontSize = (int)(sh * 0.055f);
-        int textW = Raylib.MeasureText(PhysicsEngine.RoundAnnouncement, fontSize);
+        int textW = Raylib.MeasureText(announcement, fontSize);
         int x = (sw - textW) / 2;
         int y = (int)(sh * 0.35f);
 
-        Raylib.DrawText(PhysicsEngine.RoundAnnouncement, x + 3, y + 3, fontSize, Color.BLACK);
-        Raylib.DrawText(PhysicsEngine.RoundAnnouncement, x, y, fontSize, Color.GOLD);
+        Raylib.DrawText(announcement, x + 3, y + 3, fontSize, Color.BLACK);
+        Raylib.DrawText(announcement, x, y, fontSize, Color.GOLD);
     }
 
     private static void DrawSkillCooldowns(Player player, float xPct, bool rightAlign)

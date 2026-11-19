@@ -163,10 +163,7 @@ public class LuaEngine
         string cacheKey = $"{characterId}_{slot}";
         if (_characterCache.TryGetValue(cacheKey, out Character? cached))
         {
-            cached.ActiveSkill = null;
-            cached.HasHit = false;
-            cached.SkillCooldowns.Clear();
-            cached.CustomData.Clear();
+            cached.ResetCombatState();
             return cached;
         }
 
@@ -180,7 +177,4 @@ public class LuaEngine
         _characterCache[cacheKey] = character;
         return character;
     }
-
-    public void Update(float deltaTime) { }
-    public void Draw() { }
 }

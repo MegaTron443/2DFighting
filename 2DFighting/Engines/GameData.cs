@@ -1,19 +1,28 @@
 public readonly struct GameData
 {
-    public Player Player1 { get; }
-    public Player Player2 { get; }
+    public Player? Player1 { get; }
+    public Player? Player2 { get; }
     public Timer Timer { get; }
     public LuaEngine LuaEngine { get; }
     public AppConfig AppConfig { get; }
     public SoundHandler? SoundHandler { get; }
+    public EngineServices? Services { get; }
 
-    public GameData(Player player1, Player player2, Timer gameTimer, LuaEngine LuaEngineInstance, AppConfig appConfig, SoundHandler? soundHandler)
+    public GameData(
+        Player? player1,
+        Player? player2,
+        Timer gameTimer,
+        LuaEngine luaEngineInstance,
+        AppConfig appConfig,
+        SoundHandler? soundHandler,
+        EngineServices? services = null)
     {
         Player1 = player1;
         Player2 = player2;
         Timer = gameTimer;
-        LuaEngine = LuaEngineInstance;
+        LuaEngine = luaEngineInstance;
         AppConfig = appConfig;
         SoundHandler = soundHandler;
+        Services = services;
     }
 }

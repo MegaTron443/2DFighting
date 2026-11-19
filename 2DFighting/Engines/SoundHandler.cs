@@ -3,224 +3,53 @@ using System.Collections.Generic;
 using MoonSharp.Interpreter;
 using Raylib_cs;
 
-public enum AudioBusType
-{
-    Bgm,
-    SfxWorld,
-    SfxCharacter
-}
-
-public class AudioBusState
-{
-    public float BaseVolume { get; set; } = 1.0f;
-    public float DuckMultiplier { get; set; } = 1.0f;
-    public float TargetDuck { get; set; } = 1.0f;
-    public int HoldFrames { get; set; } = 0;
-    public float RecoverySpeed { get; set; } = 2.0f;
-    public float LowPassCutoffHz { get; set; } = 20000f;
-
-    public float EffectiveVolume => Math.Clamp(BaseVolume * DuckMultiplier, 0f, 1f);
-}
-
 [MoonSharpUserData]
 public class SoundHandler : IDisposable
 {
     public static SoundHandler? Current { get; private set; }
 
-    private float _masterVolume = 1.0f;
     private readonly List<Character_Sounds> _activeSoundBanks = new();
     private Character_Sounds? _sharedSoundBank;
+    private readonly ProceduralSoundBank _proceduralBank = new();
 
-    private readonly Dictionary<string, AudioBusState> _buses = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["bgm"] = new AudioBusState(),
-        ["sfx_world"] = new AudioBusState(),
-        ["sfx_character"] = new AudioBusState()
-    };
-
-    private readonly Dictionary<string, Sound> _proceduralSounds = new(StringComparer.OrdinalIgnoreCase);
+    public AudioBusMixer Mixer { get; } = new();
 
     public float Volume
     {
-        get => _masterVolume;
-        set => _masterVolume = Math.Clamp(value, 0f, 1f);
+        get => Mixer.MasterVolume;
+        set => Mixer.MasterVolume = value;
     }
 
     public SoundHandler(GameData data)
     {
-        _masterVolume = Math.Clamp(data.AppConfig.Sound.Volume / 100f, 0f, 1f);
+        Mixer.MasterVolume = Math.Clamp(data.AppConfig.Sound.Volume / 100f, 0f, 1f);
         LoadSharedSoundBanks();
-        GenerateProceduralCosmicSounds();
-
-        if (data.Player1?.CurrentCharacter != null)
-        {
-            _activeSoundBanks.Add(new Character_Sounds(data.Player1.CurrentCharacter));
-        }
-
-        if (data.Player2?.CurrentCharacter != null &&
-            data.Player2.CurrentCharacter.Name != data.Player1?.CurrentCharacter?.Name)
-        {
-            _activeSoundBanks.Add(new Character_Sounds(data.Player2.CurrentCharacter));
-        }
-
+        _proceduralBank.GenerateDefaults();
+        ReloadCharacterBanks(data.Player1, data.Player2);
         Current = this;
     }
 
-    public static bool IsSoundValid(Sound sound)
-    {
-        return Raylib.IsAudioDeviceReady() && sound.frameCount > 0 && sound.stream.sampleRate > 0;
-    }
+    public static bool IsSoundValid(Sound sound) => ProceduralSoundBank.IsSoundValid(sound);
 
     private void LoadSharedSoundBanks()
     {
         _sharedSoundBank = Character_Sounds.CreateSharedBank();
     }
 
-    private void GenerateProceduralCosmicSounds()
-    {
-        if (!Raylib.IsAudioDeviceReady())
-        {
-            DiagnosticsLogger.LogSilentIssueOnce(
-                "audio_device_not_ready",
-                "Audio device is not ready; procedural sounds were not generated.",
-                LogSeverity.Warning
-            );
-            return;
-        }
+    public void UpdateTick(float dt) => Mixer.UpdateTick(dt);
 
-        RegisterProcedural("default",            CreateSineSweepSound(startHz: 420f,    endHz: 260f,  durationSec: 0.10f, volume: 0.50f));
-        RegisterProcedural("cosmic_sub_drop",    CreateSineSweepSound(startHz: 68f,     endHz: 32f,   durationSec: 0.45f, volume: 0.95f));
-        RegisterProcedural("cosmic_heavy_slash", CreateSineSweepSound(startHz: 140f,    endHz: 42f,   durationSec: 0.25f, volume: 0.85f));
-        RegisterProcedural("cosmic_light_slash", CreateSineSweepSound(startHz: 880f,    endHz: 1480f, durationSec: 0.12f, volume: 0.65f));
-        RegisterProcedural("cosmic_recall",      CreateSineSweepSound(startHz: 180f,    endHz: 620f,  durationSec: 0.22f, volume: 0.80f));
-        RegisterProcedural("prism_chime",        CreateSineSweepSound(startHz: 1046.5f, endHz: 2093f, durationSec: 0.30f, volume: 0.60f));
-    }
+    public float GetBusEffectiveVolume(string busName) => Mixer.GetEffectiveVolume(busName);
 
-    private void RegisterProcedural(string name, Sound sound)
-    {
-        if (IsSoundValid(sound))
-        {
-            _proceduralSounds[name] = sound;
-        }
-        else
-        {
-            DiagnosticsLogger.LogSilentIssueOnce(
-                $"proc_sound_failed_{name}",
-                $"Failed to generate procedural sound '{name}'.",
-                LogSeverity.Error
-            );
-        }
-    }
+    public static void SetBusVolumeFromLua(string busName, float volume) =>
+        Current?.Mixer.SetBusVolume(busName, volume);
 
-    private static unsafe Sound CreateSineSweepSound(float startHz, float endHz, float durationSec, float volume)
-    {
-        const int sampleRate = 44100;
-        int sampleCount = Math.Max(1, (int)(sampleRate * durationSec));
-        short* pcm = (short*)Raylib.MemAlloc((int)(sampleCount * sizeof(short)));
-
-        float phase = 0f;
-        for (int i = 0; i < sampleCount; i++)
-        {
-            float t = i / (float)sampleCount;
-            float freq = startHz * MathF.Pow(endHz / startHz, t);
-            phase += (MathF.Tau * freq) / sampleRate;
-
-            float attack = Math.Clamp(t / 0.05f, 0f, 1f);
-            float decay = MathF.Cos(t * MathF.PI * 0.5f);
-            float env = attack * decay * volume;
-
-            pcm[i] = (short)(MathF.Sin(phase) * env * short.MaxValue);
-        }
-
-        Wave wave = new Wave
-        {
-            sampleCount = (uint)sampleCount,
-            sampleRate = sampleRate,
-            sampleSize = 16,
-            channels = 1,
-            data = pcm
-        };
-
-        Sound sound = Raylib.LoadSoundFromWave(wave);
-        Raylib.UnloadWave(wave);
-        return sound;
-    }
-
-    public void UpdateTick(float dt)
-    {
-        foreach (var bus in _buses.Values)
-        {
-            if (bus.HoldFrames > 0)
-            {
-                bus.HoldFrames--;
-                bus.DuckMultiplier = bus.TargetDuck;
-            }
-            else if (bus.DuckMultiplier < 1.0f)
-            {
-                bus.DuckMultiplier = Math.Min(1.0f, bus.DuckMultiplier + (bus.RecoverySpeed * dt));
-                bus.LowPassCutoffHz = Math.Min(20000f, bus.LowPassCutoffHz + (18000f * bus.RecoverySpeed * dt));
-            }
-        }
-    }
-
-    public float GetBusEffectiveVolume(string busName)
-    {
-        if (_buses.TryGetValue(busName, out var bus))
-            return _masterVolume * bus.EffectiveVolume;
-
-        DiagnosticsLogger.LogSilentIssueOnce(
-            $"invalid_audio_bus_{busName}",
-            $"Unknown audio bus '{busName}'; defaulting to master volume.",
-            LogSeverity.Warning
-        );
-        return _masterVolume;
-    }
-
-    public static void SetBusVolumeFromLua(string busName, float volume)
-    {
-        if (Current == null) return;
-        if (Current._buses.TryGetValue(busName, out var bus))
-        {
-            bus.BaseVolume = Math.Clamp(volume, 0f, 1f);
-        }
-        else
-        {
-            DiagnosticsLogger.LogSilentIssueOnce(
-                $"set_invalid_bus_vol_{busName}",
-                $"SetAudioBusVolume called with unknown bus '{busName}'.",
-                LogSeverity.Warning
-            );
-        }
-    }
-
-    public static void SetBusLowPassFromLua(string busName, float cutoffHz)
-    {
-        if (Current == null) return;
-        if (Current._buses.TryGetValue(busName, out var bus))
-        {
-            bus.LowPassCutoffHz = Math.Clamp(cutoffHz, 60f, 20000f);
-            float muffleFactor = Math.Clamp(0.35f + (0.65f * (bus.LowPassCutoffHz / 20000f)), 0.1f, 1f);
-            bus.DuckMultiplier = Math.Min(bus.DuckMultiplier, muffleFactor);
-        }
-    }
+    public static void SetBusLowPassFromLua(string busName, float cutoffHz) =>
+        Current?.Mixer.SetBusLowPass(busName, cutoffHz);
 
     public static void TriggerDuckFromLua(float targetGain = 0.05f, int holdFrames = 10, float recoverySeconds = 0.6f)
     {
         if (Current == null || PhysicsEngine.IsTrainingMode) return;
-
-        float speed = recoverySeconds > 0.01f ? (1f - targetGain) / recoverySeconds : 10f;
-        string[] duckedBuses = { "bgm", "sfx_world" };
-
-        foreach (string b in duckedBuses)
-        {
-            if (Current._buses.TryGetValue(b, out var bus))
-            {
-                bus.TargetDuck = Math.Clamp(targetGain, 0f, 1f);
-                bus.DuckMultiplier = bus.TargetDuck;
-                bus.HoldFrames = Math.Max(bus.HoldFrames, holdFrames);
-                bus.RecoverySpeed = speed;
-            }
-        }
+        Current.Mixer.TriggerDuck(targetGain, holdFrames, recoverySeconds);
     }
 
     public static void PlayFromLua(Player? player, DynValue soundOrConfig)
@@ -270,13 +99,13 @@ public class SoundHandler : IDisposable
 
     public void PlayEx(Player? player, string soundNameOrType, string busName = "sfx_character", float pitch = 1.0f, float volumeMult = 1.0f)
     {
-        if (PhysicsEngine.IsTrainingMode || _masterVolume <= 0f) return;
+        if (PhysicsEngine.IsTrainingMode || Volume <= 0f) return;
 
         float finalVolume = Math.Clamp(GetBusEffectiveVolume(busName) * volumeMult, 0f, 1f);
         float finalPitch = Math.Clamp(pitch, 0.2f, 3.0f);
 
         // 1. Procedural sound bank
-        if (_proceduralSounds.TryGetValue(soundNameOrType, out Sound procSound) && IsSoundValid(procSound))
+        if (_proceduralBank.TryGet(soundNameOrType, out Sound procSound))
         {
             DispatchRaylibSound(procSound, finalVolume, finalPitch);
             return;
@@ -320,7 +149,7 @@ public class SoundHandler : IDisposable
             LogSeverity.Warning
         );
 
-        if (_proceduralSounds.TryGetValue("default", out Sound fallback) && IsSoundValid(fallback))
+        if (_proceduralBank.TryGet("default", out Sound fallback))
         {
             DispatchRaylibSound(fallback, volume * 0.6f, pitch);
         }
@@ -454,14 +283,7 @@ public class SoundHandler : IDisposable
         _sharedSoundBank?.Dispose();
         _sharedSoundBank = null;
 
-        foreach (var proc in _proceduralSounds.Values)
-        {
-            if (IsSoundValid(proc))
-            {
-                Raylib.UnloadSound(proc);
-            }
-        }
-        _proceduralSounds.Clear();
+        _proceduralBank.Dispose();
 
         if (Current == this) Current = null;
     }

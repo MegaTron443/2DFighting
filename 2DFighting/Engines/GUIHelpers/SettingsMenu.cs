@@ -30,8 +30,9 @@ public static class SettingsMenu
         {
             var cfg = ctx.Data.AppConfig;
             cfg.Sound.Volume = Math.Clamp(cfg.Sound.Volume - 10, 0, 100);
-            if (SoundHandler.Current != null)
-                SoundHandler.Current.Volume = cfg.Sound.Volume / 100f;
+            SoundHandler? activeSound = ctx.Data.SoundHandler ?? ctx.Data.Services?.Sound ?? SoundHandler.Current;
+            if (activeSound != null)
+                activeSound.Volume = cfg.Sound.Volume / 100f;
             AppConfig.Save("config.json", cfg);
         }));
 
@@ -39,8 +40,9 @@ public static class SettingsMenu
         {
             var cfg = ctx.Data.AppConfig;
             cfg.Sound.Volume = Math.Clamp(cfg.Sound.Volume + 10, 0, 100);
-            if (SoundHandler.Current != null)
-                SoundHandler.Current.Volume = cfg.Sound.Volume / 100f;
+            SoundHandler? activeSound = ctx.Data.SoundHandler ?? ctx.Data.Services?.Sound ?? SoundHandler.Current;
+            if (activeSound != null)
+                activeSound.Volume = cfg.Sound.Volume / 100f;
             AppConfig.Save("config.json", cfg);
         }));
 

@@ -13,6 +13,9 @@ public class Player
     public const float CROUCH_HEIGHT_RATIO = 0.65f;
     private const float TECH_INVULNERABILITY_DURATION = 0.25f;
     private const float TECH_POPUP_DURATION = 0.45f;
+    private const float AIR_TECH_WINDOW_SECONDS = 0.15f;
+    private const float AIR_TECH_VX_MULT = 0.85f;
+    private const float AIR_TECH_VY_MULT = 0.55f;
 
     private readonly string _name;
     private readonly bool _isAI;
@@ -74,7 +77,7 @@ public class Player
         }
     }
 
-    public bool CanTech => !IsGrounded && IsInHitstun && HitstunTimer < 0.15f;
+    public bool CanTech => !IsGrounded && IsInHitstun && HitstunTimer < AIR_TECH_WINDOW_SECONDS;
 
     public Player(string name, bool isAI, int playerIndex, Vector2 spawnPos, AppConfig appConfig, Player? opponent = null)
     {
@@ -144,13 +147,7 @@ public class Player
         ComboCount = 0;
         _keyHandler.ClearBuffer(_playerIndex);
 
-        if (CurrentCharacter != null)
-        {
-            CurrentCharacter.ActiveSkill = null;
-            CurrentCharacter.HasHit = false;
-            CurrentCharacter.SkillCooldowns.Clear();
-            CurrentCharacter.CustomData.Clear();
-        }
+        CurrentCharacter?.ResetCombatState();
     }
 
     public void SavePreviousState()
@@ -158,12 +155,16 @@ public class Player
         PreviousPosition = Position;
     }
 
-    public Vector2 GetInterpolatedPosition(float alpha)
+    public Vector2 GetInterpolatedPosition(float alpha) // Larp funtion, lets LARP together.
     {
-        return Vector2.Lerp(PreviousPosition, Position, alpha); // Haha larp function, get it? Larp with me? Nevermind.
+        return Vector2.Lerp(PreviousPosition, Position, alpha);
     }
 
-    public Rectangle GetHurtbox()
+    public Rectangle GetHurtbox() => ComputeHurtboxAt(Position);
+
+    public Rectangle GetRenderHurtbox(float alpha) => ComputeHurtboxAt(GetInterpolatedPosition(alpha));
+
+    private Rectangle ComputeHurtboxAt(Vector2 center)
     {
         if (CurrentCharacter == null) return default;
         float fullW = CurrentCharacter.Width;
@@ -172,67 +173,25 @@ public class Player
         if (IsCrouching && IsGrounded)
         {
             float crouchH = fullH * CROUCH_HEIGHT_RATIO;
-            float topY = (Position.Y + (fullH / 2f)) - crouchH;
-            return new Rectangle(Position.X - (fullW / 2f), topY, fullW, crouchH);
+            float topY = (center.Y + (fullH / 2f)) - crouchH;
+            return new Rectangle(center.X - (fullW / 2f), topY, fullW, crouchH);
         }
 
         return new Rectangle(
-            Position.X - (fullW / 2f),
-            Position.Y - (fullH / 2f),
+            center.X - (fullW / 2f),
+            center.Y - (fullH / 2f),
             fullW,
             fullH
         );
     }
 
-    public Rectangle GetRenderHurtbox(float alpha)
-    {
-        if (CurrentCharacter == null) return default;
-        Vector2 renderPos = GetInterpolatedPosition(alpha);
-        float fullW = CurrentCharacter.Width;
-        float fullH = CurrentCharacter.Height;
+    public bool TryGetRenderHitbox(float alpha, out Rectangle hitbox) =>
+        TryComputeHitboxAt(GetInterpolatedPosition(alpha), out hitbox);
 
-        if (IsCrouching && IsGrounded)
-        {
-            float crouchH = fullH * CROUCH_HEIGHT_RATIO;
-            float topY = (renderPos.Y + (fullH / 2f)) - crouchH;
-            return new Rectangle(renderPos.X - (fullW / 2f), topY, fullW, crouchH);
-        }
+    public bool TryGetHitbox(out Rectangle hitbox) =>
+        TryComputeHitboxAt(Position, out hitbox);
 
-        return new Rectangle(
-            renderPos.X - (fullW / 2f),
-            renderPos.Y - (fullH / 2f),
-            fullW,
-            fullH
-        );
-    }
-
-    public bool TryGetRenderHitbox(float alpha, out Rectangle hitbox)
-    {
-        hitbox = default;
-        if (CurrentCharacter == null || !CurrentCharacter.IsHitboxActive) return false;
-
-        Vector2 renderPos = GetInterpolatedPosition(alpha);
-        SkillData skill = CurrentCharacter.ActiveSkill!;
-        Rectangle pct = skill.HitboxOffsetPct;
-
-        float hbWidth = CurrentCharacter.Width * pct.width;
-        float hbHeight = CurrentCharacter.Height * pct.height;
-        float offsetX = CurrentCharacter.Width * pct.x;
-        float offsetY = CurrentCharacter.Height * pct.y;
-
-        float rootX = renderPos.X - (CurrentCharacter.Width / 2f);
-        float rootY = renderPos.Y - (CurrentCharacter.Height / 2f);
-
-        float hitX = FacingRight
-            ? rootX + offsetX
-            : rootX + CurrentCharacter.Width - offsetX - hbWidth;
-        float hitY = rootY + offsetY;
-
-        hitbox = new Rectangle(hitX, hitY, hbWidth, hbHeight);
-        return true;
-    }
-
-    public bool TryGetHitbox(out Rectangle hitbox)
+    private bool TryComputeHitboxAt(Vector2 center, out Rectangle hitbox)
     {
         hitbox = default;
         if (CurrentCharacter == null || !CurrentCharacter.IsHitboxActive) return false;
@@ -245,8 +204,8 @@ public class Player
         float offsetX = CurrentCharacter.Width * pct.x;
         float offsetY = CurrentCharacter.Height * pct.y;
 
-        float rootX = Position.X - (CurrentCharacter.Width / 2f);
-        float rootY = Position.Y - (CurrentCharacter.Height / 2f);
+        float rootX = center.X - (CurrentCharacter.Width / 2f);
+        float rootY = center.Y - (CurrentCharacter.Height / 2f);
 
         float hitX = FacingRight
             ? rootX + offsetX
@@ -281,8 +240,8 @@ public class Player
             ? MathF.Sign(techDir)
             : (FacingRight ? -1f : 1f);
 
-        Velocity.X = escapeDir * CurrentCharacter.WalkSpeed * 0.85f;
-        Velocity.Y = CurrentCharacter.JumpForce * 0.55f;
+        Velocity.X = escapeDir * CurrentCharacter.WalkSpeed * AIR_TECH_VX_MULT;
+        Velocity.Y = CurrentCharacter.JumpForce * AIR_TECH_VY_MULT;
     }
 
     public void ConsumeInput()
