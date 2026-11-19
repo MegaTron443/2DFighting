@@ -14,6 +14,8 @@ public class Button
     public float FontSizePct { get; set; } = 0.025f;
     public Action<ButtonContext>? OnClick { get; set; }
     public Texture2D? Icon { get; set; } = null;
+    public Texture2D? BackgroundTexture { get; set; } = null;
+    public RenderMaterial Material { get; set; } = new() { ShaderId = BuiltInShaders.UiButtonId };
     public bool IsSelected { get; set; } = false;
 
     public Color NormalColor { get; set; } = new Color(40, 40, 40, 200);
@@ -116,27 +118,13 @@ public class Button
     public void Draw()
     {
         Rectangle bounds = GetPixelBounds();
-        int fontSize = Math.Max(12, (int)(Raylib.GetScreenHeight() * FontSizePct));
+        int preferredFont = Math.Max(12, (int)(Raylib.GetScreenHeight() * FontSizePct));
 
-        if (ShaderManager.TryGetShader("ui_button", out Shader btnShader))
-        {
-            Raylib.BeginShaderMode(btnShader);
-            ShaderManager.SetVec2(btnShader, "u_Size", new Vector2(bounds.width, bounds.height));
-            ShaderManager.SetFloat(btnShader, "u_Time", (float)Raylib.GetTime());
-            ShaderManager.SetFloat(btnShader, "u_Hover", _hoverLerp);
-            ShaderManager.SetFloat(btnShader, "u_Selected", IsSelected ? 1.0f : 0.0f);
-            ShaderManager.SetVec3(btnShader, "u_AccentColor", AccentColor);
+        Color bg = IsHovered ? HoverColor : NormalColor;
+        Color border = IsSelected ? SelectedColor : (IsHovered ? Color.SKYBLUE : Color.GRAY);
+        UIRenderer.DrawStyledPanel(bounds, Material, BackgroundTexture, _hoverLerp, IsSelected, AccentColor, bg, border);
 
-            Raylib.DrawTexturePro(SharedTextures.WhitePixel, new Rectangle(0, 0, 1, 1), bounds, Vector2.Zero, 0f, Color.WHITE);
-
-            Raylib.EndShaderMode();
-        }
-        else
-        {
-            Color bg = IsHovered ? HoverColor : NormalColor;
-            Raylib.DrawRectangleRec(bounds, bg);
-            Raylib.DrawRectangleLinesEx(bounds, IsSelected ? 3 : (IsHovered ? 2 : 1), IsSelected ? SelectedColor : (IsHovered ? Color.SKYBLUE : Color.GRAY));
-        }
+        int fontSize = UIRenderer.FitFontSize(Text, preferredFont, 10, MathF.Max(20f, bounds.width - 8f));
 
         if (Icon.HasValue && Icon.Value.id > 0)
         {

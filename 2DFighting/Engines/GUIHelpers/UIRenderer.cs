@@ -64,4 +64,60 @@ public static class UIRenderer
             Raylib.DrawRectangleLinesEx(bounds, style.BorderThickness, style.BorderColor);
         }
     }
+
+    public static void DrawStyledPanel(
+        Rectangle bounds,
+        RenderMaterial material,
+        Texture2D? texture,
+        float hover,
+        bool isSelected,
+        Vector3 accentColor,
+        Color fallbackBg,
+        Color fallbackBorder)
+    {
+        material.SetVec2("u_Size", bounds.width, bounds.height);
+        material.SetFloat("u_Hover", hover);
+        material.SetFloat("u_Selected", isSelected ? 1.0f : 0.0f);
+        material.SetColor("u_AccentColor", accentColor.X, accentColor.Y, accentColor.Z);
+
+        bool isBuiltInUi = string.Equals(material.ShaderId, BuiltInShaders.UiButtonId, StringComparison.OrdinalIgnoreCase);
+        bool shaderStarted = material.Begin();
+
+        if (shaderStarted)
+        {
+            Texture2D quadTex = (!isBuiltInUi && texture is { id: > 0 } customTex) ? customTex : SharedTextures.WhitePixel;
+            Raylib.DrawTexturePro(quadTex, new Rectangle(0, 0, quadTex.width, quadTex.height), bounds, Vector2.Zero, 0f, Color.WHITE);
+            material.End(true);
+
+            if (isBuiltInUi && texture is { id: > 0 } insetTex)
+            {
+                Rectangle inset = new Rectangle(bounds.x + 3f, bounds.y + 3f, MathF.Max(2f, bounds.width - 6f), MathF.Max(2f, bounds.height - 6f));
+                Raylib.DrawTexturePro(insetTex, new Rectangle(0, 0, insetTex.width, insetTex.height), inset, Vector2.Zero, 0f, new Color(255, 255, 255, 215));
+            }
+            return;
+        }
+
+        if (texture is { id: > 0 } fallbackTex)
+        {
+            Raylib.DrawTexturePro(fallbackTex, new Rectangle(0, 0, fallbackTex.width, fallbackTex.height), bounds, Vector2.Zero, 0f, Color.WHITE);
+        }
+        else
+        {
+            Raylib.DrawRectangleRec(bounds, fallbackBg);
+        }
+
+        material.End(false);
+        float borderWidth = isSelected ? 3f : (hover > 0.25f ? 2f : 1f);
+        Raylib.DrawRectangleLinesEx(bounds, borderWidth, fallbackBorder);
+    }
+
+    public static int FitFontSize(string text, int preferredSize, int minSize, float maxWidth)
+    {
+        int size = Math.Max(minSize, preferredSize);
+        while (size > minSize && Raylib.MeasureText(text, size) > maxWidth)
+        {
+            size--;
+        }
+        return size;
+    }
 }
