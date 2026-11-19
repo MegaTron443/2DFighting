@@ -1,22 +1,45 @@
+using System;
+using System.IO;
 using System.Numerics;
 using Raylib_cs;
 
-public class Button
+public class Button : IDisposable
 {
     private static double _lastGlobalClickTime = -1.0;
     private const double ClickCooldown = 0.05;
+
+    private string _text = "";
+    private TextScrollController? _scrollController;
 
     public float XPct { get; set; }
     public float YPct { get; set; }
     public float WidthPct { get; set; }
     public float HeightPct { get; set; }
-    public string Text { get; set; }
+    public string Title { get; set; } = "";
+    public float TitleFontSizePct { get; set; } = 0.022f;
+
+    public string Text
+    {
+        get => _text;
+        set
+        {
+            string normalized = value ?? "";
+            if (!string.Equals(_text, normalized, StringComparison.Ordinal))
+            {
+                _text = normalized;
+                _scrollController?.NotifyTextChanged();
+            }
+        }
+    }
+
     public float FontSizePct { get; set; } = 0.025f;
     public Action<ButtonContext>? OnClick { get; set; }
     public Texture2D? Icon { get; set; } = null;
     public Texture2D? BackgroundTexture { get; set; } = null;
+    public bool OwnsBackgroundTexture { get; private set; }
     public RenderMaterial Material { get; set; } = new() { ShaderId = BuiltInShaders.UiButtonId };
     public bool IsSelected { get; set; } = false;
+    public bool IsScrollable { get; set; } = false;
 
     public Color NormalColor { get; set; } = new Color(40, 40, 40, 200);
     public Color HoverColor { get; set; } = new Color(70, 70, 70, 240);
@@ -26,6 +49,7 @@ public class Button
     public TextAlignment Alignment { get; set; } = TextAlignment.Center;
 
     public bool IsHovered { get; private set; }
+    public bool CapturesPointer => IsHovered || (_scrollController?.IsDraggingScrollbar ?? false);
     private float _hoverLerp = 0f;
 
     public Button(float xPct, float yPct, float widthPct, float heightPct, string text, Action<ButtonContext>? onClick = null, Texture2D? icon = null, bool isCentered = false)
@@ -34,7 +58,7 @@ public class Button
         HeightPct = heightPct;
         XPct = isCentered ? xPct - (widthPct / 2f) : xPct;
         YPct = isCentered ? yPct - (heightPct / 2f) : yPct;
-        Text = text;
+        _text = text ?? "";
         OnClick = onClick;
         Icon = icon;
     }
@@ -75,6 +99,59 @@ public class Button
         return this;
     }
 
+    public Button WithAlignment(TextAlignment alignment)
+    {
+        Alignment = alignment;
+        return this;
+    }
+
+    public Button WithTitle(string title)
+    {
+        Title = title ?? "";
+        return this;
+    }
+
+    public Button WithFontSize(float fontSizePct)
+    {
+        FontSizePct = fontSizePct;
+        return this;
+    }
+
+    public Button WithScrolling(bool enabled = true)
+    {
+        IsScrollable = enabled;
+        if (enabled && _scrollController == null)
+        {
+            _scrollController = new TextScrollController();
+        }
+        return this;
+    }
+
+    public bool LoadBackgroundTexture(string relativeOrFullPath)
+    {
+        if (OwnsBackgroundTexture && BackgroundTexture is { id: > 0 } oldTex)
+        {
+            Raylib.UnloadTexture(oldTex);
+        }
+        BackgroundTexture = null;
+        OwnsBackgroundTexture = false;
+
+        string? resolved = ModManager.ResolveFile(relativeOrFullPath)
+                        ?? ModManager.ResolveFile("Assets", "UI", relativeOrFullPath)
+                        ?? (File.Exists(relativeOrFullPath) ? relativeOrFullPath : null);
+
+        if (resolved == null || !File.Exists(resolved))
+            return false;
+
+        Texture2D loaded = Raylib.LoadTexture(resolved);
+        if (loaded.id == 0)
+            return false;
+
+        BackgroundTexture = loaded;
+        OwnsBackgroundTexture = true;
+        return true;
+    }
+
     public Rectangle GetPixelBounds()
     {
         int sw = Raylib.GetScreenWidth();
@@ -85,12 +162,6 @@ public class Button
             (int)(sw * WidthPct),
             (int)(sh * HeightPct)
         );
-    }
-
-    public Button WithAlignment(TextAlignment alignment)
-    {
-        Alignment = alignment;
-        return this;
     }
 
     public void Update(ButtonContext context)
@@ -104,13 +175,22 @@ public class Button
         float targetHover = IsHovered ? 1f : 0f;
         _hoverLerp = Math.Clamp(_hoverLerp + ((targetHover - _hoverLerp) * Math.Min(1f, dt * 14f)), 0f, 1f);
 
-        if (IsHovered && Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
+        if (IsScrollable)
+        {
+            _scrollController ??= new TextScrollController();
+            _scrollController.Update(bounds, Title, _text, TitleFontSizePct, FontSizePct, IsHovered);
+        }
+
+        if (OnClick != null &&
+            IsHovered &&
+            !(_scrollController?.IsDraggingScrollbar ?? false) &&
+            Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
         {
             double now = Raylib.GetTime();
             if (_lastGlobalClickTime < 0.0 || (now - _lastGlobalClickTime) >= ClickCooldown)
             {
                 _lastGlobalClickTime = now;
-                OnClick?.Invoke(context);
+                OnClick.Invoke(context);
             }
         }
     }
@@ -118,13 +198,19 @@ public class Button
     public void Draw()
     {
         Rectangle bounds = GetPixelBounds();
-        int preferredFont = Math.Max(12, (int)(Raylib.GetScreenHeight() * FontSizePct));
-
         Color bg = IsHovered ? HoverColor : NormalColor;
         Color border = IsSelected ? SelectedColor : (IsHovered ? Color.SKYBLUE : Color.GRAY);
         UIRenderer.DrawStyledPanel(bounds, Material, BackgroundTexture, _hoverLerp, IsSelected, AccentColor, bg, border);
 
-        int fontSize = UIRenderer.FitFontSize(Text, preferredFont, 10, MathF.Max(20f, bounds.width - 8f));
+        if (IsScrollable)
+        {
+            _scrollController ??= new TextScrollController();
+            _scrollController.Draw(bounds, Title, _text, TitleFontSizePct, FontSizePct, Color.RAYWHITE, AccentColor);
+            return;
+        }
+
+        int preferredFont = Math.Max(12, (int)(Raylib.GetScreenHeight() * FontSizePct));
+        int fontSize = UIRenderer.FitFontSize(_text, preferredFont, 10, MathF.Max(20f, bounds.width - 8f));
 
         if (Icon.HasValue && Icon.Value.id > 0)
         {
@@ -142,7 +228,7 @@ public class Button
             Raylib.DrawTexturePro(tex, srcRect, destRect, Vector2.Zero, 0f, Color.WHITE);
         }
 
-        int textWidth = Raylib.MeasureText(Text, fontSize);
+        int textWidth = Raylib.MeasureText(_text, fontSize);
         int textX = (int)(bounds.x + (bounds.width - textWidth) / 2f);
 
         int textY = Alignment switch
@@ -153,9 +239,19 @@ public class Button
             _                    => (int)(bounds.y + (bounds.height - fontSize) / 2f)
         };
 
-        Raylib.DrawText(Text, textX + 1, textY + 1, fontSize, Color.BLACK);
+        Raylib.DrawText(_text, textX + 1, textY + 1, fontSize, Color.BLACK);
         Color finalTextCol = IsHovered ? Color.GOLD : TextColor;
-        Raylib.DrawText(Text, textX, textY, fontSize, finalTextCol);
+        Raylib.DrawText(_text, textX, textY, fontSize, finalTextCol);
+    }
+
+    public void Dispose()
+    {
+        if (OwnsBackgroundTexture && BackgroundTexture is { id: > 0 } tex)
+        {
+            Raylib.UnloadTexture(tex);
+        }
+        BackgroundTexture = null;
+        OwnsBackgroundTexture = false;
     }
 }
 

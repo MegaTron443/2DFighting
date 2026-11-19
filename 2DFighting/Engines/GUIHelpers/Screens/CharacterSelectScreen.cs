@@ -8,8 +8,8 @@ public class CharacterSelectScreen : IUIScreen
     private readonly List<Button> _buttons = new();
     private PaginatedRosterWidget? _p1Roster;
     private PaginatedRosterWidget? _p2Roster;
-    private ScrollableTextPanel? _p1DescPanel;
-    private ScrollableTextPanel? _p2DescPanel;
+    private Button? _p1DescPanel;
+    private Button? _p2DescPanel;
 
     private int _knownCatalogVersion = -1;
     private string _knownP1Key = "";
@@ -32,19 +32,17 @@ public class CharacterSelectScreen : IUIScreen
             AccentColor = new Vector3(1.0f, 0.35f, 0.35f)
         };
 
-        _p1DescPanel = new ScrollableTextPanel(0.03f, 0.50f, 0.44f, 0.24f)
-        {
-            Title = "PLAYER 1 FIGHTER",
-            Text = "Select a fighter on the left roster.",
-            AccentColor = new Vector3(0.30f, 0.72f, 1.0f)
-        };
+        _p1DescPanel = new Button(0.03f, 0.50f, 0.44f, 0.24f, "Select a fighter on the left roster.")
+            .WithTitle("PLAYER 1 FIGHTER")
+            .WithFontSize(0.017f)
+            .WithAccent(0.30f, 0.72f, 1.0f)
+            .WithScrolling();
 
-        _p2DescPanel = new ScrollableTextPanel(0.53f, 0.50f, 0.44f, 0.24f)
-        {
-            Title = "PLAYER 2 FIGHTER",
-            Text = "Select a fighter on the right roster.",
-            AccentColor = new Vector3(1.0f, 0.35f, 0.35f)
-        };
+        _p2DescPanel = new Button(0.53f, 0.50f, 0.44f, 0.24f, "Select a fighter on the right roster.")
+            .WithTitle("PLAYER 2 FIGHTER")
+            .WithFontSize(0.017f)
+            .WithAccent(1.0f, 0.35f, 0.35f)
+            .WithScrolling();
 
         _buttons.Add(
             Button.Create("START MATCH")
@@ -138,11 +136,10 @@ public class CharacterSelectScreen : IUIScreen
         if (_knownCatalogVersion != ModManager.CatalogVersion)
             RefreshRosters();
 
-        float dt = Raylib.GetFrameTime();
         _p1Roster?.Update(context);
         _p2Roster?.Update(context);
-        _p1DescPanel?.Update(dt);
-        _p2DescPanel?.Update(dt);
+        _p1DescPanel?.Update(context);
+        _p2DescPanel?.Update(context);
         SyncDescriptionPanels(context.Data);
 
         for (int i = 0; i < _buttons.Count; i++)

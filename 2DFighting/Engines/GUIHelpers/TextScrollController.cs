@@ -1,121 +1,51 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Numerics;
 using Raylib_cs;
 
-public class ScrollableTextPanel : IDisposable
+public class TextScrollController
 {
-    public float XPct { get; set; }
-    public float YPct { get; set; }
-    public float WidthPct { get; set; }
-    public float HeightPct { get; set; }
-
-    public string Title { get; set; } = "";
-    public string Text
-    {
-        get => _text;
-        set
-        {
-            string normalized = value ?? "";
-            if (!string.Equals(_text, normalized, StringComparison.Ordinal))
-            {
-                _text = normalized;
-                _scrollOffsetPx = 0f;
-                _layoutDirty = true;
-            }
-        }
-    }
-
-    public Texture2D? BackgroundTexture { get; set; }
-    public bool OwnsTexture { get; private set; }
-    public RenderMaterial Material { get; set; } = new() { ShaderId = BuiltInShaders.UiButtonId };
-    public Vector3 AccentColor { get; set; } = new Vector3(0.45f, 0.78f, 1.0f);
-
-    public float TitleFontSizePct { get; set; } = 0.022f;
-    public float FontSizePct { get; set; } = 0.017f;
-    public bool IsHovered { get; private set; }
-    public bool CapturesPointer => IsHovered || _isDraggingScrollbar;
-
-    private string _text = "";
     private readonly List<string> _wrappedLines = new();
     private bool _layoutDirty = true;
+    private string _cachedText = "";
     private int _cachedFontSize = -1;
     private float _cachedWrapWidth = -1f;
     private float _scrollOffsetPx = 0f;
-    private bool _isDraggingScrollbar = false;
 
-    public ScrollableTextPanel(float xPct, float yPct, float widthPct, float heightPct)
+    public bool IsDraggingScrollbar { get; private set; }
+
+    public void NotifyTextChanged()
     {
-        XPct = xPct;
-        YPct = yPct;
-        WidthPct = widthPct;
-        HeightPct = heightPct;
+        _scrollOffsetPx = 0f;
+        _layoutDirty = true;
     }
 
-    public bool LoadTexture(string relativeOrFullPath)
+    public void Update(Rectangle bounds, string title, string text, float titleFontSizePct, float bodyFontSizePct, bool isHovered)
     {
-        if (OwnsTexture && BackgroundTexture is { id: > 0 } oldTex)
-        {
-            Raylib.UnloadTexture(oldTex);
-        }
-        BackgroundTexture = null;
-        OwnsTexture = false;
-
-        string? resolved = ModManager.ResolveFile(relativeOrFullPath)
-                        ?? ModManager.ResolveFile("Assets", "UI", relativeOrFullPath)
-                        ?? (File.Exists(relativeOrFullPath) ? relativeOrFullPath : null);
-
-        if (resolved == null || !File.Exists(resolved))
-            return false;
-
-        Texture2D loaded = Raylib.LoadTexture(resolved);
-        if (loaded.id == 0)
-            return false;
-
-        BackgroundTexture = loaded;
-        OwnsTexture = true;
-        return true;
-    }
-
-    public Rectangle GetPixelBounds() => UIRenderer.GetPctRect(XPct, YPct, WidthPct, HeightPct);
-
-    public void Update(float dt)
-    {
-        Rectangle bounds = GetPixelBounds();
         Vector2 mousePos = Raylib.GetMousePosition();
-        IsHovered = Raylib.CheckCollisionPointRec(mousePos, bounds);
+        float maxScroll = ComputeScrollGeometry(bounds, title, text, titleFontSizePct, bodyFontSizePct, out Rectangle trackRect, out _, out _, out _, out _);
 
-        float maxScroll = ComputeMaxScroll(bounds, out Rectangle trackRect);
-
-        if (maxScroll <= 0f)
-        {
-            _scrollOffsetPx = 0f;
-            _isDraggingScrollbar = false;
-            return;
-        }
-
-        if (IsHovered)
+        if (isHovered)
         {
             float wheel = Raylib.GetMouseWheelMove();
             if (MathF.Abs(wheel) > 0.001f)
             {
-                float step = Math.Max(22f, Raylib.GetScreenHeight() * FontSizePct * 2.2f);
+                float step = Math.Max(22f, Raylib.GetScreenHeight() * bodyFontSizePct * 2.2f);
                 _scrollOffsetPx = Math.Clamp(_scrollOffsetPx - (wheel * step), 0f, maxScroll);
             }
         }
 
         if (Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT) && Raylib.CheckCollisionPointRec(mousePos, trackRect))
         {
-            _isDraggingScrollbar = true;
+            IsDraggingScrollbar = true;
         }
 
         if (!Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT))
         {
-            _isDraggingScrollbar = false;
+            IsDraggingScrollbar = false;
         }
 
-        if (_isDraggingScrollbar && trackRect.height > 1f)
+        if (IsDraggingScrollbar && trackRect.height > 1f)
         {
             float t = Math.Clamp((mousePos.Y - trackRect.y) / trackRect.height, 0f, 1f);
             _scrollOffsetPx = t * maxScroll;
@@ -124,36 +54,24 @@ public class ScrollableTextPanel : IDisposable
         _scrollOffsetPx = Math.Clamp(_scrollOffsetPx, 0f, maxScroll);
     }
 
-    public void Draw()
+    public void Draw(Rectangle bounds, string title, string text, float titleFontSizePct, float bodyFontSizePct, Color textColor, Vector3 accentColor)
     {
-        Rectangle bounds = GetPixelBounds();
         Color accentCol = new Color(
-            (byte)Math.Clamp(AccentColor.X * 255f, 0f, 255f),
-            (byte)Math.Clamp(AccentColor.Y * 255f, 0f, 255f),
-            (byte)Math.Clamp(AccentColor.Z * 255f, 0f, 255f),
+            (byte)Math.Clamp(accentColor.X * 255f, 0f, 255f),
+            (byte)Math.Clamp(accentColor.Y * 255f, 0f, 255f),
+            (byte)Math.Clamp(accentColor.Z * 255f, 0f, 255f),
             (byte)255
-        );
-
-        UIRenderer.DrawStyledPanel(
-            bounds,
-            Material,
-            BackgroundTexture,
-            IsHovered ? 0.55f : 0f,
-            isSelected: false,
-            AccentColor,
-            new Color(20, 22, 32, 232),
-            IsHovered ? accentCol : new Color(90, 95, 115, 220)
         );
 
         float pad = 10f;
         float sh = Raylib.GetScreenHeight();
-        int titleFont = UIRenderer.FitFontSize(Title, Math.Max(14, (int)(sh * TitleFontSizePct)), 11, MathF.Max(24f, bounds.width - pad * 2f));
-        float headerH = string.IsNullOrWhiteSpace(Title) ? 6f : (titleFont + 10f);
+        int titleFont = UIRenderer.FitFontSize(title, Math.Max(14, (int)(sh * titleFontSizePct)), 11, MathF.Max(24f, bounds.width - pad * 2f));
+        float headerH = string.IsNullOrWhiteSpace(title) ? 6f : (titleFont + 10f);
 
-        if (!string.IsNullOrWhiteSpace(Title))
+        if (!string.IsNullOrWhiteSpace(title))
         {
-            Raylib.DrawText(Title, (int)(bounds.x + pad + 1), (int)(bounds.y + 7), titleFont, Color.BLACK);
-            Raylib.DrawText(Title, (int)(bounds.x + pad), (int)(bounds.y + 6), titleFont, Color.GOLD);
+            Raylib.DrawText(title, (int)(bounds.x + pad + 1), (int)(bounds.y + 7), titleFont, Color.BLACK);
+            Raylib.DrawText(title, (int)(bounds.x + pad), (int)(bounds.y + 6), titleFont, Color.GOLD);
             Raylib.DrawLine(
                 (int)(bounds.x + pad),
                 (int)(bounds.y + headerH),
@@ -163,7 +81,7 @@ public class ScrollableTextPanel : IDisposable
             );
         }
 
-        float maxScroll = ComputeMaxScroll(bounds, out Rectangle trackRect, out Rectangle clipRect, out int bodyFont, out int lineHeight);
+        float maxScroll = ComputeScrollGeometry(bounds, title, text, titleFontSizePct, bodyFontSizePct, out Rectangle trackRect, out Rectangle clipRect, out int bodyFont, out int lineHeight, out float contentH);
         _scrollOffsetPx = Math.Clamp(_scrollOffsetPx, 0f, maxScroll);
 
         Raylib.BeginScissorMode(
@@ -183,7 +101,7 @@ public class ScrollableTextPanel : IDisposable
                 if (line.Length > 0)
                 {
                     Raylib.DrawText(line, (int)clipRect.x + 1, (int)drawY + 1, bodyFont, Color.BLACK);
-                    Raylib.DrawText(line, (int)clipRect.x, (int)drawY, bodyFont, Color.RAYWHITE);
+                    Raylib.DrawText(line, (int)clipRect.x, (int)drawY, bodyFont, textColor);
                 }
             }
             drawY += lineHeight;
@@ -191,32 +109,39 @@ public class ScrollableTextPanel : IDisposable
 
         Raylib.EndScissorMode();
 
-        if (maxScroll > 0f && trackRect.height > 8f)
+        if (trackRect.height > 8f)
         {
             Raylib.DrawRectangleRec(trackRect, new Color(15, 16, 22, 180));
-            float totalContentH = _wrappedLines.Count * lineHeight;
-            float thumbRatio = Math.Clamp(clipRect.height / MathF.Max(1f, totalContentH), 0.12f, 1f);
+            float thumbRatio = Math.Clamp(clipRect.height / MathF.Max(1f, contentH), 0.12f, 1f);
             float thumbH = MathF.Max(14f, trackRect.height * thumbRatio);
-            float thumbY = trackRect.y + ((_scrollOffsetPx / maxScroll) * (trackRect.height - thumbH));
+            float scrollNorm = maxScroll > 0f ? (_scrollOffsetPx / maxScroll) : 0f;
+            float thumbY = trackRect.y + (scrollNorm * (trackRect.height - thumbH));
 
             Rectangle thumbRect = new Rectangle(trackRect.x + 1f, thumbY, MathF.Max(4f, trackRect.width - 2f), thumbH);
-            Color thumbCol = _isDraggingScrollbar ? Color.GOLD : accentCol;
+            Color thumbCol = IsDraggingScrollbar ? Color.GOLD : accentCol;
             Raylib.DrawRectangleRec(thumbRect, thumbCol);
         }
     }
 
-    private float ComputeMaxScroll(Rectangle bounds, out Rectangle trackRect) =>
-        ComputeMaxScroll(bounds, out trackRect, out _, out _, out _);
-
-    private float ComputeMaxScroll(Rectangle bounds, out Rectangle trackRect, out Rectangle clipRect, out int bodyFont, out int lineHeight)
+    private float ComputeScrollGeometry(
+        Rectangle bounds,
+        string title,
+        string text,
+        float titleFontSizePct,
+        float bodyFontSizePct,
+        out Rectangle trackRect,
+        out Rectangle clipRect,
+        out int bodyFont,
+        out int lineHeight,
+        out float contentH)
     {
         float pad = 10f;
         float scrollbarW = 10f;
         float sh = Raylib.GetScreenHeight();
-        int titleFont = UIRenderer.FitFontSize(Title, Math.Max(14, (int)(sh * TitleFontSizePct)), 11, MathF.Max(24f, bounds.width - pad * 2f));
-        float headerH = string.IsNullOrWhiteSpace(Title) ? 6f : (titleFont + 14f);
+        int titleFont = UIRenderer.FitFontSize(title, Math.Max(14, (int)(sh * titleFontSizePct)), 11, MathF.Max(24f, bounds.width - pad * 2f));
+        float headerH = string.IsNullOrWhiteSpace(title) ? 6f : (titleFont + 14f);
 
-        bodyFont = Math.Max(12, (int)(sh * FontSizePct));
+        bodyFont = Math.Max(12, (int)(sh * bodyFontSizePct));
         lineHeight = (int)MathF.Ceiling(bodyFont * 1.32f);
 
         clipRect = new Rectangle(
@@ -233,15 +158,17 @@ public class ScrollableTextPanel : IDisposable
             clipRect.height
         );
 
-        EnsureWrapped(clipRect.width, bodyFont);
+        EnsureWrapped(text, clipRect.width, bodyFont);
 
-        float contentH = _wrappedLines.Count * lineHeight;
+        contentH = _wrappedLines.Count * lineHeight;
         return MathF.Max(0f, contentH - clipRect.height);
     }
 
-    private void EnsureWrapped(float maxWidth, int fontSize)
+    private void EnsureWrapped(string text, float maxWidth, int fontSize)
     {
+        string normalized = text ?? "";
         if (!_layoutDirty &&
+            string.Equals(_cachedText, normalized, StringComparison.Ordinal) &&
             _cachedFontSize == fontSize &&
             MathF.Abs(_cachedWrapWidth - maxWidth) < 1f)
         {
@@ -249,14 +176,15 @@ public class ScrollableTextPanel : IDisposable
         }
 
         _layoutDirty = false;
+        _cachedText = normalized;
         _cachedFontSize = fontSize;
         _cachedWrapWidth = maxWidth;
         _wrappedLines.Clear();
 
-        if (string.IsNullOrEmpty(_text))
+        if (string.IsNullOrEmpty(normalized))
             return;
 
-        string[] paragraphs = _text.Replace("\r\n", "\n").Split('\n');
+        string[] paragraphs = normalized.Replace("\r\n", "\n").Split('\n');
         foreach (string rawPara in paragraphs)
         {
             if (rawPara.Length == 0)
@@ -321,15 +249,5 @@ public class ScrollableTextPanel : IDisposable
             }
         }
         remainder = chunk;
-    }
-
-    public void Dispose()
-    {
-        if (OwnsTexture && BackgroundTexture is { id: > 0 } tex)
-        {
-            Raylib.UnloadTexture(tex);
-        }
-        BackgroundTexture = null;
-        OwnsTexture = false;
     }
 }

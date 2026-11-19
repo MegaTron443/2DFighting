@@ -16,7 +16,7 @@ public class MainMenuScreen : IUIScreen
 
     private readonly List<WorldButton> _worldButtons = new();
     private PaginatedRosterWidget? _roster;
-    private ScrollableTextPanel? _descPanel;
+    private Button? _descPanel;
     private Button? _launchQueueButton;
     private Button? _cancelQueueButton;
 
@@ -51,37 +51,37 @@ public class MainMenuScreen : IUIScreen
     {
         WorldButton settingsBtn = CreateWorldButton(
             "settings", "SETTINGS", "OPTIONS & KEYS",
-            new Vector2(0.16f, 0.38f), new Vector2(0.17f, 0.09f),
+            new Vector2(0.16f, 0.37f), new Vector2(0.17f, 0.09f),
             new Vector3(0.45f, 0.78f, 1.0f), isToggle: false,
             _ => GameState.SetState(State.Settings));
 
         _modFilterBtn = CreateWorldButton(
             "mod_filter", "MOD FILTER", GetFilterLabel(ModManager.ActiveModFilter),
-            new Vector2(0.50f, 0.38f), new Vector2(0.21f, 0.09f),
+            new Vector2(0.50f, 0.37f), new Vector2(0.21f, 0.09f),
             new Vector3(1.0f, 0.75f, 0.25f), isToggle: true,
             OnCycleModFilter);
 
         WorldButton exitBtn = CreateWorldButton(
             "exit", "EXIT", "QUIT GAME",
-            new Vector2(0.84f, 0.38f), new Vector2(0.16f, 0.09f),
+            new Vector2(0.84f, 0.37f), new Vector2(0.16f, 0.09f),
             new Vector3(0.95f, 0.32f, 0.36f), isToggle: false,
             _ => GameState.SetState(State.Exit));
 
         _queue1v1Btn = CreateWorldButton(
             "play_1v1", "PLAY 1v1", "QUEUE 1v1",
-            new Vector2(0.21f, 0.54f), new Vector2(0.19f, 0.095f),
+            new Vector2(0.21f, 0.505f), new Vector2(0.19f, 0.095f),
             new Vector3(0.28f, 0.78f, 1.0f), isToggle: true,
             _ => ToggleQueueMode(LobbyQueueMode.Queue1v1));
 
         _queue2v2Btn = CreateWorldButton(
             "play_2v2", "PLAY 2v2", "QUEUE 2v2",
-            new Vector2(0.50f, 0.54f), new Vector2(0.19f, 0.095f),
+            new Vector2(0.50f, 0.505f), new Vector2(0.19f, 0.095f),
             new Vector3(0.68f, 0.45f, 1.0f), isToggle: true,
             _ => ToggleQueueMode(LobbyQueueMode.Queue2v2));
 
         WorldButton vsAiBtn = CreateWorldButton(
             "vs_ai", "VS AI", "QUICK START",
-            new Vector2(0.79f, 0.54f), new Vector2(0.19f, 0.095f),
+            new Vector2(0.79f, 0.505f), new Vector2(0.19f, 0.095f),
             new Vector3(0.25f, 0.90f, 0.48f), isToggle: false,
             OnLaunchVsAi);
 
@@ -96,7 +96,7 @@ public class MainMenuScreen : IUIScreen
     {
         _debugHitboxBtn = CreateWorldButton(
             "dev_hitboxes", "DEBUG HITBOXES", Character.ShowDebugBoxes ? "ON" : "OFF",
-            new Vector2(1.23f, 0.40f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.23f, 0.37f), new Vector2(0.21f, 0.095f),
             new Vector3(0.0f, 1.0f, 0.95f), isToggle: true,
             _ =>
             {
@@ -106,13 +106,13 @@ public class MainMenuScreen : IUIScreen
 
         WorldButton aiTrainBtn = CreateWorldButton(
             "dev_ai_train", "AI VS AI", "TURBO TRAIN",
-            new Vector2(1.50f, 0.40f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.50f, 0.37f), new Vector2(0.21f, 0.095f),
             new Vector3(1.0f, 0.18f, 0.85f), isToggle: false,
             OnLaunchAiTraining);
 
         _dummyModeBtn = CreateWorldButton(
             "dev_dummy_mode", "DUMMY MODE", "PASSIVE",
-            new Vector2(1.77f, 0.40f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.77f, 0.37f), new Vector2(0.21f, 0.095f),
             new Vector3(0.38f, 1.0f, 0.30f), isToggle: true,
             ctx =>
             {
@@ -126,13 +126,13 @@ public class MainMenuScreen : IUIScreen
 
         WorldButton reloadModsBtn = CreateWorldButton(
             "dev_reload_mods", "RELOAD MODS", "HOT REFRESH",
-            new Vector2(1.36f, 0.61f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.36f, 0.505f), new Vector2(0.21f, 0.095f),
             new Vector3(1.0f, 0.72f, 0.12f), isToggle: false,
             OnReloadMods);
 
         WorldButton resetWeightsBtn = CreateWorldButton(
             "dev_reset_weights", "RESET AI WEIGHTS", "CLEAR RL MODEL",
-            new Vector2(1.64f, 0.61f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.64f, 0.505f), new Vector2(0.21f, 0.095f),
             new Vector3(1.0f, 0.25f, 0.30f), isToggle: false,
             _ =>
             {
@@ -159,17 +159,17 @@ public class MainMenuScreen : IUIScreen
         );
         TryLoadOptionalUiTexture("roster_panel.png", p => _roster.LoadPanelTexture(p));
 
-        _descPanel = new ScrollableTextPanel(
+        _descPanel = new Button(
             xPct: 0.615f,
             yPct: 0.015f,
             widthPct: 0.37f,
-            heightPct: 0.235f
+            heightPct: 0.235f,
+            text: "Select a fighter to view archetype and move list."
         )
-        {
-            Title = "FIGHTER INFO",
-            Text = "Select a fighter to view archetype and move list."
-        };
-        TryLoadOptionalUiTexture("desc_panel.png", p => _descPanel.LoadTexture(p));
+        .WithTitle("FIGHTER INFO")
+        .WithFontSize(0.017f)
+        .WithScrolling();
+        TryLoadOptionalUiTexture("desc_panel.png", p => _descPanel.LoadBackgroundTexture(p));
 
         _launchQueueButton = new Button(0.36f, 0.205f, 0.13f, 0.048f, "LAUNCH PvP", OnLaunchQueuedPvp)
         {
@@ -456,7 +456,7 @@ public class MainMenuScreen : IUIScreen
         SyncDynamicLabels(context.Data);
 
         _roster?.Update(context);
-        _descPanel?.Update(dt);
+        _descPanel?.Update(context);
 
         bool pointerInBanner = false;
         if (_queueMode != LobbyQueueMode.None)
@@ -606,8 +606,8 @@ public class MainMenuScreen : IUIScreen
 
         int hintFont = Math.Max(12, (int)(sh * 0.018f));
         string hint = CameraManager.IsInLobbyAlcove
-            ? "DEV ALCOVE: PUNCH OR CLICK TOOLS   |   WALK LEFT TO EXIT ALCOVE"
-            : "LOBBY ARENA: MOVE / ATTACK OR CLICK BUTTONS   |   WALK FAR RIGHT FOR DEV ALCOVE";
+            ? "DEV ALCOVE: JUMP PLATFORMS TO HIT TOOLS   |   TAP CROUCH TO DROP   |   WALK LEFT TO EXIT"
+            : "JUMP PLATFORMS TO REACH HIGH BUTTONS   |   TAP CROUCH TO DROP   |   WALK RIGHT FOR DEV ROOM";
         int hw = Raylib.MeasureText(hint, hintFont);
         Raylib.DrawText(hint, (int)(sw * 0.985f - hw), (int)(groundY + (sh - groundY - hintFont) * 0.5f), hintFont, Color.LIGHTGRAY);
 
