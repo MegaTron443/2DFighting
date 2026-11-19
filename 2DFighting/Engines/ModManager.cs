@@ -2,6 +2,13 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
+public enum ModFilterMode
+{
+    VanillaOnly,
+    VanillaAndMods,
+    ModsOnly
+}
+
 public static class ModManager
 {
     public static string BaseDir => AppDomain.CurrentDomain.BaseDirectory;
@@ -12,10 +19,28 @@ public static class ModManager
     private static readonly List<string> _contentRoots = new();
 
     private static readonly Dictionary<string, string> _characterScripts = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, string> _vanillaCharacterScripts = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, string> _modCharacterScripts = new(StringComparer.OrdinalIgnoreCase);
+
+    private static ModFilterMode _activeModFilter = ModFilterMode.VanillaAndMods;
 
     public static IReadOnlyList<string> ContentRoots => _contentRoots;
     public static IReadOnlyDictionary<string, string> CharacterScripts => _characterScripts;
     public static string[] AvailableFighters { get; private set; } = Array.Empty<string>();
+    public static int CatalogVersion { get; private set; } = 0;
+
+    public static ModFilterMode ActiveModFilter
+    {
+        get => _activeModFilter;
+        set
+        {
+            if (_activeModFilter != value)
+            {
+                _activeModFilter = value;
+                CatalogVersion++;
+            }
+        }
+    }
 
     public static void Initialize()
     {
@@ -25,6 +50,8 @@ public static class ModManager
 
         _contentRoots.Clear();
         _characterScripts.Clear();
+        _vanillaCharacterScripts.Clear();
+        _modCharacterScripts.Clear();
 
         foreach (string zipPath in Directory.GetFiles(ModsDir, "*.zip", SearchOption.TopDirectoryOnly))
         {
@@ -125,6 +152,7 @@ public static class ModManager
         for (int i = _contentRoots.Count - 1; i >= 0; i--)
         {
             string root = _contentRoots[i];
+            bool isVanillaRoot = root.Equals(BaseDir, StringComparison.OrdinalIgnoreCase);
             string[] scriptFolders =
             {
                 Path.Combine(root, "Scripts", "characters"),
@@ -141,15 +169,51 @@ public static class ModManager
                 {
                     string id = Path.GetFileNameWithoutExtension(luaFile).ToLowerInvariant();
                     _characterScripts[id] = luaFile;
+                    if (isVanillaRoot)
+                        _vanillaCharacterScripts[id] = luaFile;
+                    else
+                        _modCharacterScripts[id] = luaFile;
                 }
             }
         }
 
-        AvailableFighters = _characterScripts.Keys.ToArray();
+        AvailableFighters = _characterScripts.Keys
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        CatalogVersion++;
     }
 
-    public static string? ResolveCharacterScript(string characterId)
+    public static string[] GetFilteredFighters(ModFilterMode filter)
     {
+        IEnumerable<string> keys = filter switch
+        {
+            ModFilterMode.VanillaOnly => _vanillaCharacterScripts.Keys,
+            ModFilterMode.ModsOnly    => _modCharacterScripts.Keys,
+            _                         => _characterScripts.Keys
+        };
+
+        return keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public static string? ResolveCharacterScript(string characterId) =>
+        ResolveCharacterScript(characterId, _activeModFilter);
+
+    public static string? ResolveCharacterScript(string characterId, ModFilterMode filter)
+    {
+        if (filter == ModFilterMode.VanillaOnly &&
+            _vanillaCharacterScripts.TryGetValue(characterId, out string? vanillaPath) &&
+            File.Exists(vanillaPath))
+        {
+            return vanillaPath;
+        }
+
+        if (filter == ModFilterMode.ModsOnly &&
+            _modCharacterScripts.TryGetValue(characterId, out string? modPath) &&
+            File.Exists(modPath))
+        {
+            return modPath;
+        }
+
         if (_characterScripts.TryGetValue(characterId, out string? path) && File.Exists(path))
             return path;
 

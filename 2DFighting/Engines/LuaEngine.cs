@@ -192,4 +192,6 @@ public class LuaEngine
         _characterCache[cacheKey] = character;
         return character;
     }
+
+    public void ClearCharacterCache() => _characterCache.Clear();
 }

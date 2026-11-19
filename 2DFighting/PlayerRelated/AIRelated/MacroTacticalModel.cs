@@ -86,9 +86,9 @@ public class MacroTacticalModel
     public static MacroTacticalModel SharedInstance { get; } = new MacroTacticalModel();
 
     private readonly string _modelPath;
-    private readonly MacroModelWeights _weights;
-    private readonly float[] _flatW1;
-    private readonly float[] _flatW2;
+    private MacroModelWeights _weights;
+    private float[] _flatW1;
+    private float[] _flatW2;
     private readonly Random _rng = new();
     private float _baselineReturn = 0f;
 
@@ -354,6 +354,15 @@ public class MacroTacticalModel
             if (step.Hidden != null) ArrayPool<float>.Shared.Return(step.Hidden);
             if (step.Probs != null) ArrayPool<float>.Shared.Return(step.Probs);
         }
+    }
+
+    public void ResetWeights()
+    {
+        _weights = CreateEmbeddedPretrainedWeights();
+        _flatW1 = Flatten(_weights.W1, _weights.HiddenSize, _weights.InputSize);
+        _flatW2 = Flatten(_weights.W2, _weights.OutputSize, _weights.HiddenSize);
+        _baselineReturn = 0f;
+        SaveWeights();
     }
 
     public void SaveWeights()
