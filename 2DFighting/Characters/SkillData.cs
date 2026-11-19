@@ -1,8 +1,11 @@
 using Raylib_cs;
 using MoonSharp.Interpreter;
+
+[MoonSharpUserData]
 public class SkillData
 {
     public string Name { get; set; } = "";
+    public string? AnimationClipName { get; set; } = null;
     public int TriggerMask { get; set; }
     public int Damage { get; set; }
     public AttackHeight Height { get; set; } = AttackHeight.Mid;
