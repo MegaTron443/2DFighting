@@ -16,6 +16,7 @@ public class Player : IDisposable
     private const float AIR_TECH_WINDOW_SECONDS = 0.15f;
     private const float AIR_TECH_VX_MULT = 0.85f;
     private const float AIR_TECH_VY_MULT = 0.55f;
+    private const float PLATFORM_DROP_DURATION = 0.18f;
 
     private readonly string _name;
     private readonly bool _isAI;
@@ -42,6 +43,8 @@ public class Player : IDisposable
     public Vector2 Velocity;
 
     public bool IsGrounded = false;
+    public bool IsOnPlatform { get; set; } = false;
+    public float PlatformDropTimer { get; set; } = 0f;
     public bool FacingRight = true;
     public bool IsInputIdle { get; private set; } = true;
     public bool IsCrouching { get; set; } = false;
@@ -155,6 +158,8 @@ public class Player : IDisposable
         InvulnerableTimer = 0f;
         TechPopupTimer = 0f;
         IsGrounded = false;
+        IsOnPlatform = false;
+        PlatformDropTimer = 0f;
         IsCrouching = false;
         IsAirStalled = false;
         HasUsedAirStall = false;
@@ -330,6 +335,17 @@ public class Player : IDisposable
         Velocity.Y = vyPct * Raylib.GetScreenHeight();
     }
 
+    public void RequestPlatformDrop()
+    {
+        if (IsGrounded && IsOnPlatform)
+        {
+            PlatformDropTimer = PLATFORM_DROP_DURATION;
+            IsGrounded = false;
+            IsOnPlatform = false;
+            Position.Y += 4f;
+        }
+    }
+
     public void Dispose()
     {
         _aiController?.Dispose();
@@ -351,6 +367,7 @@ public class Player : IDisposable
 
         if (InvulnerableTimer > 0f) InvulnerableTimer = MathF.Max(0f, InvulnerableTimer - dt);
         if (TechPopupTimer > 0f) TechPopupTimer = MathF.Max(0f, TechPopupTimer - dt);
+        if (PlatformDropTimer > 0f) PlatformDropTimer = MathF.Max(0f, PlatformDropTimer - dt);
 
         if (CurrentCharacter == null) return;
         CurrentCharacter.Update(this, dt);

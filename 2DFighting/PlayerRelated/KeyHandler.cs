@@ -13,6 +13,7 @@ public class KeyHandler
     private float _latchedDir = 0f;
     private bool _latchedJumpPressed = false;
     private bool _latchedCrouch = false;
+    private bool _latchedCrouchPressed = false;
     private float _simTime = 0f;
 
     public KeyHandler(AppConfig appConfig)
@@ -35,6 +36,10 @@ public class KeyHandler
         }
 
         _latchedCrouch = Raylib.IsKeyDown(controls.Crouch);
+        if (Raylib.IsKeyPressed(controls.Crouch))
+        {
+            _latchedCrouchPressed = true;
+        }
 
         int pressedThisFrame = 0;
         if (Raylib.IsKeyPressed(controls.KeyTop))    pressedThisFrame |= (1 << 0);
@@ -85,6 +90,7 @@ public class KeyHandler
         _latchedDir = 0f;
         _latchedJumpPressed = false;
         _latchedCrouch = false;
+        _latchedCrouchPressed = false;
         if (_inputBuffers.TryGetValue(playerIndex, out var buffer))
         {
             buffer.Clear();
@@ -97,9 +103,15 @@ public class KeyHandler
 
         float dir = _latchedDir;
         bool jumped = _latchedJumpPressed;
+        bool crouchPressed = _latchedCrouchPressed;
         _latchedJumpPressed = false;
+        _latchedCrouchPressed = false;
 
-        if (jumped)
+        if (crouchPressed && player.IsGrounded && player.IsOnPlatform)
+        {
+            player.RequestPlatformDrop();
+        }
+        else if (jumped)
         {
             currentCharacter.Jump(player);
         }

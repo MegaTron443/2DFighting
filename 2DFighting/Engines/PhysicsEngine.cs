@@ -198,17 +198,58 @@ public class PhysicsEngine
         float halfW = ch.Width / 2f;
         float halfH = ch.Height / 2f;
 
-        if (p.Position.Y + halfH >= GroundY && p.Velocity.Y >= 0f)
+        float prevFeetY = p.PreviousPosition.Y + halfH;
+        float currFeetY = p.Position.Y + halfH;
+        bool landedOnPlatform = false;
+
+        if (p.Velocity.Y >= 0f &&
+            p.PlatformDropTimer <= 0f &&
+            SceneManager.CurrentScene is { Platforms.Count: > 0 } scene)
         {
-            p.Position.Y = GroundY - halfH;
-            p.Velocity.Y = 0;
-            p.IsGrounded = true;
-            p.IsAirStalled = false;
-            p.HasUsedAirStall = false;
+            float bestTopY = float.MaxValue;
+            float feetHalfW = halfW * 0.65f;
+
+            for (int i = 0; i < scene.Platforms.Count; i++)
+            {
+                Rectangle plat = scene.Platforms[i].GetPixelBounds();
+                bool overlapsX = (p.Position.X + feetHalfW) > plat.x &&
+                                 (p.Position.X - feetHalfW) < (plat.x + plat.width);
+                if (!overlapsX) continue;
+
+                if (prevFeetY <= plat.y + 6f && currFeetY >= plat.y - 1f && plat.y < bestTopY)
+                {
+                    bestTopY = plat.y;
+                    landedOnPlatform = true;
+                }
+            }
+
+            if (landedOnPlatform)
+            {
+                p.Position.Y = bestTopY - halfH;
+                p.Velocity.Y = 0f;
+                p.IsGrounded = true;
+                p.IsOnPlatform = true;
+                p.IsAirStalled = false;
+                p.HasUsedAirStall = false;
+            }
         }
-        else if (p.Position.Y + halfH < GroundY)
+
+        if (!landedOnPlatform)
         {
-            p.IsGrounded = false;
+            if (currFeetY >= GroundY && p.Velocity.Y >= 0f)
+            {
+                p.Position.Y = GroundY - halfH;
+                p.Velocity.Y = 0f;
+                p.IsGrounded = true;
+                p.IsOnPlatform = false;
+                p.IsAirStalled = false;
+                p.HasUsedAirStall = false;
+            }
+            else if (currFeetY < GroundY || p.PlatformDropTimer > 0f || p.Velocity.Y < 0f)
+            {
+                p.IsGrounded = false;
+                p.IsOnPlatform = false;
+            }
         }
 
         float sw = Raylib.GetScreenWidth();

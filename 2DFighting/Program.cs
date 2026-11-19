@@ -112,6 +112,7 @@ void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, GameDat
     Raylib.DrawLine((int)b.x, (int)PhysicsEngine.GroundY, (int)(b.x + b.width), (int)PhysicsEngine.GroundY, Color.BLACK);
 
     GUIEngine.DrawWorld(data);
+    SceneManager.DrawPlatforms();
 
     p1.Draw(alpha);
     p2.Draw(alpha);

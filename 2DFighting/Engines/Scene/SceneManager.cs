@@ -58,6 +58,28 @@ public static class SceneManager
             floorLayer.Parallax = Vector2.One;
         }
 
+        string? platformTex = ModManager.ResolveFile("Assets", "Scenes", "lobby_platform.png");
+        Vector3 mainAccent = new Vector3(0.45f, 0.78f, 1.0f);
+        Vector3 devAccent = new Vector3(0.0f, 0.95f, 0.88f);
+
+        // Main Lobby 3-tier jumpable platforms (max vertical step 0.090 * sh < Titan max jump height)
+        lobbyScene.AddPlatform("lobby_low_left",    0.11f, 0.760f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
+        lobbyScene.AddPlatform("lobby_low_right",   0.67f, 0.760f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
+        lobbyScene.AddPlatform("lobby_mid_left",    0.22f, 0.670f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
+        lobbyScene.AddPlatform("lobby_mid_right",   0.56f, 0.670f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
+        lobbyScene.AddPlatform("lobby_high_left",   0.07f, 0.580f, 0.20f, texturePath: platformTex, accentColor: mainAccent);
+        lobbyScene.AddPlatform("lobby_high_center", 0.39f, 0.580f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
+        lobbyScene.AddPlatform("lobby_high_right",  0.73f, 0.580f, 0.20f, texturePath: platformTex, accentColor: mainAccent);
+
+        // Developer Alcove 3-tier jumpable platforms
+        lobbyScene.AddPlatform("dev_low_left",      1.15f, 0.760f, 0.22f, texturePath: platformTex, accentColor: devAccent);
+        lobbyScene.AddPlatform("dev_low_right",     1.63f, 0.760f, 0.22f, texturePath: platformTex, accentColor: devAccent);
+        lobbyScene.AddPlatform("dev_mid_left",      1.24f, 0.670f, 0.23f, texturePath: platformTex, accentColor: devAccent);
+        lobbyScene.AddPlatform("dev_mid_right",     1.53f, 0.670f, 0.23f, texturePath: platformTex, accentColor: devAccent);
+        lobbyScene.AddPlatform("dev_high_left",     1.13f, 0.580f, 0.20f, texturePath: platformTex, accentColor: devAccent);
+        lobbyScene.AddPlatform("dev_high_center",   1.40f, 0.580f, 0.20f, texturePath: platformTex, accentColor: devAccent);
+        lobbyScene.AddPlatform("dev_high_right",    1.67f, 0.580f, 0.20f, texturePath: platformTex, accentColor: devAccent);
+
         LoadScene(lobbyScene);
     }
 
@@ -68,6 +90,7 @@ public static class SceneManager
     }
 
     public static void DrawBackground(Vector2 cameraTarget) => CurrentScene?.DrawBackground(cameraTarget);
+    public static void DrawPlatforms() => CurrentScene?.DrawPlatforms();
     public static void DrawForeground(Vector2 cameraTarget) => CurrentScene?.DrawForeground(cameraTarget);
 
     public static void Dispose()

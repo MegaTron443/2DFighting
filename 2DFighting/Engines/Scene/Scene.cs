@@ -36,10 +36,39 @@ public class Scene : IDisposable
     public Color ClearColor { get; set; } = Color.RAYWHITE;
 
     private readonly List<SceneLayer> _layers = new();
+    public List<Platform> Platforms { get; } = new();
 
     public Scene(string id)
     {
         Id = id;
+    }
+
+    public Platform AddPlatform(
+        string name,
+        float xPct,
+        float yPct,
+        float widthPct,
+        float thicknessPct = 0.016f,
+        bool isOneWay = true,
+        Vector3? accentColor = null,
+        string? texturePath = null)
+    {
+        var platform = new Platform(name, xPct, yPct, widthPct, thicknessPct, isOneWay);
+        if (accentColor.HasValue)
+            platform.AccentColor = accentColor.Value;
+        if (!string.IsNullOrEmpty(texturePath))
+            platform.LoadTexture(texturePath);
+
+        Platforms.Add(platform);
+        return platform;
+    }
+
+    public void DrawPlatforms()
+    {
+        for (int i = 0; i < Platforms.Count; i++)
+        {
+            Platforms[i].Draw();
+        }
     }
 
     public SceneLayer AddLayer(string name, string? texturePath = null, string shaderId = "none", bool isForeground = false)
@@ -84,5 +113,9 @@ public class Scene : IDisposable
         foreach (var layer in _layers)
             layer.Dispose();
         _layers.Clear();
+
+        foreach (var platform in Platforms)
+            platform.Dispose();
+        Platforms.Clear();
     }
 }
