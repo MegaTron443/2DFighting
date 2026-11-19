@@ -1,10 +1,12 @@
 using System;
+using System.Numerics;
+using Raylib_cs;
 
 public class EngineServices
 {
     public static readonly string[] DefaultFighters =
     {
-        "brawler", "lancer", "pyromancer", "phantom", "titan", "chronomancer", "gravity"
+        "brawler", "lancer", "pyromancer", "phantom", "titan", "chronomancer", "gravity", "priest"
     };
 
     public static EngineServices? Current { get; private set; }
@@ -22,9 +24,22 @@ public class EngineServices
     public Player? Player1 { get; set; }
     public Player? Player2 { get; set; }
 
+    public bool IsLobbySession { get; private set; } = false;
+    public string SelectedLobbyFighterId { get; set; } = "brawler";
+
     public string[] AvailableFighters => ModManager.AvailableFighters.Length > 0
         ? ModManager.AvailableFighters
         : DefaultFighters;
+
+    public string[] FilteredFighters
+    {
+        get
+        {
+            string[] filtered = ModManager.GetFilteredFighters(ModManager.ActiveModFilter);
+            if (filtered.Length > 0) return filtered;
+            return ModManager.ActiveModFilter == ModFilterMode.ModsOnly ? Array.Empty<string>() : DefaultFighters;
+        }
+    }
 
     public EngineServices(AppConfig config)
     {
@@ -55,18 +70,142 @@ public class EngineServices
 
     public void EnsureMatchSoundHandler()
     {
-        if (GameState.CurrentState == State.Playing && Sound == null &&
+        if (GameState.IsLiveArena && Sound == null &&
             Player1?.CurrentCharacter != null && Player2?.CurrentCharacter != null)
         {
             Sound = new SoundHandler(CreateGameData());
-            Sound.PlaySound(SoundType.RoundStart);
+            if (GameState.CurrentState == State.Playing)
+            {
+                Sound.PlaySound(SoundType.RoundStart);
+            }
+        }
+    }
+
+    public void SyncSessionForCurrentState()
+    {
+        if (GameState.CurrentState == State.GameOver)
+        {
+            DisposeMatchSession();
+            return;
+        }
+
+        if (GameState.CurrentState == State.MainMenu)
+        {
+            if (!IsLobbySession && (Player1 != null || Player2 != null || Sound != null))
+            {
+                DisposeMatchSession();
+            }
+            EnsureLobbySession();
+        }
+    }
+
+    public void EnsureLobbySession()
+    {
+        if (IsLobbySession && Player1?.CurrentCharacter != null && Player2?.CurrentCharacter != null)
+            return;
+
+        Match.IsTrainingMode = false;
+        SceneManager.LoadLobbyScene();
+
+        string[] fighters = FilteredFighters;
+        string[] fallbackPool = fighters.Length > 0 ? fighters : AvailableFighters;
+
+        if (!Array.Exists(fallbackPool, f => string.Equals(f, SelectedLobbyFighterId, StringComparison.OrdinalIgnoreCase)))
+        {
+            SelectedLobbyFighterId = fallbackPool[0];
+        }
+
+        string dummyId = Array.Exists(AvailableFighters, f => string.Equals(f, "titan", StringComparison.OrdinalIgnoreCase))
+            ? "titan"
+            : fallbackPool[^1];
+
+        int sw = Raylib.GetScreenWidth();
+        Vector2 spawnP1 = new Vector2(sw * 0.28f, PhysicsEngine.GroundY * 0.86f);
+        Vector2 spawnP2 = new Vector2(sw * 0.68f, PhysicsEngine.GroundY * 0.86f);
+
+        Player1?.Dispose();
+        Player2?.Dispose();
+
+        Player p1 = Player.Create("Player 1", 0, spawnP1, Config, isAI: false);
+        Player p2 = Player.Create("Sparring Dummy", 1, spawnP2, Config, isAI: true);
+        p2.IsPassiveDummy = true;
+        p2.SetAIDifficulty(AIDifficulty.Hard);
+        p1.SetOpponent(p2);
+        p2.SetOpponent(p1);
+
+        p1.ChangeCharacter(Lua.CreateCharacter(SelectedLobbyFighterId, slot: 0));
+        p2.ChangeCharacter(Lua.CreateCharacter(dummyId, slot: 1));
+        p1.ResetState(faceRight: true);
+        p2.ResetState(faceRight: false);
+
+        Player1 = p1;
+        Player2 = p2;
+
+        Projectiles.Clear();
+        VFXManager.Clear();
+        PostFXManager.ResetAll();
+        Match.HitstopTimer = 0f;
+        CameraManager.Reset();
+
+        Sound?.Dispose();
+        Sound = new SoundHandler(CreateGameData());
+        IsLobbySession = true;
+    }
+
+    public void StartMatchFromLobby(
+        bool p1AI,
+        bool p2AI,
+        string? p1CharId,
+        string? p2CharId,
+        bool startImmediately,
+        bool isTrainingMode)
+    {
+        DisposeMatchSession();
+        Match.IsTrainingMode = isTrainingMode;
+        SceneManager.LoadMatchScene();
+
+        int sw = Raylib.GetScreenWidth();
+        Vector2 spawnP1 = new Vector2(sw * 0.15f, PhysicsEngine.GroundY * 0.9f);
+        Vector2 spawnP2 = new Vector2(sw * 0.85f, PhysicsEngine.GroundY * 0.9f);
+
+        Player p1 = Player.Create("Player 1", 0, spawnP1, Config, isAI: p1AI);
+        Player p2 = Player.Create("Player 2", 1, spawnP2, Config, isAI: p2AI);
+        p1.SetOpponent(p2);
+        p2.SetOpponent(p1);
+
+        if (!string.IsNullOrEmpty(p1CharId))
+            p1.ChangeCharacter(Lua.CreateCharacter(p1CharId, slot: 0));
+
+        if (!string.IsNullOrEmpty(p2CharId))
+            p2.ChangeCharacter(Lua.CreateCharacter(p2CharId, slot: 1));
+
+        Player1 = p1;
+        Player2 = p2;
+
+        if (startImmediately)
+        {
+            Match.ResetMatch(p1, p2, Projectiles);
+            GameState.SetState(State.Playing);
+        }
+        else
+        {
+            GameState.SetState(State.ChoiceMenu);
         }
     }
 
     public void CleanupMatchSession()
     {
-        if ((GameState.CurrentState == State.GameOver || GameState.CurrentState == State.MainMenu) &&
-            (Player1 != null || Player2 != null || Sound != null))
+        if (GameState.CurrentState == State.GameOver ||
+            (GameState.CurrentState == State.MainMenu && !IsLobbySession))
+        {
+            DisposeMatchSession();
+        }
+    }
+
+    public void DisposeMatchSession()
+    {
+        IsLobbySession = false;
+        if (Player1 != null || Player2 != null || Sound != null)
         {
             Sound?.Dispose();
             Sound = null;
@@ -74,6 +213,10 @@ public class EngineServices
             Player2?.Dispose();
             Player1 = null;
             Player2 = null;
+            Projectiles.Clear();
+            VFXManager.Clear();
+            PostFXManager.ResetAll();
+            Match.HitstopTimer = 0f;
             CameraManager.Reset();
         }
     }

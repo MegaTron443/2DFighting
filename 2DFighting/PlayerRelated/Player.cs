@@ -24,6 +24,9 @@ public class Player : IDisposable
     private readonly PlayerAI? _aiController;
 
     public string Name => _name;
+    public bool IsAI => _isAI;
+    public bool IsPassiveDummy { get; set; } = false;
+    public float TimeSinceHitstun { get; set; } = 0f;
     public float HitstunTimer { get; set; } = 0f;
     public float InvulnerableTimer { get; set; } = 0f;
     public float TechPopupTimer { get; set; } = 0f;
@@ -47,6 +50,7 @@ public class Player : IDisposable
     public bool IsHoldingBack { get; set; } = false;
 
     public bool IsNeutralBlocking =>
+        !IsPassiveDummy &&
         IsGrounded &&
         (IsInputIdle || IsHoldingBack || IsCrouching) &&
         CurrentCharacter?.ActiveSkill == null &&
@@ -126,6 +130,12 @@ public class Player : IDisposable
         _aiController?.SetOpponent(opponent);
     }
 
+    public void SetAIDifficulty(AIDifficulty difficulty)
+    {
+        if (_aiController != null)
+            _aiController.Difficulty = difficulty;
+    }
+
     public bool ChangeCharacter(Character newCharacter)
     {
         CurrentCharacter = newCharacter;
@@ -141,6 +151,7 @@ public class Player : IDisposable
         Velocity = Vector2.Zero;
         Health = MAX_HEALTH;
         HitstunTimer = 0f;
+        TimeSinceHitstun = 0f;
         InvulnerableTimer = 0f;
         TechPopupTimer = 0f;
         IsGrounded = false;
@@ -222,7 +233,7 @@ public class Player : IDisposable
 
     public void PollInput()
     {
-        if (GameState.CurrentState != State.Playing || CurrentCharacter == null) return;
+        if (!GameState.IsLiveArena || CurrentCharacter == null) return;
         if (!_isAI) _keyHandler.PollHardwareInput(_playerIndex);
     }
 
@@ -254,7 +265,15 @@ public class Player : IDisposable
         JustExecutedMotion = SpecialMotion.None;
         JustCompletedComboSignature = null;
 
-        if (GameState.CurrentState != State.Playing || CurrentCharacter == null) return;
+        if (!GameState.IsLiveArena || CurrentCharacter == null) return;
+
+        if (_isAI && IsPassiveDummy)
+        {
+            IsInputIdle = true;
+            IsCrouching = false;
+            IsHoldingBack = false;
+            return;
+        }
 
         if (CanTech)
         {
@@ -318,9 +337,18 @@ public class Player : IDisposable
 
     public void Update(float dt)
     {
-        if (GameState.CurrentState != State.Playing) return;
+        if (!GameState.IsLiveArena) return;
 
-        if (HitstunTimer > 0f) HitstunTimer = MathF.Max(0f, HitstunTimer - dt);
+        if (HitstunTimer > 0f)
+        {
+            HitstunTimer = MathF.Max(0f, HitstunTimer - dt);
+            TimeSinceHitstun = 0f;
+        }
+        else
+        {
+            TimeSinceHitstun += dt;
+        }
+
         if (InvulnerableTimer > 0f) InvulnerableTimer = MathF.Max(0f, InvulnerableTimer - dt);
         if (TechPopupTimer > 0f) TechPopupTimer = MathF.Max(0f, TechPopupTimer - dt);
 

@@ -1,35 +1,61 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Numerics;
 using Raylib_cs;
 
 public class CharacterSelectScreen : IUIScreen
 {
     private readonly List<Button> _buttons = new();
-    private readonly Dictionary<string, Texture2D> _rosterThumbnails = new();
+    private PaginatedRosterWidget? _p1Roster;
+    private PaginatedRosterWidget? _p2Roster;
+    private ScrollableTextPanel? _p1DescPanel;
+    private ScrollableTextPanel? _p2DescPanel;
+
+    private int _knownCatalogVersion = -1;
+    private string _knownP1Key = "";
+    private string _knownP2Key = "";
 
     public void Initialize()
     {
         Dispose();
         _buttons.Clear();
+        _knownCatalogVersion = -1;
+        _knownP1Key = "";
+        _knownP2Key = "";
 
-        string[] fighters = EngineServices.Current?.AvailableFighters ?? GUIEngine.RosterIds;
-        LoadRosterThumbnails(fighters);
+        _p1Roster = new PaginatedRosterWidget(0.03f, 0.14f, 0.44f, 0.34f, columns: 4, rows: 2)
+        {
+            AccentColor = new Vector3(0.30f, 0.72f, 1.0f)
+        };
+        _p2Roster = new PaginatedRosterWidget(0.53f, 0.14f, 0.44f, 0.34f, columns: 4, rows: 2)
+        {
+            AccentColor = new Vector3(1.0f, 0.35f, 0.35f)
+        };
 
-        var p1Grid = BuildFighterGrid(fighters, xPct: 0.05f, slot: 0, isP1: true);
-        var p2Grid = BuildFighterGrid(fighters, xPct: 0.55f, slot: 1, isP1: false);
+        _p1DescPanel = new ScrollableTextPanel(0.03f, 0.50f, 0.44f, 0.24f)
+        {
+            Title = "PLAYER 1 FIGHTER",
+            Text = "Select a fighter on the left roster.",
+            AccentColor = new Vector3(0.30f, 0.72f, 1.0f)
+        };
 
-        _buttons.AddRange(p1Grid.Build());
-        _buttons.AddRange(p2Grid.Build());
+        _p2DescPanel = new ScrollableTextPanel(0.53f, 0.50f, 0.44f, 0.24f)
+        {
+            Title = "PLAYER 2 FIGHTER",
+            Text = "Select a fighter on the right roster.",
+            AccentColor = new Vector3(1.0f, 0.35f, 0.35f)
+        };
 
         _buttons.Add(
             Button.Create("START MATCH")
-                .WithSize(0.22f, 0.08f)
-                .At(0.5f, 0.85f)
+                .WithSize(0.24f, 0.08f)
+                .At(0.50f, 0.84f)
+                .WithAccent(0.25f, 0.90f, 0.48f)
                 .Action(ctx =>
                 {
                     if (ctx.Data.Player1?.CurrentCharacter != null && ctx.Data.Player2?.CurrentCharacter != null)
                     {
+                        SceneManager.LoadMatchScene();
                         if (ctx.Data.Services != null)
                             ctx.Data.Services.Match.ResetMatch(ctx.Data.Player1, ctx.Data.Player2, ctx.Data.Services.Projectiles);
                         else
@@ -38,52 +64,87 @@ public class CharacterSelectScreen : IUIScreen
                     }
                 })
         );
+
+        _buttons.Add(
+            Button.Create("BACK TO LOBBY")
+                .WithSize(0.18f, 0.06f)
+                .At(0.14f, 0.84f)
+                .WithAccent(0.60f, 0.65f, 0.80f)
+                .Action(_ => GameState.SetState(State.MainMenu))
+        );
     }
 
-    private UIGrid BuildFighterGrid(string[] fighters, float xPct, int slot, bool isP1)
+    private void RefreshRosters()
     {
-        var grid = new UIGrid(xPct: xPct, yPct: 0.20f, widthPct: 0.4f, heightPct: 0.6f, columns: 6, rows: 5)
-            .WithAlignment(TextAlignment.Bottom);
+        string[] fighters = EngineServices.Current?.FilteredFighters
+                         ?? EngineServices.Current?.AvailableFighters
+                         ?? GUIEngine.RosterIds;
 
-        foreach (var fighter in fighters)
+        _p1Roster?.SetFighters(fighters, (id, ctx) => AssignFighter(ctx, slot: 0, id));
+        _p2Roster?.SetFighters(fighters, (id, ctx) => AssignFighter(ctx, slot: 1, id));
+        _knownCatalogVersion = ModManager.CatalogVersion;
+    }
+
+    private static void AssignFighter(ButtonContext ctx, int slot, string fighterId)
+    {
+        Player? target = slot == 0 ? ctx.Data.Player1 : ctx.Data.Player2;
+        if (target == null) return;
+
+        Character character = ctx.Data.LuaEngine.CreateCharacter(fighterId, slot: slot);
+        target.ChangeCharacter(character);
+    }
+
+    private void SyncDescriptionPanels(GameData data)
+    {
+        Character? c1 = data.Player1?.CurrentCharacter;
+        if (_p1DescPanel != null)
         {
-            string id = fighter;
-            string label = char.ToUpper(id[0]) + id[1..];
-            grid.Add(label, ctx =>
+            string key = c1 != null ? $"{c1.Name}|{c1.ScriptHash}" : "";
+            if (!string.Equals(_knownP1Key, key, StringComparison.Ordinal))
             {
-                Player? target = isP1 ? ctx.Data.Player1 : ctx.Data.Player2;
-                if (target != null)
-                {
-                    Character character = ctx.Data.LuaEngine.CreateCharacter(id, slot: slot);
-                    target.ChangeCharacter(character);
-                }
-            }, GetThumbnail(id));
+                _knownP1Key = key;
+                _p1DescPanel.Title = c1 != null ? $"P1: {c1.Name.ToUpperInvariant()}" : "PLAYER 1 FIGHTER";
+                _p1DescPanel.Text = c1?.Description ?? "Select a fighter on the left roster.";
+            }
+            if (c1 == null && _p1Roster?.SelectedFighterId != null)
+            {
+                _p1Roster.SetSelectedFighter(null);
+            }
+            else if (c1 != null && data.Services != null && _p1Roster?.SelectedFighterId == null)
+            {
+                _p1Roster?.SetSelectedFighter(data.Services.SelectedLobbyFighterId);
+            }
         }
 
-        return grid;
-    }
-
-    private void LoadRosterThumbnails(string[] fighters)
-    {
-        foreach (var fighter in fighters)
+        Character? c2 = data.Player2?.CurrentCharacter;
+        if (_p2DescPanel != null)
         {
-            string? path = ModManager.ResolveFile("Assets", "Characters", fighter, "Roaster.png")
-                        ?? ModManager.ResolveFile("Characters", "assets", fighter, "Roaster.png");
-
-            if (path != null && File.Exists(path) && !_rosterThumbnails.ContainsKey(fighter))
+            string key = c2 != null ? $"{c2.Name}|{c2.ScriptHash}" : "";
+            if (!string.Equals(_knownP2Key, key, StringComparison.Ordinal))
             {
-                _rosterThumbnails[fighter] = Raylib.LoadTexture(path);
+                _knownP2Key = key;
+                _p2DescPanel.Title = c2 != null ? $"P2: {c2.Name.ToUpperInvariant()}" : "PLAYER 2 FIGHTER";
+                _p2DescPanel.Text = c2?.Description ?? "Select a fighter on the right roster.";
+            }
+            if (c2 == null && _p2Roster?.SelectedFighterId != null)
+            {
+                _p2Roster.SetSelectedFighter(null);
             }
         }
     }
 
-    private Texture2D? GetThumbnail(string characterKey)
-    {
-        return _rosterThumbnails.TryGetValue(characterKey, out var tex) ? tex : null;
-    }
-
     public void Update(ButtonContext context)
     {
+        if (_knownCatalogVersion != ModManager.CatalogVersion)
+            RefreshRosters();
+
+        float dt = Raylib.GetFrameTime();
+        _p1Roster?.Update(context);
+        _p2Roster?.Update(context);
+        _p1DescPanel?.Update(dt);
+        _p2DescPanel?.Update(dt);
+        SyncDescriptionPanels(context.Data);
+
         for (int i = 0; i < _buttons.Count; i++)
         {
             _buttons[i].Update(context);
@@ -94,21 +155,25 @@ public class CharacterSelectScreen : IUIScreen
     {
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
-        int headerSize = (int)(sh * 0.04f);
-        int infoSize = (int)(sh * 0.03f);
-        float p2TextMargin = 0.2f * sh;
+        int headerSize = Math.Max(16, (int)(sh * 0.04f));
+        int infoSize = Math.Max(14, (int)(sh * 0.03f));
 
         string p1Name = data.Player1?.CurrentCharacter?.Name ?? "None";
         string p2Name = data.Player2?.CurrentCharacter?.Name ?? "None";
 
-        Raylib.DrawText($"P1: {p1Name}", (int)(sw * 0.05f), (int)(sh * 0.1f), infoSize, Color.DARKGRAY);
-        Raylib.DrawText($"P2: {p2Name}", (int)((sw * 0.95f) - p2TextMargin), (int)(sh * 0.1f), infoSize, Color.DARKGRAY);
+        Raylib.DrawText($"P1: {p1Name}", (int)(sw * 0.03f), (int)(sh * 0.07f), infoSize, Color.DARKBLUE);
+        Raylib.DrawText($"P2: {p2Name}", (int)(sw * 0.53f), (int)(sh * 0.07f), infoSize, Color.MAROON);
+
+        _p1Roster?.Draw();
+        _p2Roster?.Draw();
+        _p1DescPanel?.Draw();
+        _p2DescPanel?.Draw();
 
         if (data.Player1?.CurrentCharacter != null && data.Player2?.CurrentCharacter != null)
         {
             string readyMsg = "FIGHTERS READY!";
             int w = Raylib.MeasureText(readyMsg, headerSize);
-            Raylib.DrawText(readyMsg, (sw - w) / 2, (int)(sh * 0.76f), headerSize, Color.DARKGREEN);
+            Raylib.DrawText(readyMsg, (sw - w) / 2, (int)(sh * 0.755f), headerSize, Color.DARKGREEN);
         }
 
         for (int i = 0; i < _buttons.Count; i++)
@@ -119,10 +184,16 @@ public class CharacterSelectScreen : IUIScreen
 
     public void Dispose()
     {
-        foreach (var tex in _rosterThumbnails.Values)
-        {
-            Raylib.UnloadTexture(tex);
-        }
-        _rosterThumbnails.Clear();
+        _p1Roster?.Dispose();
+        _p1Roster = null;
+
+        _p2Roster?.Dispose();
+        _p2Roster = null;
+
+        _p1DescPanel?.Dispose();
+        _p1DescPanel = null;
+
+        _p2DescPanel?.Dispose();
+        _p2DescPanel = null;
     }
 }

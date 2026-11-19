@@ -46,6 +46,14 @@ public static class GUIEngine
         p2 = currentP2;
     }
 
+    public static void DrawWorld(GameData data)
+    {
+        if (_screens.TryGetValue(GameState.CurrentState, out IUIScreen? screen))
+        {
+            screen.DrawWorld(data);
+        }
+    }
+
     public static void Draw(GameData data)
     {
         if (_screens.TryGetValue(GameState.CurrentState, out IUIScreen? screen))

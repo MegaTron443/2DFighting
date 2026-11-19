@@ -6,6 +6,12 @@ using Raylib_cs;
 public class Scene : IDisposable
 {
     public string Id { get; }
+    public float ExtraLeftScreens { get; set; } = 0f;
+    public float ExtraRightScreens { get; set; } = 0f;
+    public float PlayableLeftPct { get; set; } = PhysicsEngine.LEFT_BOUNDARY_PCT;
+    public float PlayableRightPct { get; set; } = PhysicsEngine.RIGHT_BOUNDARY_PCT;
+    public bool HasDeveloperAlcove => ExtraRightScreens > 0.1f;
+
     public Rectangle Bounds
     {
         get
@@ -20,7 +26,10 @@ public class Scene : IDisposable
             float padX = extraW * 0.6f;
             float padY = extraH * 0.6f;
 
-            return new Rectangle(-padX, -padY, sw + padX * 2f, sh + padY * 2f);
+            float leftExt = ExtraLeftScreens * sw;
+            float rightExt = ExtraRightScreens * sw;
+
+            return new Rectangle(-padX - leftExt, -padY, sw + padX * 2f + leftExt + rightExt, sh + padY * 2f);
         }
     }
 

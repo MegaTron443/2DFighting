@@ -12,6 +12,8 @@ public class PhysicsEngine
     public const float RIGHT_BOUNDARY_PCT = 0.99f;
     private const float AUTO_FACE_DEADZONE_PX = 2f;
     private const float PUSHBACK_SPLIT_FACTOR = 0.5f;
+    private const float LOBBY_DUMMY_REGEN_DELAY_SEC = 3.0f;
+    private const float LOBBY_FACING_MIN_SPEED_PX = 20f;
 
     private static PhysicsEngine _activeInstance = new();
 
@@ -78,14 +80,15 @@ public class PhysicsEngine
 
     public void Update(GameData data)
     {
-        if (GameState.CurrentState != State.Playing) return;
+        if (!GameState.IsLiveArena) return;
         if (data.Player1?.CurrentCharacter == null || data.Player2?.CurrentCharacter == null) return;
 
+        bool isLobby = GameState.CurrentState == State.MainMenu;
         float dt = Timer.FixedDeltaTime;
         Player p1 = data.Player1;
         Player p2 = data.Player2;
 
-        if (Match.TickRoundTransition(data, Projectiles, dt))
+        if (!isLobby && Match.TickRoundTransition(data, Projectiles, dt))
             return;
 
         if (!Match.IsTrainingMode)
@@ -106,12 +109,19 @@ public class PhysicsEngine
         TryPlaySkillStartSound(data, p1);
         TryPlaySkillStartSound(data, p2);
 
-        ClampPlayer(p1);
-        ClampPlayer(p2);
+        ClampPlayer(p1, allowExtendedBounds: isLobby);
+        ClampPlayer(p2, allowExtendedBounds: false);
 
         ResolvePushback(p1, p2);
 
-        UpdateAutoFacing(p1, p2);
+        if (isLobby)
+        {
+            UpdateLobbyPlayerFacing(p1);
+        }
+        else
+        {
+            UpdateAutoFacing(p1, p2);
+        }
         UpdateAutoFacing(p2, p1);
 
         Combat.ResolveSimultaneousHits(data, p1, p2);
@@ -119,12 +129,18 @@ public class PhysicsEngine
         Projectiles.Update(dt, Match);
         VFXManager.Update(dt);
 
-        Match.TickRoundTimer(dt);
-
         if (!p1.IsInHitstun) p2.ComboCount = 0;
         if (!p2.IsInHitstun) p1.ComboCount = 0;
 
-        Match.CheckRoundEndCondition(data, p1, p2);
+        if (isLobby)
+        {
+            UpdateLobbyAutoRegen(data, p1, p2);
+        }
+        else
+        {
+            Match.TickRoundTimer(dt);
+            Match.CheckRoundEndCondition(data, p1, p2);
+        }
     }
 
     private static void TryPlaySkillStartSound(GameData data, Player player)
@@ -132,6 +148,36 @@ public class PhysicsEngine
         if (player.CurrentCharacter?.ActiveSkill != null && player.CurrentCharacter.CurrentActionFrame == 1)
         {
             data.SoundHandler?.PlaySkillSound(player, player.CurrentCharacter.ActiveSkill.Name);
+        }
+    }
+
+    private static void UpdateLobbyPlayerFacing(Player player)
+    {
+        if (!player.IsInHitstun &&
+            player.CurrentCharacter?.ActiveSkill == null &&
+            MathF.Abs(player.Velocity.X) > LOBBY_FACING_MIN_SPEED_PX)
+        {
+            player.FacingRight = player.Velocity.X > 0f;
+        }
+    }
+
+    private static void UpdateLobbyAutoRegen(GameData data, Player p1, Player p2)
+    {
+        bool dummyShouldHeal = p2.Health <= 0 || (p2.Health < Player.MAX_HEALTH && p2.TimeSinceHitstun >= LOBBY_DUMMY_REGEN_DELAY_SEC);
+        if (dummyShouldHeal)
+        {
+            p2.Health = Player.MAX_HEALTH;
+            p2.TimeSinceHitstun = 0f;
+            VFXManager.SpawnPreset(VFXPreset.HealGlow, p2.Position, p2.FacingRight);
+            data.SoundHandler?.PlaySound(SoundType.RoundStart);
+        }
+
+        if (p1.Health <= 0)
+        {
+            p1.Health = Player.MAX_HEALTH;
+            p1.HitstunTimer = 0f;
+            VFXManager.SpawnPreset(VFXPreset.HealGlow, p1.Position, p1.FacingRight);
+            data.SoundHandler?.PlaySound(SoundType.RoundStart);
         }
     }
 
@@ -146,7 +192,7 @@ public class PhysicsEngine
         }
     }
 
-    private static void ClampPlayer(Player p)
+    private static void ClampPlayer(Player p, bool allowExtendedBounds)
     {
         Character ch = p.CurrentCharacter!;
         float halfW = ch.Width / 2f;
@@ -165,10 +211,18 @@ public class PhysicsEngine
             p.IsGrounded = false;
         }
 
-        if (p.Position.X - halfW < LeftBoundary)
-            p.Position.X = LeftBoundary + halfW;
-        if (p.Position.X + halfW > RightBoundary)
-            p.Position.X = RightBoundary - halfW;
+        float sw = Raylib.GetScreenWidth();
+        float leftBound = (allowExtendedBounds && SceneManager.CurrentScene != null)
+            ? SceneManager.CurrentScene.PlayableLeftPct * sw
+            : LeftBoundary;
+        float rightBound = (allowExtendedBounds && SceneManager.CurrentScene != null)
+            ? SceneManager.CurrentScene.PlayableRightPct * sw
+            : RightBoundary;
+
+        if (p.Position.X - halfW < leftBound)
+            p.Position.X = leftBound + halfW;
+        if (p.Position.X + halfW > rightBound)
+            p.Position.X = rightBound - halfW;
     }
 
     private static void ResolvePushback(Player p1, Player p2)

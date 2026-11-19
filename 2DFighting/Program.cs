@@ -19,7 +19,7 @@ GameState.SetState(State.MainMenu);
 while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
-    services.CleanupMatchSession();
+    services.SyncSessionForCurrentState();
 
     GameData data = services.CreateGameData();
     Player? p1 = services.Player1;
@@ -34,10 +34,10 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     HandlePauseInput();
 
-    bool isPlaying = GameState.CurrentState == State.Playing && p1 != null && p2 != null;
-    bool isTraining = services.Match.IsTrainingMode;
+    bool isLiveArena = GameState.IsLiveArena && p1 != null && p2 != null;
+    bool isTraining = GameState.CurrentState == State.Playing && services.Match.IsTrainingMode;
 
-    if (isPlaying)
+    if (isLiveArena)
     {
         services.Timer.Update(dt);
         p1!.PollInput();
@@ -48,7 +48,7 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
         {
             for (int step = 0; step < subSteps; step++)
             {
-                if (GameState.CurrentState != State.Playing) break;
+                if (!GameState.IsLiveArena) break;
 
                 if (services.Match.HitstopTimer <= 0f)
                 {
@@ -62,22 +62,29 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     float alpha = services.Timer.Alpha;
 
-    if (isPlaying)
+    if (isLiveArena)
     {
-        CameraManager.Update(dt, p1!.Position, p2!.Position, SceneManager.CurrentScene?.Bounds);
+        if (GameState.CurrentState == State.MainMenu)
+        {
+            CameraManager.UpdateLobby(dt, p1!.Position, SceneManager.CurrentScene);
+        }
+        else
+        {
+            CameraManager.Update(dt, p1!.Position, p2!.Position, SceneManager.CurrentScene?.Bounds);
+        }
     }
 
-    if (isPlaying && !isTraining)
+    if (isLiveArena && !isTraining)
     {
         PostFXManager.BeginSceneCapture();
-        DrawArenaScene(p1!, p2!, services.Projectiles, alpha);
+        DrawArenaScene(p1!, p2!, services.Projectiles, data, alpha);
         PostFXManager.EndSceneCapture();
     }
 
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.RAYWHITE);
 
-    if (isPlaying)
+    if (isLiveArena)
     {
         if (!isTraining)
         {
@@ -85,7 +92,7 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
         }
         else
         {
-            DrawArenaScene(p1!, p2!, services.Projectiles, alpha);
+            DrawArenaScene(p1!, p2!, services.Projectiles, data, alpha);
             string trainText = $"Episodes Learned: {MacroTacticalModel.SharedInstance.EpisodesTrained}";
             Raylib.DrawText(trainText, 20, Raylib.GetScreenHeight() - 40, 22, Color.DARKGREEN);
         }
@@ -95,7 +102,7 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
     Raylib.EndDrawing();
 }
 
-void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, float alpha)
+void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, GameData data, float alpha)
 {
     CameraManager.BeginMode();
 
@@ -103,6 +110,8 @@ void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, float a
 
     Rectangle b = SceneManager.CurrentScene?.Bounds ?? new Rectangle(0, 0, Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
     Raylib.DrawLine((int)b.x, (int)PhysicsEngine.GroundY, (int)(b.x + b.width), (int)PhysicsEngine.GroundY, Color.BLACK);
+
+    GUIEngine.DrawWorld(data);
 
     p1.Draw(alpha);
     p2.Draw(alpha);

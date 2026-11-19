@@ -7,6 +7,11 @@ public static class SceneManager
 
     public static void Initialize()
     {
+        LoadMatchScene();
+    }
+
+    public static void LoadMatchScene()
+    {
         var defaultScene = new Scene("default");
 
         var bg = defaultScene.AddLayer(
@@ -19,6 +24,41 @@ public static class SceneManager
         bg.Material.SetFloat("u_GroundYPct", PhysicsEngine.GROUND_Y_PCT);
 
         LoadScene(defaultScene);
+    }
+
+    public static void LoadLobbyScene()
+    {
+        var lobbyScene = new Scene("lobby")
+        {
+            ExtraRightScreens = 1.0f,
+            PlayableLeftPct = PhysicsEngine.LEFT_BOUNDARY_PCT,
+            PlayableRightPct = 1.97f
+        };
+
+        var bg = lobbyScene.AddLayer(
+            "background",
+            texturePath: null,
+            shaderId: BuiltInShaders.SceneDefaultId,
+            isForeground: false
+        );
+        bg.Parallax = Vector2.One;
+        bg.Material.SetFloat("u_GroundYPct", PhysicsEngine.GROUND_Y_PCT);
+
+        string? lobbyTex = ModManager.ResolveFile("Assets", "Scenes", "lobby_bg.png");
+        if (lobbyTex != null)
+        {
+            var artLayer = lobbyScene.AddLayer("lobby_backdrop", lobbyTex, "none", isForeground: false);
+            artLayer.Parallax = new Vector2(0.85f, 1.0f);
+        }
+
+        string? floorTex = ModManager.ResolveFile("Assets", "Scenes", "lobby_floor.png");
+        if (floorTex != null)
+        {
+            var floorLayer = lobbyScene.AddLayer("lobby_floor", floorTex, "none", isForeground: false);
+            floorLayer.Parallax = Vector2.One;
+        }
+
+        LoadScene(lobbyScene);
     }
 
     public static void LoadScene(Scene scene)

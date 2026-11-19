@@ -102,7 +102,10 @@ public class Projectile
         Position += Velocity * dt;
 
         float sw = Raylib.GetScreenWidth();
-        if (Position.X < -sw * 0.25f || Position.X > sw * 1.25f)
+        Rectangle? sceneBounds = SceneManager.CurrentScene?.Bounds;
+        float leftLimit = (sceneBounds?.x ?? 0f) - (sw * 0.25f);
+        float rightLimit = (sceneBounds.HasValue ? sceneBounds.Value.x + sceneBounds.Value.width : sw) + (sw * 0.25f);
+        if (Position.X < leftLimit || Position.X > rightLimit)
         {
             IsActive = false;
         }

@@ -10,10 +10,13 @@ public static class CameraManager
 
     private static Vector2 _currentTarget;
     private static float _currentZoom = 1f;
+    private static bool _inLobbyAlcove = false;
 
     private static Vector2? _overrideTarget;
     private static float? _overrideZoom;
     private static float _overrideTimer;
+
+    public static bool IsInLobbyAlcove => _inLobbyAlcove;
 
     public static void Initialize() => Reset();
 
@@ -24,6 +27,7 @@ public static class CameraManager
 
         _currentTarget = new Vector2(sw * 0.5f, sh * 0.5f);
         _currentZoom = 1f;
+        _inLobbyAlcove = false;
         ClearOverride();
 
         RawCamera = new Camera2D
@@ -33,6 +37,50 @@ public static class CameraManager
             rotation = 0f,
             zoom = 1f
         };
+    }
+
+    public static void UpdateLobby(float dt, Vector2 playerPos, Scene? scene)
+    {
+        float sw = Raylib.GetScreenWidth();
+        float sh = Raylib.GetScreenHeight();
+
+        if (scene?.HasDeveloperAlcove == true)
+        {
+            if (!_inLobbyAlcove && playerPos.X > sw * 1.01f)
+                _inLobbyAlcove = true;
+            else if (_inLobbyAlcove && playerPos.X < sw * 0.97f)
+                _inLobbyAlcove = false;
+        }
+        else
+        {
+            _inLobbyAlcove = false;
+        }
+
+        Vector2 desiredTarget;
+        float desiredZoom;
+
+        if (_overrideTimer > 0f && _overrideTarget.HasValue)
+        {
+            _overrideTimer -= dt;
+            desiredTarget = _overrideTarget.Value;
+            desiredZoom = _overrideZoom ?? _currentZoom;
+            if (_overrideTimer <= 0f) ClearOverride();
+        }
+        else
+        {
+            desiredTarget = _inLobbyAlcove
+                ? new Vector2(sw * 1.50f, sh * 0.50f)
+                : new Vector2(sw * 0.50f, sh * 0.50f);
+            desiredZoom = 1.0f;
+        }
+
+        float moveT = 1f - MathF.Exp(-Config.MoveSmoothSpeed * dt);
+        float zoomT = 1f - MathF.Exp(-Config.ZoomSmoothSpeed * dt);
+
+        _currentTarget = Vector2.Lerp(_currentTarget, desiredTarget, moveT);
+        _currentZoom = float.Lerp(_currentZoom, desiredZoom, zoomT);
+
+        ApplyToRaylibCamera(scene?.Bounds);
     }
 
     public static void Update(float dt, Vector2 p1Pos, Vector2 p2Pos, Rectangle? arenaBounds = null)
