@@ -6,6 +6,22 @@ local CINDER_BLINK_RETREAT_PCT = 0.30
 
 local Character = {
     name = "Pyromancer",
+    description = [[
+ARTILLERY / TRAP ZONER
+Volatile pyrokinetic mage who blankets the stage in wave projectiles, bouncing bombs, and lingering pillars.
+
+PASSIVE:
+None — controls horizontal and vertical lanes through layered projectiles.
+
+MOVE LIST:
+- Flame Serpent (Top): Undulating sine-wave fireball that threatens jumping and standing heights.
+- Magma Lob (Bottom): Arcing volcanic bomb that bounces repeatedly along the floor.
+- Cinder Blink (Left): Counter trigger leaving an explosive blast behind while blinking to safety.
+- Flame Pillar (Right): Summons a lingering mid-range eruption that launches on contact.
+- Magma Geyser (Top+Bottom): Unblockable distant pillar erupting beneath defensive turtles.
+- Phoenix Updraft (Top+Right): Evasive back-flip blast launching enemies in overhead flames.
+- Hellfire Barrage (Top+Bottom+Right): Rapid staggered 3-fireball volley across varied heights.
+]],
 
     physics = {
         width_pct = 0.045,

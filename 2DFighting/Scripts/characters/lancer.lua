@@ -22,6 +22,22 @@ local DRAGOON_KNOCKBACK_PCT      = 0.36
 
 local Character = {
     name = "Lancer",
+    description = [[
+FOOTSIES / LONG-REACH ZONER
+Disciplined polearm duelist who dominates mid-screen spacing with disjointed thrusts and retreating counters.
+
+PASSIVE:
+None — excels at range control and whiff punishing.
+
+MOVE LIST:
+- Spear Poke (Top): Fast, long-range horizontal thrust for neutral control.
+- Halberd Reap (Bottom): Sweeping low slice with massive horizontal reach.
+- Royal Deflect (Left): Parry stance that backsteps and punishes the attacker.
+- Retreating Vault (Right): Strikes forward while leaping backward to maintain ideal spacing.
+- Grand Impale (Top+Bottom): Extreme-reach piercing lance thrust that shatters guards.
+- Sky Crescent (Top+Right): Overhead anti-air arc launching jumping foes.
+- Dragoon Dive (Top+Bottom+Right): Armored aerial vault and steep downward block-breaking plunge.
+]],
 
     physics = {
         width_pct = 0.048,

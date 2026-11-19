@@ -52,6 +52,8 @@ public static class CharacterLoader
             throw new Exception($"Table 'Character' missing in: {path}");
 
         character.Name = t.Get("name").String ?? "Fighter";
+        string? desc = t.Get("description").String;
+        character.Description = string.IsNullOrWhiteSpace(desc) ? "No description provided." : desc.Trim();
         character.OnPassive = t.Get("on_passive");
 
         ParsePhysics(character, t.Get("physics").Table);

@@ -7,6 +7,22 @@ local IZUNA_HEIGHT_PCT        = 0.40
 
 local Character = {
     name = "Phantom",
+    description = [[
+TRICKSTER / TELEPORT RUSHDOWN
+Hyper-mobile shinobi assassin specializing in cross-ups, returning boomerangs, and ambush teleports.
+
+PASSIVE:
+None — highest walk speed and floaty aerial agility.
+
+MOVE LIST:
+- Shadow Chakram (Top): Piercing boomerang projectile that pulls enemies inward on return.
+- Shadow Sweep (Bottom): Rapid low strike with near-zero pushback for mixups.
+- Substitution Jutsu (Left): Counter that blinks behind the attacker and launches them upward.
+- Phantom Dash (Right): High-speed cross-up dash slicing cleanly through opponents.
+- Kunai Fan (Top+Bottom): Leaps backward and fans 3 angled kunai toward the floor.
+- Crescent Somersault (Top+Right): Advancing overhead flip kick launching foes for combos.
+- Izuna Drop (Top+Bottom+Right): Teleports high above the target into an unblockable slam.
+]],
 
     physics = {
         width_pct = 0.043,

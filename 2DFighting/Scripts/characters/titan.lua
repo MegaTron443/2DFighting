@@ -7,6 +7,22 @@ local REGEN_HP_AMOUNT    = 1
 
 local Character = {
     name = "Titan",
+    description = [[
+ARMORED GRAPPLER / JUGGERNAUT
+Colossal fortress fighter who absorbs hits with hyper-armor, pulls enemies close, and inflicts crushing grabs.
+
+PASSIVE:
+Regenerates 1 HP every 1.5 seconds while grounded and out of hitstun.
+
+MOVE LIST:
+- Vacuum Clap (Top): Wide shockwave clap with negative knockback that pulls foes inward.
+- Boulder Toss (Bottom): Throws a massive arcing boulder hitting overhead from afar.
+- Fortress Aegis (Left): Counter stance restoring 18 HP while blasting attackers away.
+- Juggernaut Tackle (Right): Armored freight-train shoulder charge plowing forward.
+- Spinebuster Grab (Top+Bottom): Armored unblockable command grab launching foes sky-high.
+- Sky Snatch (Top+Right): Armored anti-air slam snatching jumpers out of the sky.
+- Cataclysm Slam (Top+Bottom+Right): Armored leap slam unleashing a low ground shockwave.
+]],
 
     physics = {
         width_pct = 0.066,

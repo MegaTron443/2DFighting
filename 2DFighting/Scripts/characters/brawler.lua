@@ -40,6 +40,22 @@ local METEOR_BREAK_KNOCKBACK_PCT = 0.35
 
 local Character = {
     name = "Brawler",
+    description = [[
+RUSHDOWN / ALL-ROUNDER
+Relentless street pugilist built for close-range pressure, anti-air conversions, and explosive armored finishers.
+
+PASSIVE:
+None — pure frame-trap fundamentals and high damage output.
+
+MOVE LIST:
+- Quick Jab (Top): Fast 3-frame close-range strike.
+- Low Sweep (Bottom): Knockdown low poke that catches standing foes.
+- Iron Parry (Left): Deflects incoming strikes, heals 10 HP, and counters hard.
+- Plasma Shot (Right): Horizontal mid-range energy projectile.
+- Guard Crush Slam (Top+Bottom): Armored block-break smash for 65 bonus damage.
+- Rising Uppercut (Top+Right): Overhead anti-air that launches both fighters skyward.
+- Meteor Dive (Top+Bottom+Right): Armored divekick block-breaker dealing 90 heavy impact damage.
+]],
     
     -- Physics & Core Body
     physics = {

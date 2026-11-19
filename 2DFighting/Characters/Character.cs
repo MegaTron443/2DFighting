@@ -18,6 +18,7 @@ public class Character
     public static bool ShowDebugBoxes { get; set; } = false;
 
     public string Name { get; internal set; } = "";
+    public string Description { get; set; } = "No description provided.";
 
     // --- Viewport Percentage Ratios (Mutable from Lua for Stance Switching) ---
     public float WidthPct { get; set; } = 0.05f;

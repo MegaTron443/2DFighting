@@ -6,6 +6,22 @@ local TIME_SKIP_DASH_PCT = 0.25
 
 local Character = {
     name = "Chronomancer",
+    description = [[
+TIME MANIPULATOR / SETUP SPECIALIST
+Temporal arcana master blending homing bolts, freezing stasis traps, and cooldown-resetting overclock bursts.
+
+PASSIVE:
+None — dictates match tempo with freeze setups and cooldown manipulation.
+
+MOVE LIST:
+- Chrono Bolt (Top): Homing energy sphere that curves vertically to track opponents.
+- Stasis Mine (Bottom): Suspended time trap freezing hit foes in place for 1.35 seconds.
+- Temporal Rewind (Left): Counter restoring 15 HP and locking attackers in stasis.
+- Time-Skip Strike (Right): Blinks forward mid-startup into an immediate lunge strike.
+- Overclock Surge (Top+Bottom): Sacrifices 12 HP for an unblockable wave and instant cooldown resets.
+- Gravity Inversion (Top+Right): Overhead anti-air lift launching enemies for follow-ups.
+- Paradox Convergence (Top+Bottom+Right): Fires a slow low wave and fast homing overhead simultaneously.
+]],
 
     physics = {
         width_pct = 0.046,

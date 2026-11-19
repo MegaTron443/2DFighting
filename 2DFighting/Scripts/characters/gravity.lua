@@ -27,6 +27,22 @@ end
 
 local Character = {
     name = "GravitySamurai",
+    description = [[
+STANCE SWITCHER / COSMIC BLADEMASTER
+Void-forged samurai shifting between Fused heavy odachi strikes and Split high-mobility gravity blades.
+
+PASSIVE:
+Custom stance engine (Fused = heavy/high gravity, Split = fast/lightweight) + cosmic blade aura.
+
+MOVE LIST:
+- Normal Slash (Right): Heavy odachi cleave in Fused stance or rapid flurry in Split stance.
+- Gravity Upper (Top): Fused zeroes victim gravity on launch; Split slams aerial foes downward.
+- Event Horizon (Left): Overhead gravity shockwave projectile.
+- Anchor Counter (Bottom): Heavy counter slam flattening attackers into the floor.
+- Stance Switch (Top+Right): Jettisons or recalls the heavy blade casing to swap stances.
+- Wellspring Pull (Bottom+Left): Gravity vacuum slash yanking enemies toward you with radial pinch.
+- Collapse Execution (Top+Bottom): Armored dash impale; executes foes below 20 HP in a black hole.
+]],
 
     physics = {
         width_pct      = 0.055,

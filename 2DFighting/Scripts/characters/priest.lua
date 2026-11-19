@@ -31,6 +31,22 @@ end
 
 local Character = {
     name = "ChromaticPriest",
+    description = [[
+AURA SHIFTER / INQUISITOR
+Chromatic zealot whose attacks channel 4 distinct sacred/forbidden auras (White, Red, Dark, Purple).
+
+PASSIVE:
+Maintains an orbiting halo and active Aura (0=White, 1=Red, 2=Dark, 3=Purple) updated per skill.
+
+MOVE LIST:
+- Sanctified Ray (Right): Attunes White aura and fires a disciplined mid-range smite.
+- Benediction Pulse (Bottom+Right): Attunes White aura and restores 12 HP.
+- Crimson Censer (Top): Attunes Red aura; 3 hits ignite Sunburn to launch the opponent.
+- Abyssal Heresy (Left): Attunes Dark aura; spends 7 HP for an unblockable overhead stealing 12 HP.
+- Violet Warp (Bottom): Attunes Purple aura and blinks forward leaving arcane afterimages.
+- Chromatic Shift (Top+Left): Detonates active aura bonus (knockback / burn flash / heal / extra hitstop).
+- Lux Aeterna (Top+Bottom): Armored full-spectrum block-breaking prism beam that heals 14 HP on hit.
+]],
 
     physics = {
         width_pct      = 0.05,
