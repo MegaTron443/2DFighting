@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using MoonSharp.Interpreter;
 using Raylib_cs;
 
@@ -64,6 +66,11 @@ public class SoundHandler : IDisposable
         Current = this;
     }
 
+    public static bool IsSoundValid(Sound sound)
+    {
+        return Raylib.IsAudioDeviceReady() && sound.frameCount > 0 && sound.stream.sampleRate > 0;
+    }
+
     private void LoadSharedSoundBanks()
     {
         _sharedSoundBank = Character_Sounds.CreateSharedBank();
@@ -71,17 +78,44 @@ public class SoundHandler : IDisposable
 
     private void GenerateProceduralCosmicSounds()
     {
-        _proceduralSounds["cosmic_sub_drop"] = CreateSineSweepSound(startHz: 68f, endHz: 32f, durationSec: 0.45f, volume: 0.95f);
-        _proceduralSounds["cosmic_heavy_slash"] = CreateSineSweepSound(startHz: 140f, endHz: 42f, durationSec: 0.25f, volume: 0.85f);
-        _proceduralSounds["cosmic_light_slash"] = CreateSineSweepSound(startHz: 880f, endHz: 1480f, durationSec: 0.12f, volume: 0.65f);
-        _proceduralSounds["cosmic_recall"] = CreateSineSweepSound(startHz: 180f, endHz: 620f, durationSec: 0.22f, volume: 0.80f);
-        _proceduralSounds["prism_chime"] = CreateSineSweepSound(startHz: 1046.5f, endHz: 2093f, durationSec: 0.30f, volume: 0.60f);
+        if (!Raylib.IsAudioDeviceReady())
+        {
+            DiagnosticsLogger.LogSilentIssueOnce(
+                "audio_device_not_ready",
+                "Audio device is not ready; procedural sounds were not generated.",
+                LogSeverity.Warning
+            );
+            return;
+        }
+
+        RegisterProcedural("default",            CreateSineSweepSound(startHz: 420f,    endHz: 260f,  durationSec: 0.10f, volume: 0.50f));
+        RegisterProcedural("cosmic_sub_drop",    CreateSineSweepSound(startHz: 68f,     endHz: 32f,   durationSec: 0.45f, volume: 0.95f));
+        RegisterProcedural("cosmic_heavy_slash", CreateSineSweepSound(startHz: 140f,    endHz: 42f,   durationSec: 0.25f, volume: 0.85f));
+        RegisterProcedural("cosmic_light_slash", CreateSineSweepSound(startHz: 880f,    endHz: 1480f, durationSec: 0.12f, volume: 0.65f));
+        RegisterProcedural("cosmic_recall",      CreateSineSweepSound(startHz: 180f,    endHz: 620f,  durationSec: 0.22f, volume: 0.80f));
+        RegisterProcedural("prism_chime",        CreateSineSweepSound(startHz: 1046.5f, endHz: 2093f, durationSec: 0.30f, volume: 0.60f));
+    }
+
+    private void RegisterProcedural(string name, Sound sound)
+    {
+        if (IsSoundValid(sound))
+        {
+            _proceduralSounds[name] = sound;
+        }
+        else
+        {
+            DiagnosticsLogger.LogSilentIssueOnce(
+                $"proc_sound_failed_{name}",
+                $"Failed to generate procedural sound '{name}'.",
+                LogSeverity.Error
+            );
+        }
     }
 
     private static unsafe Sound CreateSineSweepSound(float startHz, float endHz, float durationSec, float volume)
     {
         const int sampleRate = 44100;
-        int sampleCount = (int)(sampleRate * durationSec);
+        int sampleCount = Math.Max(1, (int)(sampleRate * durationSec));
         short* pcm = (short*)Raylib.MemAlloc((int)(sampleCount * sizeof(short)));
 
         float phase = 0f;
@@ -100,6 +134,7 @@ public class SoundHandler : IDisposable
 
         Wave wave = new Wave
         {
+            sampleCount = (uint)sampleCount,
             sampleRate = sampleRate,
             sampleSize = 16,
             channels = 1,
@@ -132,6 +167,12 @@ public class SoundHandler : IDisposable
     {
         if (_buses.TryGetValue(busName, out var bus))
             return _masterVolume * bus.EffectiveVolume;
+
+        DiagnosticsLogger.LogSilentIssueOnce(
+            $"invalid_audio_bus_{busName}",
+            $"Unknown audio bus '{busName}'; defaulting to master volume.",
+            LogSeverity.Warning
+        );
         return _masterVolume;
     }
 
@@ -142,6 +183,14 @@ public class SoundHandler : IDisposable
         {
             bus.BaseVolume = Math.Clamp(volume, 0f, 1f);
         }
+        else
+        {
+            DiagnosticsLogger.LogSilentIssueOnce(
+                $"set_invalid_bus_vol_{busName}",
+                $"SetAudioBusVolume called with unknown bus '{busName}'.",
+                LogSeverity.Warning
+            );
+        }
     }
 
     public static void SetBusLowPassFromLua(string busName, float cutoffHz)
@@ -150,7 +199,6 @@ public class SoundHandler : IDisposable
         if (Current._buses.TryGetValue(busName, out var bus))
         {
             bus.LowPassCutoffHz = Math.Clamp(cutoffHz, 60f, 20000f);
-            // Approximation in standard Raylib: lower high-frequency energy by scaling duck slightly when muffled
             float muffleFactor = Math.Clamp(0.35f + (0.65f * (bus.LowPassCutoffHz / 20000f)), 0.1f, 1f);
             bus.DuckMultiplier = Math.Min(bus.DuckMultiplier, muffleFactor);
         }
@@ -207,7 +255,15 @@ public class SoundHandler : IDisposable
             }
         }
 
-        if (string.IsNullOrEmpty(soundName)) return;
+        if (string.IsNullOrEmpty(soundName))
+        {
+            DiagnosticsLogger.LogSilentIssueOnce(
+                "lua_playsound_empty",
+                "PlaySound called from Lua with an empty or missing sound name.",
+                LogSeverity.Warning
+            );
+            return;
+        }
 
         Current.PlayEx(player, soundName, bus, pitch, volumeMult);
     }
@@ -219,12 +275,14 @@ public class SoundHandler : IDisposable
         float finalVolume = Math.Clamp(GetBusEffectiveVolume(busName) * volumeMult, 0f, 1f);
         float finalPitch = Math.Clamp(pitch, 0.2f, 3.0f);
 
-        if (_proceduralSounds.TryGetValue(soundNameOrType, out Sound procSound))
+        // 1. Procedural sound bank
+        if (_proceduralSounds.TryGetValue(soundNameOrType, out Sound procSound) && IsSoundValid(procSound))
         {
             DispatchRaylibSound(procSound, finalVolume, finalPitch);
             return;
         }
 
+        // 2. General SoundType enum
         if (Enum.TryParse<SoundType>(soundNameOrType, ignoreCase: true, out var parsedType) &&
             parsedType != SoundType.Skill)
         {
@@ -232,14 +290,40 @@ public class SoundHandler : IDisposable
             return;
         }
 
+        // 3. Skill sound bank (with automatic fallback inside)
         PlaySkillSoundInternal(player, soundNameOrType, finalVolume, finalPitch);
     }
 
-    private static void DispatchRaylibSound(Sound sound, float volume, float pitch)
+    private static bool DispatchRaylibSound(Sound sound, float volume, float pitch)
     {
+        if (!IsSoundValid(sound))
+        {
+            DiagnosticsLogger.LogSilentIssueOnce(
+                "dispatch_invalid_sound",
+                "Attempted to play an unloaded or invalid Raylib Sound (frameCount == 0). Blocked to prevent native crash.",
+                LogSeverity.Error
+            );
+            return false;
+        }
+
         Raylib.SetSoundVolume(sound, volume);
         Raylib.SetSoundPitch(sound, pitch);
         Raylib.PlaySound(sound);
+        return true;
+    }
+
+    private void PlayFallbackSound(string missingKey, float volume, float pitch)
+    {
+        DiagnosticsLogger.LogSilentIssueOnce(
+            $"sound_missing_fallback_{missingKey}",
+            $"Sound '{missingKey}' not found in character or shared banks; using procedural fallback.",
+            LogSeverity.Warning
+        );
+
+        if (_proceduralSounds.TryGetValue("default", out Sound fallback) && IsSoundValid(fallback))
+        {
+            DispatchRaylibSound(fallback, volume * 0.6f, pitch);
+        }
     }
 
     public void PlaySound(SoundType soundType)
@@ -273,56 +357,70 @@ public class SoundHandler : IDisposable
             for (int i = 0; i < _activeSoundBanks.Count; i++)
             {
                 if (_activeSoundBanks[i].CharacterName == targetName &&
-                    _activeSoundBanks[i].TryGetSound(soundType, out Sound sound))
+                    _activeSoundBanks[i].TryGetSound(soundType, out Sound sound) &&
+                    DispatchRaylibSound(sound, volume, pitch))
                 {
-                    DispatchRaylibSound(sound, volume, pitch);
                     return;
                 }
             }
 
-            if (_sharedSoundBank != null && _sharedSoundBank.TryGetSound(soundType, out Sound sharedSound))
+            if (_sharedSoundBank != null &&
+                _sharedSoundBank.TryGetSound(soundType, out Sound sharedSound) &&
+                DispatchRaylibSound(sharedSound, volume, pitch))
             {
-                DispatchRaylibSound(sharedSound, volume, pitch);
                 return;
             }
+
+            PlayFallbackSound($"{targetName}:{soundType}", volume, pitch);
             return;
         }
 
-        if (_sharedSoundBank != null && _sharedSoundBank.TryGetSound(soundType, out Sound globalShared))
+        if (_sharedSoundBank != null &&
+            _sharedSoundBank.TryGetSound(soundType, out Sound globalShared) &&
+            DispatchRaylibSound(globalShared, volume, pitch))
         {
-            DispatchRaylibSound(globalShared, volume, pitch);
             return;
         }
 
         for (int i = 0; i < _activeSoundBanks.Count; i++)
         {
-            if (_activeSoundBanks[i].TryGetSound(soundType, out Sound charSound))
+            if (_activeSoundBanks[i].TryGetSound(soundType, out Sound charSound) &&
+                DispatchRaylibSound(charSound, volume, pitch))
             {
-                DispatchRaylibSound(charSound, volume, pitch);
                 return;
             }
         }
+
+        PlayFallbackSound($"Global:{soundType}", volume, pitch);
     }
 
     private void PlaySkillSoundInternal(Player? player, string skillName, float volume, float pitch)
     {
-        if (PhysicsEngine.IsTrainingMode || volume <= 0f || player?.CurrentCharacter == null) return;
+        if (PhysicsEngine.IsTrainingMode || volume <= 0f) return;
 
-        string targetName = player.CurrentCharacter.Name;
-        for (int i = 0; i < _activeSoundBanks.Count; i++)
+        string targetName = player?.CurrentCharacter?.Name ?? "Global";
+
+        if (player?.CurrentCharacter != null)
         {
-            if (_activeSoundBanks[i].CharacterName == targetName &&
-                _activeSoundBanks[i].TryGetSound(SoundType.Skill, skillName, out Sound sound))
+            for (int i = 0; i < _activeSoundBanks.Count; i++)
             {
-                DispatchRaylibSound(sound, volume, pitch);
-                return;
+                if (_activeSoundBanks[i].CharacterName == targetName &&
+                    _activeSoundBanks[i].TryGetSound(SoundType.Skill, skillName, out Sound sound) &&
+                    DispatchRaylibSound(sound, volume, pitch))
+                {
+                    return;
+                }
             }
         }
 
-        if (_sharedSoundBank != null && _sharedSoundBank.TryGetSound(SoundType.Skill, skillName, out Sound sharedSkillSound))
+        if (_sharedSoundBank != null &&
+            _sharedSoundBank.TryGetSound(SoundType.Skill, skillName, out Sound sharedSkillSound) &&
+            DispatchRaylibSound(sharedSkillSound, volume, pitch))
         {
-            DispatchRaylibSound(sharedSkillSound, volume, pitch);
+            return;
         }
+
+        PlayFallbackSound($"{targetName}:Skill:{skillName}", volume, pitch);
     }
 
     public void ReloadCharacterBanks(Player? p1, Player? p2)
@@ -358,7 +456,10 @@ public class SoundHandler : IDisposable
 
         foreach (var proc in _proceduralSounds.Values)
         {
-            Raylib.UnloadSound(proc);
+            if (IsSoundValid(proc))
+            {
+                Raylib.UnloadSound(proc);
+            }
         }
         _proceduralSounds.Clear();
 
