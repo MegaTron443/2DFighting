@@ -34,15 +34,6 @@ public class CharacterRenderer
     private const float FacingLeftTintFactor = 0.8f;
     private const byte DebugOverlayAlpha = 90;
 
-    private static readonly Texture2D WhitePixelTexture = new()
-    {
-        id = 1,
-        width = 1,
-        height = 1,
-        mipmaps = 1,
-        format = PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
-    };
-
     private readonly List<SpritePart> _sortedParts = new();
 
     public Texture2D? SpriteSheet { get; set; }
@@ -179,7 +170,7 @@ public class CharacterRenderer
             {
                 Vector2 origin = new Vector2(partW * 0.5f, partH * 0.5f);
                 Rectangle centeredDest = new Rectangle(hurtbox.CenterX() + offX, hurtbox.CenterY() + offY, partW, partH);
-                Raylib.DrawTexturePro(WhitePixelTexture, new Rectangle(0, 0, 1, 1), centeredDest, origin, rot, part.FallbackColor);
+                Raylib.DrawTexturePro(SharedTextures.WhitePixel, new Rectangle(0, 0, 1, 1), centeredDest, origin, rot, part.FallbackColor);
             }
 
             part.Material.End(shaderStarted);

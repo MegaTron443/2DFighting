@@ -40,7 +40,7 @@ public enum GameDirection
     UpLeft
 }
 
-public class PlayerAI
+public class PlayerAI : IDisposable
 {
     private readonly Player _self;
     private Player? _opponent;
@@ -231,5 +231,10 @@ public class PlayerAI
             AIDifficulty.Hard   => 0.05f,
             _                   => 0.14f
         };
+    }
+
+    public void Dispose()
+    {
+        MacroTacticalModel.DiscardTrajectory(_episodeTrajectory);
     }
 }

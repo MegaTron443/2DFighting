@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using System.Numerics;
 using MoonSharp.Interpreter;
 
@@ -25,11 +23,14 @@ public class LuaEngine
         UserData.RegisterType<Character>();
         UserData.RegisterType<Player>();
         UserData.RegisterType<SkillData>();
+        UserData.RegisterType<LuaFloatStore>();
         UserData.RegisterType<PhysicsEngine>();
         UserData.RegisterType<Projectile>();
         UserData.RegisterType<Vector2>();
         UserData.RegisterType<RenderMaterial>();
         UserData.RegisterType(typeof(PostFXManager));
+        UserData.RegisterType<Scene>();
+        UserData.RegisterType<SceneLayer>();
 
         ScriptRuntime = new Script();
 
@@ -66,6 +67,20 @@ public class LuaEngine
         ScriptRuntime.Globals["SetHitstop"] = (Action<float>)(frames => PhysicsEngine.HitstopTimer = MathF.Max(PhysicsEngine.HitstopTimer, frames * Timer.FixedDeltaTime));
         
         ScriptRuntime.Globals["SpawnVFX"] = (Action<Player, Table>)VFXManager.SpawnFromLua;
+
+        ScriptRuntime.Globals["AddSceneLayer"] = (Func<string, string?, string?, bool, SceneLayer?>)SceneManager.AddLayerFromLua;
+        ScriptRuntime.Globals["GetSceneLayer"] = (Func<string, SceneLayer?>)SceneManager.GetLayerFromLua;
+        ScriptRuntime.Globals["SetSceneLayerTexture"] = (Action<string, string>)SceneManager.SetLayerTextureFromLua;
+        ScriptRuntime.Globals["SetSceneLayerShader"] = (Action<string, string>)SceneManager.SetLayerShaderFromLua;
+        ScriptRuntime.Globals["SetSceneLayerFloat"] = (Action<string, string, float>)SceneManager.SetLayerFloatFromLua;
+        ScriptRuntime.Globals["SetSceneLayerVec2"] = (Action<string, string, float, float>)SceneManager.SetLayerVec2FromLua;
+        ScriptRuntime.Globals["SetSceneLayerColor"] = (Action<string, string, float, float, float>)SceneManager.SetLayerColorFromLua;
+        ScriptRuntime.Globals["SetSceneLayerTint"] = (Action<string, int, int, int, int>)SceneManager.SetLayerTintFromLua;
+
+        ScriptRuntime.Globals["TriggerCameraFocus"] = (Action<float, float, float, float>)CameraManager.TriggerFocusFromLua;
+        ScriptRuntime.Globals["ClearCameraFocus"] = (Action)CameraManager.ClearFocusFromLua;
+        ScriptRuntime.Globals["SetCameraZoomLimits"] = (Action<float, float>)CameraManager.SetZoomLimitsFromLua;
+        ScriptRuntime.Globals["GetCameraZoom"] = (Func<float>)CameraManager.GetZoomFromLua;
     }
 
     public void Initialize()

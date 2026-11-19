@@ -15,11 +15,15 @@ public class ActivePostFXPass
 public static class PostFXManager
 {
     private static RenderTexture2D _sceneTarget;
+    private static RenderTexture2D _pingPongTarget;
+    private static RenderTexture2D _finalSourceTarget;
+    private static ActivePostFXPass? _finalPass;
     private static int _targetWidth = 0;
     private static int _targetHeight = 0;
     private static bool _isCapturing = false;
 
     private static readonly Dictionary<string, ActivePostFXPass> _activePasses = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly List<ActivePostFXPass> _sortedPasses = new();
 
     private static int _impactFramesRemaining = 0;
     private static float _impactMode = 0f;
@@ -55,15 +59,36 @@ public static class PostFXManager
             {
                 Raylib.UnloadRenderTexture(_sceneTarget);
             }
+            if (_pingPongTarget.id > 0)
+            {
+                Raylib.UnloadRenderTexture(_pingPongTarget);
+                _pingPongTarget = default;
+            }
+            _finalSourceTarget = default;
             _sceneTarget = Raylib.LoadRenderTexture(sw, sh);
             _targetWidth = sw;
             _targetHeight = sh;
         }
     }
 
+    private static void EnsurePingPongTargetSize()
+    {
+        if (_pingPongTarget.id == 0 || _pingPongTarget.texture.width != _targetWidth || _pingPongTarget.texture.height != _targetHeight)
+        {
+            if (_pingPongTarget.id > 0)
+            {
+                Raylib.UnloadRenderTexture(_pingPongTarget);
+            }
+            _pingPongTarget = Raylib.LoadRenderTexture(_targetWidth, _targetHeight);
+        }
+    }
+
     public static void ResetAll()
     {
         _activePasses.Clear();
+        _sortedPasses.Clear();
+        _finalPass = null;
+        _finalSourceTarget = default;
         _impactFramesRemaining = 0;
         _impactMode = 0f;
         _shakeFramesRemaining = 0;
@@ -150,25 +175,72 @@ public static class PostFXManager
         _isCapturing = true;
     }
 
-    public static void EndSceneCaptureAndPresent()
+    public static void EndSceneCapture()
     {
         if (!_isCapturing) return;
         Raylib.EndTextureMode();
         _isCapturing = false;
 
-        Rectangle src = new Rectangle(0, 0, _sceneTarget.texture.width, -_sceneTarget.texture.height);
-        Rectangle dst = new Rectangle(0, 0, Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
-
-        ActivePostFXPass? activePass = null;
-        foreach (var p in _activePasses.Values)
+        _sortedPasses.Clear();
+        foreach (var pass in _activePasses.Values)
         {
-            activePass = p;
-            break;
+            _sortedPasses.Add(pass);
+        }
+        _sortedPasses.Sort((a, b) =>
+        {
+            int cmp = a.Priority.CompareTo(b.Priority);
+            return cmp != 0 ? cmp : string.Compare(a.ShaderId, b.ShaderId, StringComparison.OrdinalIgnoreCase);
+        });
+
+        if (_sortedPasses.Count == 0)
+        {
+            _finalSourceTarget = _sceneTarget;
+            _finalPass = null;
+            return;
         }
 
-        bool shaderStarted = activePass != null && activePass.Material.Begin();
-        Raylib.DrawTexturePro(_sceneTarget.texture, src, dst, Vector2.Zero, 0f, Color.WHITE);
-        activePass?.Material.End(shaderStarted);
+        if (_sortedPasses.Count == 1)
+        {
+            _finalSourceTarget = _sceneTarget;
+            _finalPass = _sortedPasses[0];
+            return;
+        }
+
+        EnsurePingPongTargetSize();
+        RenderTexture2D srcTarget = _sceneTarget;
+        RenderTexture2D dstTarget = _pingPongTarget;
+
+        for (int i = 0; i < _sortedPasses.Count - 1; i++)
+        {
+            Raylib.BeginTextureMode(dstTarget);
+            Raylib.ClearBackground(Color.BLANK);
+
+            Rectangle src = new Rectangle(0, 0, srcTarget.texture.width, -srcTarget.texture.height);
+            Rectangle dst = new Rectangle(0, 0, dstTarget.texture.width, dstTarget.texture.height);
+
+            bool started = _sortedPasses[i].Material.Begin();
+            Raylib.DrawTexturePro(srcTarget.texture, src, dst, Vector2.Zero, 0f, Color.WHITE);
+            _sortedPasses[i].Material.End(started);
+
+            Raylib.EndTextureMode();
+            (srcTarget, dstTarget) = (dstTarget, srcTarget);
+        }
+
+        _finalSourceTarget = srcTarget;
+        _finalPass = _sortedPasses[^1];
+    }
+
+    public static void PresentScene()
+    {
+        RenderTexture2D source = _finalSourceTarget.id > 0 ? _finalSourceTarget : _sceneTarget;
+        if (source.id == 0) return;
+
+        Rectangle src = new Rectangle(0, 0, source.texture.width, -source.texture.height);
+        Rectangle dst = new Rectangle(0, 0, Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
+
+        bool shaderStarted = _finalPass != null && _finalPass.Material.Begin();
+        Raylib.DrawTexturePro(source.texture, src, dst, Vector2.Zero, 0f, Color.WHITE);
+        _finalPass?.Material.End(shaderStarted);
     }
 
     public static void EnablePassFromLua(string shaderId, int priority = 0)
@@ -265,6 +337,14 @@ public static class PostFXManager
             Raylib.UnloadRenderTexture(_sceneTarget);
             _sceneTarget = default;
         }
+        if (_pingPongTarget.id > 0)
+        {
+            Raylib.UnloadRenderTexture(_pingPongTarget);
+            _pingPongTarget = default;
+        }
+        _finalSourceTarget = default;
+        _finalPass = null;
+        _sortedPasses.Clear();
         _activePasses.Clear();
     }
 }

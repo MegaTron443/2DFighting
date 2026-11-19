@@ -141,9 +141,8 @@ public class KeyHandler
 
         float oldestPressTime = buffer.Peek().time;
         bool commitWindowElapsed = (currentTime - oldestPressTime) >= chordCommitDelay;
-        int totalPressedBits = BitOperations.PopCount((uint)combinedMask);
 
-        if (!commitWindowElapsed && totalPressedBits < 3)
+        if (!commitWindowElapsed && HasReadySupersetChord(currentCharacter, combinedMask))
         {
             return !hasInput;
         }
@@ -208,6 +207,20 @@ public class KeyHandler
 
         buffer.Clear();
         return !hasInput;
+    }
+
+    private static bool HasReadySupersetChord(Character character, int combinedMask)
+    {
+        foreach (var skill in character.Skills.Values)
+        {
+            if (skill.TriggerMask == 0) continue;
+            if ((skill.TriggerMask & combinedMask) == combinedMask && skill.TriggerMask != combinedMask)
+            {
+                if (!character.SkillCooldowns.TryGetValue(skill.Name, out float cd) || cd <= 0f)
+                    return true;
+            }
+        }
+        return false;
     }
 
     public void SimulateDirection(GameDirection direction)

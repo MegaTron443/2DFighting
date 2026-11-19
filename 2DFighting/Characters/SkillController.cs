@@ -6,7 +6,7 @@ public class SkillController
     private const int FastPokeMaxStartupFrames = 5;
 
     public Dictionary<string, SkillData> Skills { get; } = new();
-    public Dictionary<string, float> SkillCooldowns { get; } = new();
+    public LuaFloatStore SkillCooldowns { get; } = new();
     public SkillData? ActiveSkill { get; set; }
     public int CurrentActionFrame { get; private set; } = 0;
     public bool HasHit { get; set; } = false;
@@ -35,7 +35,7 @@ public class SkillController
 
     public void ExecuteSkill(Player p, string skillName)
     {
-        if (SkillCooldowns.ContainsKey(skillName) && SkillCooldowns[skillName] > 0) return;
+        if (SkillCooldowns.TryGetValue(skillName, out float cd) && cd > 0f) return;
         if (ActiveSkill != null) return;
         if (p.IsCrouching) return;
 

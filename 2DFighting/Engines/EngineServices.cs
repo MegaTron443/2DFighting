@@ -33,6 +33,7 @@ public class EngineServices
         Lua = new LuaEngine();
         Physics = new PhysicsEngine();
         Current = this;
+        
     }
 
     public void InitializeAll()
@@ -44,6 +45,8 @@ public class EngineServices
         ModManager.Initialize();
         ShaderManager.Initialize();
         PostFXManager.Initialize();
+        SceneManager.Initialize();
+        CameraManager.Initialize();
         LuaMoveTranslator.InitializeCache(Lua);
         GUIEngine.Initialize();
     }
@@ -67,18 +70,27 @@ public class EngineServices
         {
             Sound?.Dispose();
             Sound = null;
+            Player1?.Dispose();
+            Player2?.Dispose();
             Player1 = null;
             Player2 = null;
+            CameraManager.Reset();
         }
     }
 
     public void DisposeAll()
     {
         MacroTacticalModel.SharedInstance.SaveWeights();
+        Player1?.Dispose();
+        Player2?.Dispose();
+        Player1 = null;
+        Player2 = null;
         GUIEngine.Dispose();
         VFXManager.Dispose();
         PostFXManager.Dispose();
+        SceneManager.Dispose();
         ShaderManager.Dispose();
+        SharedTextures.Dispose();
         Character.UnloadAllSpriteSheets();
         Sound?.Dispose();
         Sound = null;

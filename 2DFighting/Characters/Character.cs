@@ -69,7 +69,7 @@ public class Character
 
     public int CurrentActionFrame => SkillController.CurrentActionFrame;
     public Dictionary<string, SkillData> Skills => SkillController.Skills;
-    public Dictionary<string, float> SkillCooldowns => SkillController.SkillCooldowns;
+    public LuaFloatStore SkillCooldowns => SkillController.SkillCooldowns;
 
     public bool HasHit
     {
@@ -83,7 +83,7 @@ public class Character
     public Color PrimaryColor { get; set; } = Color.DARKBLUE;
     public Color SecondaryColor { get; set; } = Color.MAROON;
     public DynValue? OnPassive { get; internal set; }
-    public Dictionary<string, float> CustomData { get; } = new();
+    public LuaFloatStore CustomData { get; } = new();
     public string ScriptHash { get; internal set; } = "";
 
     public static void UnloadAllSpriteSheets() => CharacterLoader.UnloadAllSpriteSheets();
@@ -170,9 +170,10 @@ public class Character
             {
                 p.Velocity.Y = 0f;
             }
-            else if (IsHitboxActive && (ActiveSkill == null || !ActiveSkill.CustomLogic))
+            else if (IsHitboxActive && (ActiveSkill == null || !ActiveSkill.CustomLogic) && !p.HasUsedAirStall)
             {
                 p.Velocity.Y = 0f;
+                p.HasUsedAirStall = true;
             }
             else
             {
@@ -182,6 +183,7 @@ public class Character
         else if (ActiveSkill == null)
         {
             p.IsAirStalled = false;
+            p.HasUsedAirStall = false;
             p.Velocity.X *= Friction;
         }
 

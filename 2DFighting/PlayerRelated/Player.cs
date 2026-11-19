@@ -3,7 +3,7 @@ using Raylib_cs;
 using MoonSharp.Interpreter;
 
 [MoonSharpUserData]
-public class Player
+public class Player : IDisposable
 {
     public Vector2 SpawnPosition { get; }
     public int ComboCount { get; set; } = 0;
@@ -43,6 +43,7 @@ public class Player
     public bool IsInputIdle { get; private set; } = true;
     public bool IsCrouching { get; set; } = false;
     public bool IsAirStalled { get; set; } = false;
+    public bool HasUsedAirStall { get; set; } = false;
     public bool IsHoldingBack { get; set; } = false;
 
     public bool IsNeutralBlocking =>
@@ -65,6 +66,8 @@ public class Player
 
     public float PosX => Position.X;
     public float PosY => Position.Y;
+    public float ScreenWidth => Raylib.GetScreenWidth();
+    public float ScreenHeight => Raylib.GetScreenHeight();
 
     public bool InRecoveryFrames
     {
@@ -143,6 +146,7 @@ public class Player
         IsGrounded = false;
         IsCrouching = false;
         IsAirStalled = false;
+        HasUsedAirStall = false;
         FacingRight = faceRight;
         ComboCount = 0;
         _keyHandler.ClearBuffer(_playerIndex);
@@ -283,15 +287,33 @@ public class Player
         Position.X += dx;
         Position.Y += dy;
     }
+
+    public void TranslatePct(float dxPct, float dyPct)
+    {
+        Position.X += dxPct * Raylib.GetScreenWidth();
+        Position.Y += dyPct * Raylib.GetScreenHeight();
+    }
+
     public void NotifyRoundEnd(bool wonRound)
     {
         _aiController?.OnRoundEnd(wonRound);
-    }  
+    }
 
     public void SetVelocity(float vx, float vy)
     {
         Velocity.X = vx;
         Velocity.Y = vy;
+    }
+
+    public void SetVelocityPct(float vxPct, float vyPct)
+    {
+        Velocity.X = vxPct * Raylib.GetScreenWidth();
+        Velocity.Y = vyPct * Raylib.GetScreenHeight();
+    }
+
+    public void Dispose()
+    {
+        _aiController?.Dispose();
     }
 
     public void Update(float dt)

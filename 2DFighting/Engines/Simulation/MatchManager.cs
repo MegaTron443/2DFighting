@@ -82,7 +82,8 @@ public class MatchManager
         if (!p1Dead && !p2Dead && !timeOut)
             return;
 
-        if (p1Dead && p2Dead)
+        bool isDoubleKO = p1Dead && p2Dead;
+        if (isDoubleKO)
         {
             if (p1.RoundsWon < RoundsToWin - 1) p1.RoundsWon++;
             if (p2.RoundsWon < RoundsToWin - 1) p2.RoundsWon++;
@@ -116,8 +117,8 @@ public class MatchManager
             }
         }
 
-        bool p1WonRound = p2Dead || (timeOut && p1.Health > p2.Health);
-        bool p2WonRound = p1Dead || (timeOut && p2.Health > p1.Health);
+        bool p1WonRound = !isDoubleKO && (p2Dead || (timeOut && p1.Health > p2.Health));
+        bool p2WonRound = !isDoubleKO && (p1Dead || (timeOut && p2.Health > p1.Health));
 
         p1.NotifyRoundEnd(p1WonRound);
         p2.NotifyRoundEnd(p2WonRound);
@@ -145,5 +146,6 @@ public class MatchManager
         p2.ResetState(faceRight: false);
         PostFXManager.ResetAll();
         VFXManager.Clear();
+        CameraManager.SnapTo(p1.Position, p2.Position, SceneManager.CurrentScene?.Bounds); // <-- added
     }
 }

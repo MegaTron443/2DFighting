@@ -88,7 +88,10 @@ public class PhysicsEngine
         if (Match.TickRoundTransition(data, Projectiles, dt))
             return;
 
-        data.SoundHandler?.UpdateTick(dt);
+        if (!Match.IsTrainingMode)
+        {
+            data.SoundHandler?.UpdateTick(dt);
+        }
         PostFXManager.UpdateTick(dt);
 
         if (Match.TickHitstop(p1, p2, dt))
@@ -155,6 +158,7 @@ public class PhysicsEngine
             p.Velocity.Y = 0;
             p.IsGrounded = true;
             p.IsAirStalled = false;
+            p.HasUsedAirStall = false;
         }
         else if (p.Position.Y + halfH < GroundY)
         {

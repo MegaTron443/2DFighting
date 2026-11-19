@@ -127,8 +127,7 @@ public class Button
             ShaderManager.SetFloat(btnShader, "u_Selected", IsSelected ? 1.0f : 0.0f);
             ShaderManager.SetVec3(btnShader, "u_AccentColor", AccentColor);
 
-            Texture2D defaultTex = new Texture2D { id = 1, width = 1, height = 1, mipmaps = 1, format = PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
-            Raylib.DrawTexturePro(defaultTex, new Rectangle(0, 0, 1, 1), bounds, Vector2.Zero, 0f, Color.WHITE);
+            Raylib.DrawTexturePro(SharedTextures.WhitePixel, new Rectangle(0, 0, 1, 1), bounds, Vector2.Zero, 0f, Color.WHITE);
 
             Raylib.EndShaderMode();
         }

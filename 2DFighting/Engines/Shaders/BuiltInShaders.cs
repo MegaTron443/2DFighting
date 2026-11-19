@@ -5,6 +5,7 @@ public static class BuiltInShaders
     public const string PostFxCosmicId = "postfx_cosmic";
     public const string SpriteLutId = "sprite_lut";
     public const string UiButtonId = "ui_button";
+    public const string SceneDefaultId = "scene_default";
 
     public const string PostFxCosmicFragment = @"#version 330
 in vec2 fragTexCoord;
@@ -189,10 +190,46 @@ void main()
     finalColor = vec4(col, outerAlpha * 0.95);
 }";
 
+        public const string SceneDefaultFragment = @"#version 330
+    in vec2 fragTexCoord;
+    in vec4 fragColor;
+    out vec4 finalColor;
+
+    uniform float u_Time;
+    uniform float u_GroundYPct;
+
+    void main()
+    {
+        float groundY = (u_GroundYPct > 0.01) ? u_GroundYPct : 0.85;
+        vec2 uv = fragTexCoord;
+
+        if (uv.y < groundY)
+        {
+            float t = uv.y / groundY;
+            vec3 top = vec3(0.08, 0.09, 0.16);
+            vec3 horizon = vec3(0.18, 0.16, 0.28);
+            finalColor = vec4(mix(top, horizon, t), 1.0) * fragColor;
+        }
+        else
+        {
+            float ft = (uv.y - groundY) / (1.0 - groundY);
+            vec3 floorTop = vec3(0.16, 0.16, 0.22);
+            vec3 floorBot = vec3(0.07, 0.07, 0.10);
+            vec3 col = mix(floorTop, floorBot, ft);
+
+            // Crisp highlight line right at GroundY
+            float edge = 1.0 - smoothstep(0.0, 0.004, abs(uv.y - groundY));
+            col = mix(col, vec3(0.55, 0.55, 0.70), edge);
+
+            finalColor = vec4(col, 1.0) * fragColor;
+        }
+    }";
+
     public static readonly IReadOnlyDictionary<string, string> FragmentSources = new Dictionary<string, string>
     {
         [PostFxCosmicId] = PostFxCosmicFragment,
         [SpriteLutId]    = SpriteLutFragment,
-        [UiButtonId]     = UiButtonFragment
+        [UiButtonId]     = UiButtonFragment,
+        [SceneDefaultId] = SceneDefaultFragment
     };
 }

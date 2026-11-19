@@ -62,10 +62,16 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     float alpha = services.Timer.Alpha;
 
+    if (isPlaying)
+    {
+        CameraManager.Update(dt, p1!.Position, p2!.Position, SceneManager.CurrentScene?.Bounds);
+    }
+
     if (isPlaying && !isTraining)
     {
         PostFXManager.BeginSceneCapture();
         DrawArenaScene(p1!, p2!, services.Projectiles, alpha);
+        PostFXManager.EndSceneCapture();
     }
 
     Raylib.BeginDrawing();
@@ -75,7 +81,7 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
     {
         if (!isTraining)
         {
-            PostFXManager.EndSceneCaptureAndPresent();
+            PostFXManager.PresentScene();
         }
         else
         {
@@ -91,11 +97,21 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
 void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, float alpha)
 {
-    Raylib.DrawLine(0, (int)PhysicsEngine.GroundY, Raylib.GetScreenWidth(), (int)PhysicsEngine.GroundY, Color.BLACK);
+    CameraManager.BeginMode();
+
+    SceneManager.DrawBackground(CameraManager.Target);
+
+    Rectangle b = SceneManager.CurrentScene?.Bounds ?? new Rectangle(0, 0, Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
+    Raylib.DrawLine((int)b.x, (int)PhysicsEngine.GroundY, (int)(b.x + b.width), (int)PhysicsEngine.GroundY, Color.BLACK);
+
     p1.Draw(alpha);
     p2.Draw(alpha);
     projectiles.Draw(alpha);
     VFXManager.Draw();
+
+    SceneManager.DrawForeground(CameraManager.Target);
+
+    CameraManager.EndMode();
 }
 
 void HandlePauseInput()
