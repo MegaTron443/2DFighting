@@ -222,7 +222,10 @@ Passed to callbacks as `player`, `owner`, `attacker`, `defender`, or `hit_player
 | `player.IsGrounded` | `bool` | R/W | `true` when standing on `PhysicsEngine.GroundY`. |
 | `player.IsCrouching` | `bool` | R/W | `true` when crouching (shrinks hurtbox to `65%` height). |
 | `player.IsAirStalled` | `bool` | R/W | `true` when suspended mid-air in hitstun with zero gravity. |
+| `player.HasUsedAirStall` | `bool` | R/W | `true` once the single aerial hitbox Y-freeze per jump has been consumed; resets when grounded. |
 | `player.IsHoldingBack` | `bool` | R/W | `true` when holding away from facing direction. |
+| `player.ScreenWidth` | `float` | Read | Current viewport width in pixels (`Raylib.GetScreenWidth()`). |
+| `player.ScreenHeight` | `float` | Read | Current viewport height in pixels (`Raylib.GetScreenHeight()`). |
 | `player.FacingRight` | `bool` | R/W | Facing direction (`true` = right). |
 | `player.IsInHitstun` | `bool` | Read | `HitstunTimer > 0`. |
 | `player.IsStunned` | `bool` | Read | Alias for `IsInHitstun`. |
@@ -239,7 +242,9 @@ Passed to callbacks as `player`, `owner`, `attacker`, `defender`, or `hit_player
 
 ### Methods (`:`)
 - `player:Translate(dxPx, dyPx)` — Moves `Position` by pixel delta.
+- `player:TranslatePct(dxPct, dyPct)` — Moves `Position` by screen-percentage delta (`dxPct * ScreenWidth`, `dyPct * ScreenHeight`).
 - `player:SetVelocity(vxPxPerSec, vyPxPerSec)` — Sets `Velocity` in pixels/sec.
+- `player:SetVelocityPct(vxPct, vyPct)` — Sets `Velocity` scaled by screen dimensions (`vxPct * ScreenWidth`, `vyPct * ScreenHeight`).
 - `player:SavePreviousState()` — Sets `PreviousPosition = Position` (call after teleports).
 
 ---
@@ -280,8 +285,8 @@ Passed as `character` in `on_passive` and `on_customlogic`, or accessed via `pla
 | `character.IsHitboxActive` | `bool` | `true` during `[StartupFrames, StartupFrames + ActiveFrames)`. |
 | `character.IsHyperArmorActive` | `bool` | `true` during `[HyperStartFrame, HyperStartFrame + HyperFrames)`. |
 | `character.Skills` | `Dictionary<string, SkillData>` | All parsed skills keyed by skill table name. |
-| `character.SkillCooldowns["name"]` | `Dictionary<string, float>` | Remaining cooldown in seconds per skill; write `0` to reset cooldowns immediately. |
-| `character.CustomData["key"]` | `Dictionary<string, float>` | Per-character persistent `float` storage (e.g., stances, aura IDs, stacks, timers). |
+| `character.SkillCooldowns["name"]` | `LuaFloatStore` | Persistent case-insensitive cooldown dictionary (remaining seconds per skill; write `0` to reset immediately). |
+| `character.CustomData["key"]` | `LuaFloatStore` | Persistent case-insensitive per-character `float` storage (stances, aura IDs, stacks, timers; survives across ticks and resets on `ResetCombatState`). |
 
 ### Compound Sprite Parts, Shaders & Afterimages
 
@@ -508,7 +513,7 @@ Collapse_Execution = {
     on_customlogic    = function(player, character, dt)
         if character.CurrentActionFrame >= 4 and character.CurrentActionFrame <= 12 then
             local dir = player.FacingRight and 1 or -1
-            player:SetVelocity(dir * 1150, 0)
+            player:SetVelocityPct(dir * 1.05, 0)
             character:SpawnAfterimage(160, 35, 255)
         end
     end,
@@ -584,7 +589,7 @@ substitution_jutsu = {
     hitStun = 0.80, cooldown_time = 3.0,
     is_counter = true,
     on_counter = function(defender, attacker)
-        local behindOffset = attacker.FacingRight and -110 or 110
+        local behindOffset = (attacker.FacingRight and -0.11 or 0.11) * defender.ScreenWidth
         defender.Position = NewVec2(attacker.PosX + behindOffset, attacker.PosY)
         defender.FacingRight = attacker.FacingRight
         defender:SavePreviousState()
