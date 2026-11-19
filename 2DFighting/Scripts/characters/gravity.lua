@@ -11,17 +11,15 @@ local COLLAPSE_DASH_VEL_X_PCT   = 1.05
 local function SetStance(character, stance)
     character.CustomData["stance"] = stance
     if stance == 0 then
-        -- FUSED STANCE: Heavy, slow, huge black+purple odachi
         character.WalkSpeedPct = 0.21
         character.GravityPct   = 1.48
-        character:SetPartVisible("sword_heavy", true)
-        character:SetPartShaderColor("sword_core", "u_GlowColor", 160, 50, 255)
+        character:SetPartVisible("sword", true)
+        character:SetPartShaderColor("sword", "u_GlowColor", 215, 165, 255)
     else
-        -- SPLIT STANCE: Agile, floaty, lightweight purple core only
         character.WalkSpeedPct = 0.33
         character.GravityPct   = 1.05
-        character:SetPartVisible("sword_heavy", false)
-        character:SetPartShaderColor("sword_core", "u_GlowColor", 220, 120, 255)
+        character:SetPartVisible("sword", true)
+        character:SetPartShaderColor("sword", "u_GlowColor", 240, 200, 255)
     end
 end
 
@@ -39,7 +37,7 @@ MOVE LIST:
 - Gravity Upper (Top): Fused zeroes victim gravity on launch; Split slams aerial foes downward.
 - Event Horizon (Left): Overhead gravity shockwave projectile.
 - Anchor Counter (Bottom): Heavy counter slam flattening attackers into the floor.
-- Stance Switch (Top+Right): Jettisons or recalls the heavy blade casing to swap stances.
+- Stance Switch (Top+Right): Shifts gravity stance and empowers the cosmic edge.
 - Wellspring Pull (Bottom+Left): Gravity vacuum slash yanking enemies toward you with radial pinch.
 - Collapse Execution (Top+Bottom): Armored dash impale; executes foes below 20 HP in a black hole.
 ]],
@@ -54,73 +52,89 @@ MOVE LIST:
     },
 
     rendering = {
-        frame_width  = 128,
-        frame_height = 128,
+        frame_width  = 256,
+        frame_height = 256,
         body_color   = { 45, 38, 65 },
-        shader       = "sprite_lut",
+        shader       = "gravity_ink",
 
         parts = {
-            body = {
+            left_leg = {
+                sprite_sheet = "Assets/Characters/gravity/left_leg.png",
+                shader       = "gravity_ink",
                 z_order      = 1,
-                shader       = "sprite_lut",
-                width_pct    = 1.0,
-                height_pct   = 0.78,
-                y_offset_pct = 0.11,
-                color        = { 55, 48, 80 }
+                x_offset_pct = -0.17,
+                y_offset_pct = 0.36,
+                width_pct    = 0.30,
+                height_pct   = 0.26
             },
-            head_portal = {
+            right_leg = {
+                sprite_sheet = "Assets/Characters/gravity/right_leg.png",
+                shader       = "gravity_ink",
+                z_order      = 1,
+                x_offset_pct = 0.17,
+                y_offset_pct = 0.36,
+                width_pct    = 0.30,
+                height_pct   = 0.26
+            },
+            body = {
+                sprite_sheet = "Assets/Characters/gravity/body.png",
+                shader       = "gravity_ink",
                 z_order      = 2,
-                shader       = "sprite_lut",
-                portal_mode  = true,
-                width_pct    = 0.65,
-                height_pct   = 0.26,
-                y_offset_pct = -0.40,
-                color        = { 255, 255, 255 }
+                x_offset_pct = 0.0,
+                y_offset_pct = 0.04,
+                width_pct    = 1.00,
+                height_pct   = 0.46
             },
-            sword_core = {
+            head = {
+                sprite_sheet = "Assets/Characters/gravity/head.png",
+                shader       = "gravity_ink",
                 z_order      = 3,
-                shader       = "sprite_lut",
-                is_socket    = true,
-                additive     = true,
-                x_offset_pct = 0.65,
-                y_offset_pct = -0.05,
-                width_pct    = 0.22,
-                height_pct   = 1.05,
-                rotation     = -25,
-                color        = { 175, 60, 255 }
+                x_offset_pct = 0.0,
+                y_offset_pct = -0.27,
+                width_pct    = 0.62,
+                height_pct   = 0.19
             },
-            sword_heavy = {
+            hat = {
+                sprite_sheet = "Assets/Characters/gravity/hat.png",
+                shader       = "gravity_ink",
                 z_order      = 4,
-                shader       = "sprite_lut",
+                x_offset_pct = 0.0,
+                y_offset_pct = -0.39,
+                width_pct    = 1.65,
+                height_pct   = 0.14
+            },
+            sword = {
+                sprite_sheet = "Assets/Characters/gravity/sword.png",
+                shader       = "gravity_ink",
+                z_order      = 5,
                 is_socket    = true,
                 visible      = true,
-                x_offset_pct = 0.72,
-                y_offset_pct = -0.08,
-                width_pct    = 0.42,
-                height_pct   = 1.35,
-                rotation     = -25,
-                color        = { 22, 16, 32 }
+                x_offset_pct = 1.0,
+                y_offset_pct = 0.24,
+                width_pct    = 1.55,
+                height_pct   = 0.62,
+                rotation     = -72
             }
         }
     },
 
     animations = {
-        idle = { start_frame = 0, frame_count = 4, speed = 6.0 },
-        walk = { start_frame = 4, frame_count = 6, speed = 10.0 },
+        idle = { start_frame = 0, frame_count = 1, speed = 6.0 },
+        walk = { start_frame = 0, frame_count = 1, speed = 10.0 },
         Heavy_Slash = {
             keyframes = {
-                { frame = 10, duration = 8, afterimage = false, weapon_x = -0.35, weapon_y = -0.25, weapon_angle = -75 },
-                { frame = 11, duration = 2, afterimage = true,  weapon_x = 0.90,  weapon_y = -0.05, weapon_angle = 45  },
-                { frame = 12, duration = 2, afterimage = true,  weapon_x = 1.15,  weapon_y = 0.10,  weapon_angle = 88  },
-                { frame = 13, duration = 7, afterimage = false, weapon_x = 0.85,  weapon_y = 0.20,  weapon_angle = 105 }
+                { frame = 0, duration = 8, afterimage = false, weapon_x = -0.35, weapon_y = -0.35, weapon_angle = -45 },
+                { frame = 0, duration = 2, afterimage = true,  weapon_x = 0.35,  weapon_y = -0.10, weapon_angle = 35  },
+                { frame = 0, duration = 2, afterimage = true,  weapon_x = 0.45,  weapon_y = 0.05,  weapon_angle = 75  },
+                { frame = 0, duration = 7, afterimage = false, weapon_x = 0.30,  weapon_y = 0.15,  weapon_angle = 90  }
             }
         },
         Upper_Slash = {
             keyframes = {
-                { frame = 14, duration = 6, afterimage = false, weapon_x = 0.30,  weapon_y = 0.35,  weapon_angle = 125 },
-                { frame = 15, duration = 2, afterimage = true,  weapon_x = 0.80,  weapon_y = -0.30, weapon_angle = -25 },
-                { frame = 16, duration = 2, afterimage = true,  weapon_x = 0.50,  weapon_y = -0.60, weapon_angle = -80 },
-                { frame = 17, duration = 6, afterimage = false, weapon_x = 0.35,  weapon_y = -0.50, weapon_angle = -70 }
+                { frame = 0, duration = 6, afterimage = false, weapon_x = 0.15,  weapon_y = 0.25,  weapon_angle = 110 },
+                { frame = 0, duration = 2, afterimage = true,  weapon_x = 0.40,  weapon_y = -0.25, weapon_angle = 10  },
+                { frame = 0, duration = 2, afterimage = true,  weapon_x = 0.25,  weapon_y = -0.45, weapon_angle = -45 },
+                { frame = 0, duration = 6, afterimage = false, weapon_x = 0.15,  weapon_y = -0.40, weapon_angle = -35 }
             }
         }
     },
@@ -128,12 +142,32 @@ MOVE LIST:
     on_passive = function(player, character, dt)
         if character.CustomData["stance"] == nil then
             SetStance(character, 0)
+
+            character:SetPartShaderVec2("sword", "u_SingularityUV", 0.21, 0.21)
+            character:SetPartShaderFloat("sword", "u_SingularityScale", 0.24)
+            character:SetPartShaderFloat("sword", "u_SingularityAngle", 0.75) -- Tilts accretion disk along the guard!
+
+            -- Left & Right boot black holes
+            character:SetPartShaderVec2("left_leg", "u_SingularityUV", 0.50, 0.90)
+            character:SetPartShaderFloat("left_leg", "u_SingularityScale", 0.42)
+            character:SetPartShaderFloat("left_leg", "u_SingularityAngle", 0.0)
+
+            character:SetPartShaderVec2("right_leg", "u_SingularityUV", 0.50, 0.90)
+            character:SetPartShaderFloat("right_leg", "u_SingularityScale", 0.42)
+            character:SetPartShaderFloat("right_leg", "u_SingularityAngle", 0.0)
+
+            character:SetShaderFloat("u_ParallaxStrength", 0.16)
+            character:SetShaderFloat("u_SpaceScrollSpeed", 0.03)
         end
 
-        local t = (character.CustomData["t"] or 0) + dt
-        character.CustomData["t"] = t
-        local pulse = 150 + math.floor(math.sin(t * 6.0) * 40)
-        character:SetPartShaderColor("sword_core", "u_GlowColor", pulse, 60, 255)
+        character:SetShaderVec2("u_CharacterPos", player.PosX, player.PosY)
+        character:SetShaderVec2("u_CharacterVelocity", player.Velocity.X, player.Velocity.Y)
+
+        local targetFlare = (character.ActiveSkill ~= nil) and 1.35 or 0.0
+        local curFlare = character.CustomData["flare"] or 0.0
+        curFlare = curFlare + (targetFlare - curFlare) * math.min(1.0, dt * 12.0)
+        character.CustomData["flare"] = curFlare
+        character:SetShaderFloat("u_AttackIntensity", curFlare)
     end,
 
     skills = {
@@ -294,6 +328,7 @@ MOVE LIST:
                         PlaySound(player, { sound = "cosmic_recall", pitch = 1.0, volume = 0.95 })
                     end
                 end
+                Log(character.CustomData["stance"])
             end
         },
 

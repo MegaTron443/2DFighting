@@ -104,6 +104,11 @@ public class Character
     public void SetShaderColor(string uniform, float r, float g, float b) => Renderer.SetShaderColor(uniform, r, g, b);
     public void SetShaderFloat(string uniform, float val) => Renderer.SetShaderFloat(uniform, val);
     public void SpawnAfterimage(float r = 165f, float g = 50f, float b = 255f) => Afterimages.RequestAfterimage(r, g, b);
+    public void SetPartShaderVec2(string partName, string uniform, float x, float y) =>
+        Renderer.SetPartShaderVec2(partName, uniform, x, y);
+
+    public void SetShaderVec2(string uniform, float x, float y) =>
+        Renderer.SetShaderVec2(uniform, x, y);
 
     public void Move(Player p, float direction)
     {

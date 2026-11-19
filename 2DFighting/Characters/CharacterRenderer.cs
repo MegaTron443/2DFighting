@@ -18,6 +18,7 @@ public class SpritePart
     public float HeightPct { get; set; } = 1.0f;
     public float RotationDeg { get; set; } = 0f;
     public bool IsSocketProp { get; set; } = false;
+    public bool IsAtlas { get; set; } = false;
     public Color FallbackColor { get; set; } = Color.WHITE;
 }
 
@@ -106,6 +107,20 @@ public class CharacterRenderer
             part.Material.SetFloat(uniform, val);
         }
     }
+    public void SetPartShaderVec2(string partName, string uniform, float x, float y)
+    {
+        if (Parts.TryGetValue(partName, out var part))
+            part.Material.SetVec2(uniform, x, y);
+    }
+
+    public void SetShaderVec2(string uniform, float x, float y)
+    {
+        BaseMaterial.SetVec2(uniform, x, y);
+        foreach (var part in Parts.Values)
+        {
+            part.Material.SetVec2(uniform, x, y);
+        }
+    }
 
     public void Draw(Character character, Player p, AfterimageSystem afterimages, float alpha)
     {
@@ -164,17 +179,55 @@ public class CharacterRenderer
             Texture2D? texToUse = part.Texture ?? (SpriteSheet.HasValue && !part.IsSocketProp ? SpriteSheet : null);
             if (texToUse is { id: > 0 } validTex)
             {
-                DrawAtlasSprite(character, validTex, part.IsSocketProp ? 0 : atlasFrame, p.FacingRight, partDest, Color.WHITE, rot);
-            }
-            else
-            {
-                Vector2 origin = new Vector2(partW * 0.5f, partH * 0.5f);
-                Rectangle centeredDest = new Rectangle(hurtbox.CenterX() + offX, hurtbox.CenterY() + offY, partW, partH);
-                Raylib.DrawTexturePro(SharedTextures.WhitePixel, new Rectangle(0, 0, 1, 1), centeredDest, origin, rot, part.FallbackColor);
+                if (part.Texture.HasValue && !part.IsAtlas)
+                {
+                    DrawSinglePartTexture(character, validTex, p.FacingRight, partDest, Color.WHITE, rot, part.IsSocketProp);
+                }
+                else
+                {
+                    DrawAtlasSprite(character, validTex, part.IsSocketProp ? 0 : atlasFrame, p.FacingRight, partDest, Color.WHITE, rot);
+                }
             }
 
             part.Material.End(shaderStarted);
         }
+    }
+
+    private static void DrawSinglePartTexture(Character character, Texture2D tex, bool facingRight, Rectangle partDest, Color tint, float rotationDeg, bool isSocket)
+    {
+        Rectangle srcRect = new Rectangle(
+            0,
+            0,
+            facingRight ? tex.width : -tex.width,
+            tex.height
+        );
+
+        Rectangle destRect = new Rectangle(
+            partDest.x + character.DrawOffsetX,
+            partDest.y + character.DrawOffsetY,
+            partDest.width,
+            partDest.height
+        );
+
+        Vector2 origin;
+        if (isSocket)
+        {
+            // Hilt is at top-left when facing right, and top-right when horizontally flipped!
+            origin = facingRight
+                ? new Vector2(destRect.width * 0.12f, destRect.height * 0.12f)
+                : new Vector2(destRect.width * 0.88f, destRect.height * 0.12f);
+
+            destRect.x += origin.X;
+            destRect.y += origin.Y;
+        }
+        else
+        {
+            origin = new Vector2(destRect.width * 0.5f, destRect.height * 0.5f);
+            destRect.x += origin.X;
+            destRect.y += origin.Y;
+        }
+
+        Raylib.DrawTexturePro(tex, srcRect, destRect, origin, rotationDeg, tint);
     }
 
     private void DrawBaseSprite(Character character, Player p, Rectangle hurtbox)
