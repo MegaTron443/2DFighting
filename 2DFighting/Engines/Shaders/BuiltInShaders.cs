@@ -1,11 +1,10 @@
-using System.Collections.Generic;
-
 public static class BuiltInShaders
 {
     public const string PostFxCosmicId = "postfx_cosmic";
     public const string SpriteLutId = "sprite_lut";
     public const string UiButtonId = "ui_button";
     public const string SceneDefaultId = "scene_default";
+    public const string CosmicSlashId = "cosmic_slash";
 
     public const string PostFxCosmicFragment = @"#version 330
 in vec2 fragTexCoord;
@@ -79,10 +78,10 @@ in vec4 fragColor;
 out vec4 finalColor;
 
 uniform sampler2D texture0;
-uniform vec3 u_PrimaryColor;   // Main tint for light-gray bands
-uniform vec3 u_SecondaryColor; // Shadow/mid-tone tint
-uniform vec3 u_GlowColor;      // Pure-white energy band tint
-uniform float u_PortalMode;    // > 0.5 renders screen-space cosmic starfield inside sprite
+uniform vec3 u_PrimaryColor;   // Mid-gray armor/cloth tint
+uniform vec3 u_SecondaryColor; // Dark-gray shadow/armor tint
+uniform vec3 u_GlowColor;      // Pure-white energy trim & blade tint
+uniform float u_PortalMode;    // > 0.5 renders screen-space cosmic starfield inside white mask
 uniform float u_Time;
 uniform vec2 u_Resolution;
 
@@ -97,32 +96,49 @@ void main()
 
     float luma = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
 
-    // Screen-Space Cosmic Portal Mode (for Gravity Samurai head/void parts)
-    if (u_PortalMode > 0.5 && luma > 0.25)
+    // Preserve crisp black ink outlines across all parts (including portal head)
+    float outlineMask = 1.0 - smoothstep(0.03, 0.10, luma);
+    vec3 inkColor = vec3(0.02, 0.01, 0.03);
+
+    // Screen-Space Cosmic Portal Mode (head.png white interior, black outline preserved)
+    if (u_PortalMode > 0.5)
     {
         vec2 res = (u_Resolution.x > 0.0) ? u_Resolution : vec2(800.0, 600.0);
         vec2 screenUV = gl_FragCoord.xy / res;
         vec2 cosmicUV = screenUV * 6.0 + vec2(u_Time * 0.15, u_Time * 0.08);
-        float star = step(0.985, hash(floor(cosmicUV * 18.0)));
-        float swirl = 0.5 + 0.5 * sin(cosmicUV.x * 3.0 + sin(cosmicUV.y * 2.5 + u_Time * 2.0));
-        vec3 nebula = mix(vec3(0.05, 0.01, 0.12), vec3(0.55, 0.12, 0.90), swirl) + vec3(star);
-        finalColor = vec4(nebula, tex.a) * fragColor;
+        float star = step(0.984, hash(floor(cosmicUV * 20.0)));
+        float swirl = 0.5 + 0.5 * sin(cosmicUV.x * 3.2 + sin(cosmicUV.y * 2.6 + u_Time * 2.0));
+        vec3 nebula = mix(vec3(0.05, 0.01, 0.14), vec3(0.58, 0.14, 0.95), swirl) + vec3(star * 1.2);
+        vec3 portalCol = mix(nebula, inkColor, outlineMask);
+        finalColor = vec4(portalCol, tex.a) * fragColor;
         return;
     }
 
-    vec3 cDark = (length(u_SecondaryColor) > 0.01) ? u_SecondaryColor : vec3(0.12, 0.10, 0.18);
-    vec3 cMid  = (length(u_PrimaryColor) > 0.01)   ? u_PrimaryColor   : vec3(0.75, 0.75, 0.82);
-    vec3 cGlow = (length(u_GlowColor) > 0.01)      ? u_GlowColor      : vec3(0.85, 0.40, 1.00);
+    vec3 cDark = (length(u_SecondaryColor) > 0.01) ? u_SecondaryColor : vec3(0.14, 0.12, 0.22);
+    vec3 cMid  = (length(u_PrimaryColor) > 0.01)   ? u_PrimaryColor   : vec3(0.45, 0.42, 0.58);
+    vec3 cGlow = (length(u_GlowColor) > 0.01)      ? u_GlowColor      : vec3(0.72, 0.25, 1.00);
 
     vec3 mapped;
-    if (luma < 0.5)
-        mapped = mix(cDark, cMid, luma * 2.0);
-    else if (luma < 0.88)
-        mapped = mix(cMid, cGlow, (luma - 0.5) / 0.38);
+    if (luma < 0.45)
+    {
+        // Dark gray armor panels -> Secondary to Primary
+        float t = clamp((luma - 0.10) / 0.35, 0.0, 1.0);
+        mapped = mix(cDark, cMid, t);
+    }
+    else if (luma < 0.85)
+    {
+        // Light gray highlights (e.g. sword_1 tsuba, armor accents)
+        float t = (luma - 0.45) / 0.40;
+        mapped = mix(cMid, mix(cMid * 1.45, cGlow, 0.35), t);
+    }
     else
-        mapped = cGlow * 1.25;
+    {
+        // Pure white bands (body stripes/diamonds, hat rim, sword_2 energy blade)
+        mapped = cGlow * 1.15;
+    }
 
-    finalColor = vec4(mapped, tex.a) * fragColor;
+    vec3 finalRgb = mix(mapped, inkColor, outlineMask);
+    finalColor = vec4(finalRgb, tex.a) * fragColor;
 }";
 
     public const string UiButtonFragment = @"#version 330
@@ -225,11 +241,89 @@ void main()
         }
     }";
 
+    public const string CosmicSlashFragment = @"#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+out vec4 finalColor;
+
+uniform float u_Time;
+uniform float u_Progress;    // 0.0 -> 1.0 over slash lifetime
+uniform vec3 u_AccentColor;  // Edge highlight
+uniform float u_FlipX;       // 1.0 when facing left
+uniform float u_Reverse;     // 0.0 = Top->Bottom (overhead), 1.0 = Bottom->Top (uppercut)
+
+float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float starField(vec2 uv, float density) {
+    vec2 id = floor(uv * density);
+    vec2 gv = fract(uv * density) - 0.5;
+    float rnd = hash21(id);
+    if (rnd < 0.84) return 0.0;
+    vec2 off = vec2(hash21(id + 11.3), hash21(id + 27.1)) - 0.5;
+    return smoothstep(0.16, 0.0, length(gv - off * 0.55));
+}
+
+void main()
+{
+    vec2 uv = fragTexCoord;
+    vec2 p = (uv - 0.5) * 2.0;
+    float r = length(p);
+    float angle = atan(p.y, p.x);
+
+    // Sweeps from uv.y=0 (top normally, bottom when src.height = -1) to uv.y=1
+    float startA = -2.25;
+    float endA   =  1.45;
+    float arcT = (angle - startA) / (endA - startA);
+    if (arcT < 0.0 || arcT > 1.0) discard;
+
+    // Readable whip sweep: head leads from 0->1 over first 45% of lifetime, tail chases behind
+    float head = smoothstep(0.0, 0.45, u_Progress);
+    float tail = smoothstep(0.12, 1.0, u_Progress);
+
+    float span = max(0.001, head - tail);
+    float localT = (arcT - tail) / span; // 0.0 = trailing tail, 1.0 = leading blade tip
+    if (localT <= 0.0 || localT >= 1.0) discard;
+
+    // Asymmetric comet taper: razor-thin at tail (0.0), widest near leading tip (0.85)
+    float taper = pow(localT, 0.65) * smoothstep(1.0, 0.82, localT);
+    float thickness = taper * 0.48 * (1.0 - u_Progress * 0.30);
+    float outerR = 0.94;
+    float innerR = outerR - thickness;
+
+    float outerCut = 1.0 - smoothstep(outerR - 0.02, outerR + 0.01, r);
+    float innerCut = smoothstep(innerR - 0.02, innerR + 0.03, r);
+    float shape = outerCut * innerCut;
+
+    if (shape < 0.02) discard;
+
+    // Dark night-sky interior with pinpoint stars
+    vec2 skyUV = uv * 1.4 + vec2(u_Time * 0.08, -u_Time * 0.05);
+    float stars = starField(skyUV, 26.0) + starField(skyUV + 0.31, 48.0) * 0.75;
+    vec3 darkSky = vec3(0.03, 0.015, 0.085) + vec3(0.95, 0.92, 1.0) * stars * 1.3;
+
+    // Glowing outer edge + white-hot leading tip
+    float edgeBand = smoothstep(outerR - 0.10, outerR - 0.01, r);
+    float hotCore  = smoothstep(outerR - 0.035, outerR - 0.005, r);
+    float tipFlash = smoothstep(0.65, 0.98, localT);
+
+    vec3 accent = (length(u_AccentColor) > 0.01) ? u_AccentColor : vec3(0.72, 0.25, 1.0);
+    vec3 col = mix(darkSky, accent * 1.35, edgeBand * 0.92);
+    col = mix(col, vec3(1.0, 0.97, 1.0), clamp(hotCore * 0.85 + tipFlash * 0.75, 0.0, 1.0));
+
+    float alpha = shape * smoothstep(0.0, 0.18, localT) * (1.0 - smoothstep(0.78, 1.0, u_Progress));
+    finalColor = vec4(col, alpha);
+}";
+
     public static readonly IReadOnlyDictionary<string, string> FragmentSources = new Dictionary<string, string>
     {
         [PostFxCosmicId] = PostFxCosmicFragment,
         [SpriteLutId]    = SpriteLutFragment,
         [UiButtonId]     = UiButtonFragment,
-        [SceneDefaultId] = SceneDefaultFragment
+        [SceneDefaultId] = SceneDefaultFragment,
+        [CosmicSlashId]  = CosmicSlashFragment  
     };
 }

@@ -37,6 +37,8 @@ public class Projectile
 
     public Color FillColor { get; set; } = new Color(255, 140, 0, 220);
     public Color BorderColor { get; set; } = Color.YELLOW;
+    public RenderMaterial Material { get; } = new();
+    public bool RotateToVelocity { get; set; } = true;
 
     public DynValue? Trajectory { get; set; }
     public DynValue? OnHit { get; set; }
@@ -129,9 +131,42 @@ public class Projectile
     public void Draw(float alpha)
     {
         if (!IsActive) return;
-        Rectangle rect = GetRenderHitbox(alpha);
-        Raylib.DrawRectangleRec(rect, FillColor);
-        Raylib.DrawRectangleLinesEx(rect, 2f, BorderColor);
+
+        Rectangle dst = GetRenderHitbox(alpha);
+
+        // Debug mode: plain rectangle hitbox
+        if (Character.ShowDebugBoxes)
+        {
+            Raylib.DrawRectangleRec(dst, FillColor);
+            Raylib.DrawRectangleLinesEx(dst, 2f, BorderColor);
+            return;
+        }
+
+        // Normal mode: render with shader if assigned
+        if (Material.HasShader)
+        {
+            bool shaderStarted = Material.Begin();
+
+            float angleDeg = 0f;
+            Rectangle src = new Rectangle(0, 0, FacingRight ? 1 : -1, 1);
+
+            if (RotateToVelocity && Velocity.LengthSquared() > 1f)
+            {
+                angleDeg = MathF.Atan2(Velocity.Y, Velocity.X) * (180f / MathF.PI);
+                src = new Rectangle(0, 0, 1, 1);
+            }
+
+            Vector2 origin = new Vector2(dst.width * 0.5f, dst.height * 0.5f);
+            Rectangle centeredDst = new Rectangle(dst.x + origin.X, dst.y + origin.Y, dst.width, dst.height);
+
+            Raylib.DrawTexturePro(SharedTextures.WhitePixel, src, centeredDst, origin, angleDeg, FillColor);
+            Material.End(shaderStarted);
+            return;
+        }
+
+        // Fallback for projectiles without a shader
+        Raylib.DrawRectangleRec(dst, FillColor);
+        Raylib.DrawRectangleLinesEx(dst, 2f, BorderColor);
     }
 }
 
@@ -232,6 +267,20 @@ public static class ProjectileFactory
             Trajectory = config.Get("trajectory"),
             OnHit = config.Get("on_hit")
         };
+
+        string? shaderId = config.Get("shader").String;
+        if (!string.IsNullOrEmpty(shaderId))
+        {
+            proj.Material.ShaderId = shaderId;
+            proj.Material.SetColor("u_AccentColor", fill.r, fill.g, fill.b);
+            proj.Material.SetFloat("u_FlipX", 0f);
+            proj.Material.SetFloat("u_ScrollSpeed", (float)(config.Get("scroll_speed").CastToNumber() ?? 1.2));
+        }
+
+        if (!config.Get("rotate_to_velocity").IsNil())
+        {
+            proj.RotateToVelocity = config.Get("rotate_to_velocity").CastToBool();
+        }
 
         PhysicsEngine.SpawnProjectile(proj);
         return proj;

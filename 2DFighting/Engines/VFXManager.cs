@@ -16,7 +16,8 @@ public enum VFXPreset
     Explosion,
     Dust,
     HealGlow,
-    Afterimage
+    Afterimage,
+    SlashArc,
 }
 
 public class VFXInstance
@@ -36,6 +37,8 @@ public class VFXInstance
     public int FrameCount;
     public int FrameWidth;
     public int FrameHeight;
+    public float RotationDeg;
+    public bool FlipY;
 
     public bool IsActive => Elapsed < Lifetime;
     public float Progress => Lifetime > 0f ? Math.Clamp(Elapsed / Lifetime, 0f, 1f) : 1f;
@@ -94,6 +97,7 @@ public static class VFXManager
             VFXPreset.Explosion     => (0.35f, 0.020f, 0.130f, new Color(255, 180, 40, 255),  new Color(220, 40, 0, 255)),
             VFXPreset.Dust          => (0.25f, 0.012f, 0.045f, new Color(200, 190, 175, 220), new Color(140, 130, 120, 180)),
             VFXPreset.HealGlow      => (0.40f, 0.030f, 0.090f, new Color(80, 255, 120, 240),  new Color(30, 200, 80, 200)),
+            VFXPreset.SlashArc => (0.22f, 0.080f, 0.195f, new Color(185, 65, 255, 255), new Color(12, 6, 30, 255)),
             _                       => (0.22f, 0.020f, 0.070f, Color.WHITE, Color.SKYBLUE)
         };
 
@@ -169,6 +173,9 @@ public static class VFXManager
         {
             var last = _activeVfx[^1];
             if (lifetime > 0f) last.Lifetime = lifetime;
+            last.RotationDeg = (float)(config.Get("rotation").CastToNumber() ?? 0.0);
+            last.FlipY = config.Get("flip_y").CastToBool();
+
             if (!string.IsNullOrEmpty(customSprite))
             {
                 Texture2D? tex = TryGetVFXTexture(customSprite);
@@ -265,7 +272,42 @@ public static class VFXManager
                     Raylib.DrawCircleLines((int)vfx.Position.X, (int)vfx.Position.Y, radius * 1.1f, c1);
                     break;
                 }
+                case VFXPreset.SlashArc:
+                {
+                    if (ShaderManager.TryGetShader(BuiltInShaders.CosmicSlashId, out Shader slashShader))
+                    {
+                        float size = vfx.EndRadiusPx * 2f;
+                        Rectangle src = new Rectangle(
+                            0,
+                            0,
+                            vfx.FacingRight ? 1 : -1,
+                            vfx.FlipY ? -1 : 1
+                        );
+                        Rectangle dst = new Rectangle(vfx.Position.X, vfx.Position.Y, size, size);
+                        Vector2 origin = new Vector2(size * 0.5f, size * 0.5f);
+                        float rot = vfx.FacingRight ? vfx.RotationDeg : -vfx.RotationDeg;
 
+                        Raylib.BeginShaderMode(slashShader);
+                        ShaderManager.SetFloat(slashShader, "u_Time", (float)Raylib.GetTime());
+                        ShaderManager.SetFloat(slashShader, "u_Progress", t);
+                        ShaderManager.SetVec3(slashShader, "u_AccentColor", new Vector3(
+                            vfx.PrimaryColor.r / 255f,
+                            vfx.PrimaryColor.g / 255f,
+                            vfx.PrimaryColor.b / 255f
+                        ));
+
+                        Raylib.DrawTexturePro(
+                            SharedTextures.WhitePixel,
+                            src,
+                            dst,
+                            origin,
+                            rot,
+                            Color.WHITE
+                        );
+                        Raylib.EndShaderMode();
+                    }
+                    break;
+                }
                 case VFXPreset.Shockwave:
                 case VFXPreset.HealGlow:
                 default:
