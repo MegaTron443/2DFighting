@@ -50,6 +50,15 @@ public class RenderMaterial
         Raylib.BeginShaderMode(shader);
         ShaderManager.SetFloat(shader, "u_Time", (float)Raylib.GetTime());
         ShaderManager.SetVec2(shader, "u_Resolution", new Vector2(Raylib.GetScreenWidth(), Raylib.GetScreenHeight()));
+        ShaderManager.SetVec2(shader, "u_CameraPos", CameraManager.Target);
+
+        if (ShaderId.Equals(BuiltInShaders.SpriteLutId, StringComparison.OrdinalIgnoreCase))
+        {
+            ShaderManager.SetFloat(shader, "u_PortalMode", 0f);
+            ShaderManager.SetVec3(shader, "u_PrimaryColor", Vector3.Zero);
+            ShaderManager.SetVec3(shader, "u_SecondaryColor", Vector3.Zero);
+            ShaderManager.SetVec3(shader, "u_GlowColor", Vector3.Zero);
+        }
 
         foreach (var (k, v) in FloatUniforms) ShaderManager.SetFloat(shader, k, v);
         foreach (var (k, v) in Vec2Uniforms) ShaderManager.SetVec2(shader, k, v);

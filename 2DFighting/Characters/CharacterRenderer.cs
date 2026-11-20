@@ -61,6 +61,40 @@ public class CharacterRenderer
     {
         if (Parts.TryGetValue(partName, out var part))
             part.Visible = visible;
+        else
+            DiagnosticsLogger.LogSilentIssueOnce(
+                $"missing_part_vis_{partName}",
+                $"SetPartVisible('{partName}') failed: part does not exist in rendering.parts.",
+                LogSeverity.Warning
+            );
+    }
+
+    public void SetPartTexture(string partName, string relativePath)
+    {
+        if (!Parts.TryGetValue(partName, out var part))
+        {
+            DiagnosticsLogger.LogSilentIssueOnce(
+                $"missing_part_tex_{partName}",
+                $"SetPartTexture('{partName}') failed: part does not exist.",
+                LogSeverity.Warning
+            );
+            return;
+        }
+
+        string? resolved = ModManager.ResolveFile(relativePath);
+        if (resolved != null && System.IO.File.Exists(resolved))
+        {
+            part.Texture = CharacterLoader.GetOrLoadSpriteSheet(resolved);
+        }
+    }
+
+    public void SetPartScale(string partName, float widthPct, float heightPct)
+    {
+        if (Parts.TryGetValue(partName, out var part))
+        {
+            part.WidthPct = widthPct;
+            part.HeightPct = heightPct;
+        }
     }
 
     public bool IsPartVisible(string partName)
@@ -148,24 +182,26 @@ public class CharacterRenderer
         int atlasFrame = character.Animator.GetAtlasFrameIndex(character.Animations);
         float dir = p.FacingRight ? 1f : -1f;
 
+        float refHeight = hurtbox.height;
+
         for (int i = 0; i < _sortedParts.Count; i++)
         {
             SpritePart part = _sortedParts[i];
             if (!part.Visible) continue;
 
             float offX = part.OffsetXPct * character.Width * dir;
-            float offY = part.OffsetYPct * character.Height;
+            float offY = part.OffsetYPct * refHeight;
             float rot = part.RotationDeg * dir;
 
             if (part.IsSocketProp && kf.HasValue)
             {
                 offX += kf.Value.WeaponOffsetPct.X * character.Width * dir;
-                offY += kf.Value.WeaponOffsetPct.Y * character.Height;
+                offY += kf.Value.WeaponOffsetPct.Y * refHeight;
                 rot += kf.Value.WeaponAngleDeg * dir;
             }
 
             float partW = character.Width * part.WidthPct;
-            float partH = character.Height * part.HeightPct;
+            float partH = (part.IsSocketProp ? character.Height : refHeight) * part.HeightPct;
 
             Rectangle partDest = new Rectangle(
                 hurtbox.CenterX() + offX - (partW * 0.5f),

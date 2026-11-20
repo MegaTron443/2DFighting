@@ -26,6 +26,10 @@ public class SkillData
     public DynValue? OnCustomLogic { get; set; }
     public DynValue? OnHit { get; set; }
     public string ShortLabel { get; set; } = "";
+    public void SetHitbox(float xOffsetPct, float yOffsetPct, float widthPct, float heightPct)
+    {
+        HitboxOffsetPct = new Rectangle(xOffsetPct, yOffsetPct, widthPct, heightPct);
+    }
 }
 
 public enum AttackHeight

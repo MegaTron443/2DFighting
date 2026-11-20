@@ -19,7 +19,7 @@ public static class CharacterLoader
         "TriggerPaletteShift", "TriggerGravityPinch", "SetHitstop"
     };
 
-    private static Texture2D GetOrLoadSpriteSheet(string fullPath)
+    public static Texture2D GetOrLoadSpriteSheet(string fullPath)
     {
         if (_textureCache.TryGetValue(fullPath, out Texture2D cached))
             return cached;
@@ -171,6 +171,8 @@ public static class CharacterLoader
             if (pTbl.Get("portal_mode").CastToBool())
                 part.Material.SetFloat("u_PortalMode", 1.0f);
 
+            part.IsAtlas = pTbl.Get("is_atlas").CastToBool();
+
             var pCol = pTbl.Get("color").Table;
             if (pCol != null)
             {
@@ -179,7 +181,28 @@ public static class CharacterLoader
                 int b = (int)(pCol.Get(3).CastToNumber() ?? 255);
                 part.FallbackColor = new Color(r, g, b, 255);
                 part.Material.SetColor("u_PrimaryColor", r, g, b);
-                part.Material.SetColor("u_GlowColor", r, g, b);
+            }
+
+            var sCol = pTbl.Get("secondary_color").Table;
+            if (sCol != null)
+            {
+                part.Material.SetColor(
+                    "u_SecondaryColor",
+                    (float)(sCol.Get(1).CastToNumber() ?? 35),
+                    (float)(sCol.Get(2).CastToNumber() ?? 30),
+                    (float)(sCol.Get(3).CastToNumber() ?? 55)
+                );
+            }
+
+            var gCol = pTbl.Get("glow_color").Table;
+            if (gCol != null)
+            {
+                part.Material.SetColor(
+                    "u_GlowColor",
+                    (float)(gCol.Get(1).CastToNumber() ?? 185),
+                    (float)(gCol.Get(2).CastToNumber() ?? 65),
+                    (float)(gCol.Get(3).CastToNumber() ?? 255)
+                );
             }
 
             renderer.AddPart(partName, part);

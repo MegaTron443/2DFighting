@@ -43,6 +43,8 @@ public class Character
     public float DrawOffsetYPct => Renderer.DrawOffsetYPct;
     public int FrameWidth => Renderer.FrameWidth;
     public int FrameHeight => Renderer.FrameHeight;
+    public void SetPartTexture(string partName, string relativePath) => Renderer.SetPartTexture(partName, relativePath);
+    public void SetPartScale(string partName, float widthPct, float heightPct) => Renderer.SetPartScale(partName, widthPct, heightPct);
 
     public RenderMaterial BaseMaterial => Renderer.BaseMaterial;
     public Dictionary<string, SpritePart> Parts => Renderer.Parts;

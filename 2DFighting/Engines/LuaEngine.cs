@@ -81,6 +81,11 @@ public class LuaEngine
         ScriptRuntime.Globals["ClearCameraFocus"] = (Action)CameraManager.ClearFocusFromLua;
         ScriptRuntime.Globals["SetCameraZoomLimits"] = (Action<float, float>)CameraManager.SetZoomLimitsFromLua;
         ScriptRuntime.Globals["GetCameraZoom"] = (Func<float>)CameraManager.GetZoomFromLua;
+
+        ScriptRuntime.Globals["SetHitbox"] = (Action<SkillData, float, float, float, float>)((skill, xOffsetPct, yOffsetPct, widthPct, heightPct) =>
+        {
+            skill.SetHitbox(xOffsetPct, yOffsetPct, widthPct, heightPct);
+        });
     }
 
     public void Initialize()
