@@ -29,11 +29,39 @@ public static class CharacterLoader
         return loaded;
     }
 
+    public static void UnloadUnusedSpriteSheets(IEnumerable<string> activePaths)
+    {
+        HashSet<string> activeSet = activePaths is HashSet<string> existing && Equals(existing.Comparer, StringComparer.OrdinalIgnoreCase)
+            ? existing
+            : new HashSet<string>(activePaths, StringComparer.OrdinalIgnoreCase);
+
+        List<string>? toUnload = null;
+        foreach (string key in _textureCache.Keys)
+        {
+            if (!activeSet.Contains(key))
+            {
+                toUnload ??= new List<string>();
+                toUnload.Add(key);
+            }
+        }
+
+        if (toUnload == null) return;
+
+        for (int i = 0; i < toUnload.Count; i++)
+        {
+            string key = toUnload[i];
+            if (_textureCache.Remove(key, out Texture2D tex) && tex.id > 0)
+            {
+                Raylib.UnloadTexture(tex);
+            }
+        }
+    }
+
     public static void UnloadAllSpriteSheets()
     {
         foreach (var tex in _textureCache.Values)
         {
-            Raylib.UnloadTexture(tex);
+            if (tex.id > 0) Raylib.UnloadTexture(tex);
         }
         _textureCache.Clear();
     }
@@ -60,6 +88,11 @@ public static class CharacterLoader
         ParseRendering(character, t.Get("rendering").Table);
         ParseAnimations(character, t.Get("animations").Table);
         ParseSkills(character, t.Get("skills").Table);
+
+        if (LuaMoveTranslator.HasValidCache(character.Name, character.ScriptHash))
+        {
+            character.RawLuaCode = string.Empty;
+        }
     }
 
     private static Table CreateIsolatedEnvironment(Script script)
@@ -106,6 +139,7 @@ public static class CharacterLoader
             if (fullSheetPath != null && File.Exists(fullSheetPath))
             {
                 renderer.SpriteSheet = GetOrLoadSpriteSheet(fullSheetPath);
+                renderer.SpriteSheetPath = fullSheetPath;
             }
         }
 
@@ -160,6 +194,7 @@ public static class CharacterLoader
                 if (resolvedPartTex != null && File.Exists(resolvedPartTex))
                 {
                     part.Texture = GetOrLoadSpriteSheet(resolvedPartTex);
+                    part.TexturePath = resolvedPartTex;
                 }
             }
 
@@ -292,7 +327,7 @@ public static class CharacterLoader
                 _          => AttackHeight.Mid
             };
 
-            character.Skills[pair.Key.String] = new SkillData
+            character.SkillController.AddSkill(pair.Key.String, new SkillData
             {
                 Name = pair.Key.String,
                 AnimationClipName = sTable.Get("animation").String ?? pair.Key.String,
@@ -316,7 +351,7 @@ public static class CharacterLoader
                 OnCustomLogic = sTable.Get("on_customlogic"),
                 OnHit = sTable.Get("on_hit"),
                 ShortLabel = pair.Key.String.Length > 5 ? pair.Key.String[..5].ToUpperInvariant() : pair.Key.String.ToUpperInvariant()
-            };
+            });
         }
     }
 }

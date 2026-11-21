@@ -90,6 +90,8 @@ public class Character
     public string ScriptHash { get; internal set; } = "";
 
     public static void UnloadAllSpriteSheets() => CharacterLoader.UnloadAllSpriteSheets();
+    public void CollectTexturePaths(HashSet<string> activePaths) => Renderer.CollectTexturePaths(activePaths);
+    public void EnsureTexturesLoaded() => Renderer.EnsureTexturesLoaded();
 
     public Character(string luaFilePath, Script script)
     {

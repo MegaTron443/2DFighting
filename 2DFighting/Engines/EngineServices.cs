@@ -140,6 +140,7 @@ public class EngineServices
 
         Player1 = p1;
         Player2 = p2;
+        PruneUnusedCharacterSpriteSheets();
 
         Projectiles.Clear();
         VFXManager.Clear();
@@ -160,7 +161,7 @@ public class EngineServices
         bool startImmediately,
         bool isTrainingMode)
     {
-        DisposeMatchSession();
+        DisposeMatchSession(unloadTextures: false);
         Match.IsTrainingMode = isTrainingMode;
         SceneManager.LoadMatchScene();
 
@@ -181,6 +182,7 @@ public class EngineServices
 
         Player1 = p1;
         Player2 = p2;
+        PruneUnusedCharacterSpriteSheets();
 
         if (startImmediately)
         {
@@ -202,7 +204,15 @@ public class EngineServices
         }
     }
 
-    public void DisposeMatchSession()
+    public void PruneUnusedCharacterSpriteSheets()
+    {
+        var activePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Player1?.CurrentCharacter?.CollectTexturePaths(activePaths);
+        Player2?.CurrentCharacter?.CollectTexturePaths(activePaths);
+        CharacterLoader.UnloadUnusedSpriteSheets(activePaths);
+    }
+
+    public void DisposeMatchSession(bool unloadTextures = true)
     {
         IsLobbySession = false;
         if (Player1 != null || Player2 != null || Sound != null)
@@ -213,6 +223,10 @@ public class EngineServices
             Player2?.Dispose();
             Player1 = null;
             Player2 = null;
+            if (unloadTextures)
+            {
+                Character.UnloadAllSpriteSheets();
+            }
             Projectiles.Clear();
             VFXManager.Clear();
             PostFXManager.ResetAll();

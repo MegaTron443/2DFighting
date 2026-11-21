@@ -183,6 +183,7 @@ public class LuaEngine
         string cacheKey = $"{characterId}_{slot}";
         if (_characterCache.TryGetValue(cacheKey, out Character? cached))
         {
+            cached.EnsureTexturesLoaded();
             cached.ResetCombatState();
             return cached;
         }

@@ -140,6 +140,12 @@ public static class LuaMoveTranslator
         Converters = { new JsonStringEnumConverter() }
     };
 
+    public static bool HasValidCache(string characterName, string scriptHash)
+    {
+        return _memoryCache.TryGetValue(characterName, out var cached) &&
+               string.Equals(cached.ScriptHash, scriptHash, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Scans all vanilla and modded characters at game startup.
     /// Verifies SHA-256 hashes against Cache/<Character>_Semantics.json and regenerates only if changed.
@@ -167,6 +173,7 @@ public static class LuaMoveTranslator
 
                 Character tempChar = luaEngine.CreateCharacter(charId);
                 CharacterSemanticsCacheFile generated = BuildSemanticsCache(tempChar, currentHash);
+                tempChar.RawLuaCode = string.Empty;
 
                 SaveCacheToDisk(cacheFilePath, generated);
 
@@ -208,6 +215,7 @@ public static class LuaMoveTranslator
         if (_memoryCache.TryGetValue(character.Name, out var cached) &&
             string.Equals(cached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
         {
+            character.RawLuaCode = string.Empty;
             summary = cached.Summary;
             return HydrateFromCache(character, cached);
         }
@@ -217,11 +225,13 @@ public static class LuaMoveTranslator
         if (diskCached != null && string.Equals(diskCached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
         {
             _memoryCache[character.Name] = diskCached;
+            character.RawLuaCode = string.Empty;
             summary = diskCached.Summary;
             return HydrateFromCache(character, diskCached);
         }
 
         var generated = BuildSemanticsCache(character, currentHash);
+        character.RawLuaCode = string.Empty;
         SaveCacheToDisk(diskPath, generated);
         _memoryCache[character.Name] = generated;
 

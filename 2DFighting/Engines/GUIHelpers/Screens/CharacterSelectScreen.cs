@@ -58,6 +58,7 @@ public class CharacterSelectScreen : IUIScreen
                             ctx.Data.Services.Match.ResetMatch(ctx.Data.Player1, ctx.Data.Player2, ctx.Data.Services.Projectiles);
                         else
                             PhysicsEngine.ResetMatch(ctx.Data.Player1, ctx.Data.Player2);
+                        ctx.Data.Services?.PruneUnusedCharacterSpriteSheets();
                         GameState.SetState(State.Playing);
                     }
                 })

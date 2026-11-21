@@ -22,6 +22,9 @@ public static class ModManager
     private static readonly Dictionary<string, string> _vanillaCharacterScripts = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, string> _modCharacterScripts = new(StringComparer.OrdinalIgnoreCase);
 
+    private static readonly Dictionary<ModFilterMode, string[]> _filteredFightersCache = new();
+    private static int _filteredCacheVersion = -1;
+
     private static ModFilterMode _activeModFilter = ModFilterMode.VanillaAndMods;
 
     public static IReadOnlyList<string> ContentRoots => _contentRoots;
@@ -185,6 +188,15 @@ public static class ModManager
 
     public static string[] GetFilteredFighters(ModFilterMode filter)
     {
+        if (_filteredCacheVersion != CatalogVersion)
+        {
+            _filteredFightersCache.Clear();
+            _filteredCacheVersion = CatalogVersion;
+        }
+
+        if (_filteredFightersCache.TryGetValue(filter, out string[]? cached))
+            return cached;
+
         IEnumerable<string> keys = filter switch
         {
             ModFilterMode.VanillaOnly => _vanillaCharacterScripts.Keys,
@@ -192,7 +204,9 @@ public static class ModManager
             _                         => _characterScripts.Keys
         };
 
-        return keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToArray();
+        string[] result = keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToArray();
+        _filteredFightersCache[filter] = result;
+        return result;
     }
 
     public static string? ResolveCharacterScript(string characterId) =>

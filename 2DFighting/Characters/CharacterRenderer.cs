@@ -11,6 +11,7 @@ public class SpritePart
     public int ZOrder { get; set; } = 0;
     public bool Visible { get; set; } = true;
     public Texture2D? Texture { get; set; } = null;
+    public string? TexturePath { get; set; } = null;
     public RenderMaterial Material { get; set; } = new();
     public float OffsetXPct { get; set; } = 0f;
     public float OffsetYPct { get; set; } = 0f;
@@ -38,6 +39,7 @@ public class CharacterRenderer
     private readonly List<SpritePart> _sortedParts = new();
 
     public Texture2D? SpriteSheet { get; set; }
+    public string? SpriteSheetPath { get; set; }
     public bool HasSpriteSheet => SpriteSheet is { id: > 0 };
     public bool HasCompoundParts => _sortedParts.Count > 0;
 
@@ -85,6 +87,33 @@ public class CharacterRenderer
         if (resolved != null && System.IO.File.Exists(resolved))
         {
             part.Texture = CharacterLoader.GetOrLoadSpriteSheet(resolved);
+            part.TexturePath = resolved;
+        }
+    }
+
+    public void CollectTexturePaths(HashSet<string> activePaths)
+    {
+        if (!string.IsNullOrEmpty(SpriteSheetPath))
+            activePaths.Add(SpriteSheetPath);
+
+        for (int i = 0; i < _sortedParts.Count; i++)
+        {
+            string? path = _sortedParts[i].TexturePath;
+            if (!string.IsNullOrEmpty(path))
+                activePaths.Add(path);
+        }
+    }
+
+    public void EnsureTexturesLoaded()
+    {
+        if (!string.IsNullOrEmpty(SpriteSheetPath))
+            SpriteSheet = CharacterLoader.GetOrLoadSpriteSheet(SpriteSheetPath);
+
+        for (int i = 0; i < _sortedParts.Count; i++)
+        {
+            SpritePart part = _sortedParts[i];
+            if (!string.IsNullOrEmpty(part.TexturePath))
+                part.Texture = CharacterLoader.GetOrLoadSpriteSheet(part.TexturePath);
         }
     }
 
@@ -225,8 +254,10 @@ public class CharacterRenderer
                 }
             }
 
-            part.Material.End(shaderStarted);
+            part.Material.End(shaderStarted, keepShaderBound: true);
         }
+
+        ShaderManager.EndShader();
     }
 
     private static void DrawSinglePartTexture(Character character, Texture2D tex, bool facingRight, Rectangle partDest, Color tint, float rotationDeg, bool isSocket)
