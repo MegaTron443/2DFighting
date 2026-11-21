@@ -8,6 +8,75 @@ public static class ShaderManager
 {
     private static readonly Dictionary<string, Shader> _shaders = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<(int shaderId, string uniform), int> _uniformLocations = new();
+    private static readonly Dictionary<uint, uint> _shaderGlobalUploadFrame = new();
+
+    private static string? _currentShaderId = null;
+    private static uint _currentShaderGpuId = 0;
+    private static uint _frameIndex = 0;
+    private static float _frameTime = 0f;
+    private static Vector2 _frameResolution;
+    private static Vector2 _frameCameraPos;
+    private static int _frameUniformUploadCount = 0;
+
+    public static string? CurrentShaderId => _currentShaderId;
+    public static int FrameUniformUploadCount => _frameUniformUploadCount;
+
+    public static void BeginFrame()
+    {
+        _frameIndex++;
+        _frameTime = (float)Raylib.GetTime();
+        _frameResolution = new Vector2(Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
+        _frameCameraPos = CameraManager.Target;
+        _frameUniformUploadCount = 0;
+    }
+
+    public static bool BeginShader(string shaderId, out Shader shader)
+    {
+        if (!TryGetShader(shaderId, out shader))
+        {
+            EndShader();
+            return false;
+        }
+
+        if (_currentShaderGpuId == shader.id)
+        {
+            Rlgl.rlDrawRenderBatchActive();
+            UploadGlobalUniformsOncePerFrame(shader);
+            return true;
+        }
+
+        if (_currentShaderGpuId != 0)
+        {
+            Raylib.EndShaderMode();
+        }
+
+        Raylib.BeginShaderMode(shader);
+        _currentShaderId = shaderId;
+        _currentShaderGpuId = shader.id;
+        UploadGlobalUniformsOncePerFrame(shader);
+        return true;
+    }
+
+    public static void EndShader()
+    {
+        if (_currentShaderGpuId != 0)
+        {
+            Raylib.EndShaderMode();
+            _currentShaderId = null;
+            _currentShaderGpuId = 0;
+        }
+    }
+
+    public static void UploadGlobalUniformsOncePerFrame(Shader shader)
+    {
+        if (_shaderGlobalUploadFrame.TryGetValue(shader.id, out uint lastFrame) && lastFrame == _frameIndex)
+            return;
+
+        _shaderGlobalUploadFrame[shader.id] = _frameIndex;
+        SetFloat(shader, "u_Time", _frameTime);
+        SetVec2(shader, "u_Resolution", _frameResolution);
+        SetVec2(shader, "u_CameraPos", _frameCameraPos);
+    }
 
     public static void Initialize()
     {
@@ -73,25 +142,41 @@ public static class ShaderManager
     public static unsafe void SetFloat(Shader shader, string name, float value)
     {
         int loc = GetLocation(shader, name);
-        if (loc >= 0) Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_FLOAT);
+        if (loc >= 0)
+        {
+            Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_FLOAT);
+            _frameUniformUploadCount++;
+        }
     }
 
     public static unsafe void SetVec2(Shader shader, string name, Vector2 value)
     {
         int loc = GetLocation(shader, name);
-        if (loc >= 0) Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_VEC2);
+        if (loc >= 0)
+        {
+            Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_VEC2);
+            _frameUniformUploadCount++;
+        }
     }
 
     public static unsafe void SetVec3(Shader shader, string name, Vector3 value)
     {
         int loc = GetLocation(shader, name);
-        if (loc >= 0) Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_VEC3);
+        if (loc >= 0)
+        {
+            Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_VEC3);
+            _frameUniformUploadCount++;
+        }
     }
 
     public static unsafe void SetVec4(Shader shader, string name, Vector4 value)
     {
         int loc = GetLocation(shader, name);
-        if (loc >= 0) Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_VEC4);
+        if (loc >= 0)
+        {
+            Raylib.SetShaderValue(shader, loc, &value, ShaderUniformDataType.SHADER_UNIFORM_VEC4);
+            _frameUniformUploadCount++;
+        }
     }
 
     private static void RegisterBuiltInShaders()
@@ -117,6 +202,7 @@ public static class ShaderManager
 
     public static void Dispose()
     {
+        EndShader();
         foreach (var kv in _shaders)
         {
             if (kv.Value.id > 0)
@@ -126,5 +212,6 @@ public static class ShaderManager
         }
         _shaders.Clear();
         _uniformLocations.Clear();
+        _shaderGlobalUploadFrame.Clear();
     }
 }

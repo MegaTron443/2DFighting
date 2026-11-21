@@ -21,6 +21,18 @@ public static class PostFXManager
     private static int _targetWidth = 0;
     private static int _targetHeight = 0;
     private static bool _isCapturing = false;
+    private static bool _defaultPassExplicitlyEnabled = false;
+    private static int _customPassCount = 0;
+    private static bool _hasCapturedFrame = false;
+
+    public static bool HasActiveEffects =>
+        !PhysicsEngine.IsTrainingMode &&
+        (_impactFramesRemaining > 0 ||
+         _shakeFramesRemaining > 0 ||
+         _paletteMix > 0.001f ||
+         MathF.Abs(_pinchAmount) > 0.001f ||
+         _defaultPassExplicitlyEnabled ||
+         _customPassCount > 0);
 
     private static readonly Dictionary<string, ActivePostFXPass> _activePasses = new(StringComparer.OrdinalIgnoreCase);
     private static readonly List<ActivePostFXPass> _sortedPasses = new();
@@ -44,7 +56,6 @@ public static class PostFXManager
 
     public static void Initialize()
     {
-        EnsureRenderTargetSize();
         ResetAll();
     }
 
@@ -89,6 +100,9 @@ public static class PostFXManager
         _sortedPasses.Clear();
         _finalPass = null;
         _finalSourceTarget = default;
+        _defaultPassExplicitlyEnabled = false;
+        _customPassCount = 0;
+        _hasCapturedFrame = false;
         _impactFramesRemaining = 0;
         _impactMode = 0f;
         _shakeFramesRemaining = 0;
@@ -101,6 +115,7 @@ public static class PostFXManager
     public static void UpdateTick(float dt)
     {
         if (PhysicsEngine.IsTrainingMode) return;
+        if (!HasActiveEffects && !_activePasses.ContainsKey(BuiltInShaders.PostFxCosmicId)) return;
 
         var pass = GetOrCreateDefaultPass();
         var mat = pass.Material;
@@ -154,6 +169,15 @@ public static class PostFXManager
         }
         mat.SetFloat("u_PinchAmount", _pinchAmount);
         mat.SetVec2("u_PinchCenter", _pinchCenter.X, _pinchCenter.Y);
+
+        if (_impactFramesRemaining <= 0 &&
+            _shakeFramesRemaining <= 0 &&
+            _paletteMix <= 0.001f &&
+            MathF.Abs(_pinchAmount) <= 0.001f &&
+            !_defaultPassExplicitlyEnabled)
+        {
+            _activePasses.Remove(BuiltInShaders.PostFxCosmicId);
+        }
     }
 
     private static ActivePostFXPass GetOrCreateDefaultPass()
@@ -168,16 +192,22 @@ public static class PostFXManager
 
     public static void BeginSceneCapture()
     {
-        if (PhysicsEngine.IsTrainingMode) return;
+        if (!HasActiveEffects)
+        {
+            _hasCapturedFrame = false;
+            return;
+        }
         EnsureRenderTargetSize();
         Raylib.BeginTextureMode(_sceneTarget);
         Raylib.ClearBackground(Color.RAYWHITE);
         _isCapturing = true;
+        _hasCapturedFrame = true;
     }
 
     public static void EndSceneCapture()
     {
         if (!_isCapturing) return;
+        ShaderManager.EndShader();
         Raylib.EndTextureMode();
         _isCapturing = false;
 
@@ -232,6 +262,7 @@ public static class PostFXManager
 
     public static void PresentScene()
     {
+        if (!_hasCapturedFrame) return;
         RenderTexture2D source = _finalSourceTarget.id > 0 ? _finalSourceTarget : _sceneTarget;
         if (source.id == 0) return;
 
@@ -246,6 +277,14 @@ public static class PostFXManager
     public static void EnablePassFromLua(string shaderId, int priority = 0)
     {
         ShaderManager.LoadOrGet(shaderId);
+        if (shaderId.Equals(BuiltInShaders.PostFxCosmicId, StringComparison.OrdinalIgnoreCase))
+        {
+            _defaultPassExplicitlyEnabled = true;
+        }
+        else if (!_activePasses.ContainsKey(shaderId))
+        {
+            _customPassCount++;
+        }
         var pass = new ActivePostFXPass { ShaderId = shaderId, Priority = priority };
         pass.Material.ShaderId = shaderId;
         _activePasses[shaderId] = pass;
@@ -253,7 +292,13 @@ public static class PostFXManager
 
     public static void DisablePassFromLua(string shaderId)
     {
-        _activePasses.Remove(shaderId);
+        if (_activePasses.Remove(shaderId))
+        {
+            if (shaderId.Equals(BuiltInShaders.PostFxCosmicId, StringComparison.OrdinalIgnoreCase))
+                _defaultPassExplicitlyEnabled = false;
+            else
+                _customPassCount = Math.Max(0, _customPassCount - 1);
+        }
     }
 
     public static void SetUniformFloatFromLua(string shaderId, string uniformName, float value)
@@ -344,6 +389,9 @@ public static class PostFXManager
         }
         _finalSourceTarget = default;
         _finalPass = null;
+        _defaultPassExplicitlyEnabled = false;
+        _customPassCount = 0;
+        _hasCapturedFrame = false;
         _sortedPasses.Clear();
         _activePasses.Clear();
     }

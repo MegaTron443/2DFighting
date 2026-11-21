@@ -69,6 +69,12 @@ public class Platform : IDisposable
 
     public void Draw()
     {
+        DrawPanel(keepShaderBound: false);
+        DrawLandingEdge();
+    }
+
+    public void DrawPanel(bool keepShaderBound = false)
+    {
         Rectangle bounds = GetPixelBounds();
         Color accentCol = new Color(
             (byte)Math.Clamp(AccentColor.X * 255f, 0f, 255f),
@@ -85,7 +91,19 @@ public class Platform : IDisposable
             isSelected: false,
             AccentColor,
             new Color(32, 36, 52, 235),
-            accentCol
+            accentCol,
+            keepShaderBound
+        );
+    }
+
+    public void DrawLandingEdge()
+    {
+        Rectangle bounds = GetPixelBounds();
+        Color accentCol = new Color(
+            (byte)Math.Clamp(AccentColor.X * 255f, 0f, 255f),
+            (byte)Math.Clamp(AccentColor.Y * 255f, 0f, 255f),
+            (byte)Math.Clamp(AccentColor.Z * 255f, 0f, 255f),
+            (byte)255
         );
 
         // Bright top-surface landing edge

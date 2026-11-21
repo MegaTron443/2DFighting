@@ -74,7 +74,10 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
         }
     }
 
-    if (isLiveArena && !isTraining)
+    ShaderManager.BeginFrame();
+
+    bool usePostFx = isLiveArena && !isTraining && PostFXManager.HasActiveEffects;
+    if (usePostFx)
     {
         PostFXManager.BeginSceneCapture();
         DrawArenaScene(p1!, p2!, services.Projectiles, data, alpha);
@@ -86,19 +89,23 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 
     if (isLiveArena)
     {
-        if (!isTraining)
+        if (usePostFx)
         {
             PostFXManager.PresentScene();
         }
         else
         {
             DrawArenaScene(p1!, p2!, services.Projectiles, data, alpha);
-            string trainText = $"Episodes Learned: {MacroTacticalModel.SharedInstance.EpisodesTrained}";
-            Raylib.DrawText(trainText, 20, Raylib.GetScreenHeight() - 40, 22, Color.DARKGREEN);
+            if (isTraining)
+            {
+                string trainText = $"Episodes Learned: {MacroTacticalModel.SharedInstance.EpisodesTrained}";
+                Raylib.DrawText(trainText, 20, Raylib.GetScreenHeight() - 40, 22, Color.DARKGREEN);
+            }
         }
     }
 
     GUIEngine.Draw(data);
+    ShaderManager.EndShader();
     Raylib.EndDrawing();
 }
 
@@ -121,6 +128,7 @@ void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, GameDat
 
     SceneManager.DrawForeground(CameraManager.Target);
 
+    ShaderManager.EndShader();
     CameraManager.EndMode();
 }
 

@@ -67,7 +67,12 @@ public class Scene : IDisposable
     {
         for (int i = 0; i < Platforms.Count; i++)
         {
-            Platforms[i].Draw();
+            Platforms[i].DrawPanel(keepShaderBound: true);
+        }
+        ShaderManager.EndShader();
+        for (int i = 0; i < Platforms.Count; i++)
+        {
+            Platforms[i].DrawLandingEdge();
         }
     }
 

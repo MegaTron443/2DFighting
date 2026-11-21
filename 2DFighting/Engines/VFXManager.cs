@@ -274,7 +274,7 @@ public static class VFXManager
                 }
                 case VFXPreset.SlashArc:
                 {
-                    if (ShaderManager.TryGetShader(BuiltInShaders.CosmicSlashId, out Shader slashShader))
+                    if (ShaderManager.BeginShader(BuiltInShaders.CosmicSlashId, out Shader slashShader))
                     {
                         float size = vfx.EndRadiusPx * 2f;
                         Rectangle src = new Rectangle(
@@ -287,8 +287,6 @@ public static class VFXManager
                         Vector2 origin = new Vector2(size * 0.5f, size * 0.5f);
                         float rot = vfx.FacingRight ? vfx.RotationDeg : -vfx.RotationDeg;
 
-                        Raylib.BeginShaderMode(slashShader);
-                        ShaderManager.SetFloat(slashShader, "u_Time", (float)Raylib.GetTime());
                         ShaderManager.SetFloat(slashShader, "u_Progress", t);
                         ShaderManager.SetVec3(slashShader, "u_AccentColor", new Vector3(
                             vfx.PrimaryColor.r / 255f,
@@ -304,7 +302,7 @@ public static class VFXManager
                             rot,
                             Color.WHITE
                         );
-                        Raylib.EndShaderMode();
+                        ShaderManager.EndShader();
                     }
                     break;
                 }

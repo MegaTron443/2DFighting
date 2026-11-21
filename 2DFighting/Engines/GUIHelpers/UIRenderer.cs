@@ -73,7 +73,8 @@ public static class UIRenderer
         bool isSelected,
         Vector3 accentColor,
         Color fallbackBg,
-        Color fallbackBorder)
+        Color fallbackBorder,
+        bool keepShaderBound = false)
     {
         material.SetVec2("u_Size", bounds.width, bounds.height);
         material.SetFloat("u_Hover", hover);
@@ -87,15 +88,19 @@ public static class UIRenderer
         {
             Texture2D quadTex = (!isBuiltInUi && texture is { id: > 0 } customTex) ? customTex : SharedTextures.WhitePixel;
             Raylib.DrawTexturePro(quadTex, new Rectangle(0, 0, quadTex.width, quadTex.height), bounds, Vector2.Zero, 0f, Color.WHITE);
-            material.End(true);
 
-            if (isBuiltInUi && texture is { id: > 0 } insetTex)
+            bool hasInset = isBuiltInUi && texture is { id: > 0 };
+            material.End(true, keepShaderBound && !hasInset);
+
+            if (hasInset && texture is { id: > 0 } insetTex)
             {
                 Rectangle inset = new Rectangle(bounds.x + 3f, bounds.y + 3f, MathF.Max(2f, bounds.width - 6f), MathF.Max(2f, bounds.height - 6f));
                 Raylib.DrawTexturePro(insetTex, new Rectangle(0, 0, insetTex.width, insetTex.height), inset, Vector2.Zero, 0f, new Color(255, 255, 255, 215));
             }
             return;
         }
+
+        ShaderManager.EndShader();
 
         if (texture is { id: > 0 } fallbackTex)
         {
@@ -106,17 +111,22 @@ public static class UIRenderer
             Raylib.DrawRectangleRec(bounds, fallbackBg);
         }
 
-        material.End(false);
+        material.End(false, keepShaderBound: false);
         float borderWidth = isSelected ? 3f : (hover > 0.25f ? 2f : 1f);
         Raylib.DrawRectangleLinesEx(bounds, borderWidth, fallbackBorder);
     }
 
-    public static int FitFontSize(string text, int preferredSize, int minSize, float maxWidth)
+    public static int FitFontSize(string text, int preferredSize, int minSize, float maxWidth) =>
+        FitFontSize(text, preferredSize, minSize, maxWidth, out _);
+
+    public static int FitFontSize(string text, int preferredSize, int minSize, float maxWidth, out int measuredWidth)
     {
         int size = Math.Max(minSize, preferredSize);
-        while (size > minSize && Raylib.MeasureText(text, size) > maxWidth)
+        measuredWidth = Raylib.MeasureText(text, size);
+        while (size > minSize && measuredWidth > maxWidth)
         {
             size--;
+            measuredWidth = Raylib.MeasureText(text, size);
         }
         return size;
     }

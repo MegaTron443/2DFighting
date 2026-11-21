@@ -25,7 +25,7 @@ void main()
     vec2 center = (u_PinchCenter.x == 0.0 && u_PinchCenter.y == 0.0) ? vec2(0.5, 0.5) : u_PinchCenter;
     
     // Slight zoom when shaking so edges never clamp/smear
-    float zoom = (length(u_ShakeOffset) > 0.0001) ? 0.965 : 1.0;
+    float zoom = (dot(u_ShakeOffset, u_ShakeOffset) > 0.00000001) ? 0.965 : 1.0;
     vec2 uv = (fragTexCoord - center) * zoom + center + u_ShakeOffset;
 
     // Radial Gravity Pinch / Shockwave Warp
@@ -39,13 +39,24 @@ void main()
 
     uv = clamp(uv, vec2(0.001), vec2(0.999));
 
-    // Chromatic Aberration RGB Split
-    vec2 splitOffset = vec2(u_ChromaticSplit, u_ChromaticSplit * 0.4);
-    float r = texture(texture0, clamp(uv + splitOffset, 0.001, 0.999)).r;
-    float g = texture(texture0, uv).g;
-    float b = texture(texture0, clamp(uv - splitOffset, 0.001, 0.999)).b;
-    float a = texture(texture0, uv).a;
-    vec3 col = vec3(r, g, b);
+    // Chromatic Aberration RGB Split (skip extra texture fetches when off)
+    vec3 col;
+    float a;
+    if (abs(u_ChromaticSplit) > 0.0001)
+    {
+        vec2 splitOffset = vec2(u_ChromaticSplit, u_ChromaticSplit * 0.4);
+        float r = texture(texture0, clamp(uv + splitOffset, 0.001, 0.999)).r;
+        vec4 centerSample = texture(texture0, uv);
+        float b = texture(texture0, clamp(uv - splitOffset, 0.001, 0.999)).b;
+        col = vec3(r, centerSample.g, b);
+        a = centerSample.a;
+    }
+    else
+    {
+        vec4 centerSample = texture(texture0, uv);
+        col = centerSample.rgb;
+        a = centerSample.a;
+    }
 
     float luma = dot(col, vec3(0.299, 0.587, 0.114));
 
@@ -64,7 +75,7 @@ void main()
     // Cosmic / Chromatic Palette Shift
     if (u_PaletteMix > 0.001)
     {
-        vec3 tint = (length(u_TintColor) < 0.01) ? vec3(0.55, 0.15, 0.95) : u_TintColor;
+        vec3 tint = (dot(u_TintColor, u_TintColor) < 0.0001) ? vec3(0.55, 0.15, 0.95) : u_TintColor;
         vec3 voidMapped = pow(luma, 1.25) * tint * 1.4;
         col = mix(col, voidMapped, clamp(u_PaletteMix, 0.0, 1.0));
     }
@@ -114,9 +125,9 @@ void main()
         return;
     }
 
-    vec3 cDark = (length(u_SecondaryColor) > 0.01) ? u_SecondaryColor : vec3(0.14, 0.12, 0.22);
-    vec3 cMid  = (length(u_PrimaryColor) > 0.01)   ? u_PrimaryColor   : vec3(0.45, 0.42, 0.58);
-    vec3 cGlow = (length(u_GlowColor) > 0.01)      ? u_GlowColor      : vec3(0.72, 0.25, 1.00);
+    vec3 cDark = (dot(u_SecondaryColor, u_SecondaryColor) > 0.0001) ? u_SecondaryColor : vec3(0.14, 0.12, 0.22);
+    vec3 cMid  = (dot(u_PrimaryColor, u_PrimaryColor) > 0.0001)     ? u_PrimaryColor   : vec3(0.45, 0.42, 0.58);
+    vec3 cGlow = (dot(u_GlowColor, u_GlowColor) > 0.0001)           ? u_GlowColor      : vec3(0.72, 0.25, 1.00);
 
     vec3 mapped;
     if (luma < 0.45)
@@ -167,9 +178,8 @@ void main()
     float radius = min(8.0, min(halfSize.x, halfSize.y) * 0.38);
     float dist = sdRoundedBox(pixelPos, halfSize - vec2(1.5), radius);
 
-    // Anti-aliased outer cutout
+    // Anti-aliased outer cutout (alpha blending handles transparent outer corners without discard)
     float outerAlpha = 1.0 - smoothstep(-0.75, 0.75, dist);
-    if (outerAlpha <= 0.01) discard;
 
     // Base dark metallic gradient
     vec3 bgTop = mix(vec3(0.16, 0.16, 0.20), vec3(0.24, 0.22, 0.34), u_Hover);

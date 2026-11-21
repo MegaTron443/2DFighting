@@ -42,16 +42,18 @@ public class RenderMaterial
     public bool Begin()
     {
         if (BlendMode != BlendMode.BLEND_ALPHA)
+        {
+            ShaderManager.EndShader();
             Raylib.BeginBlendMode(BlendMode);
+        }
 
-        if (!HasShader || !ShaderManager.TryGetShader(ShaderId, out Shader shader))
+        if (!HasShader || !ShaderManager.BeginShader(ShaderId, out Shader shader))
+        {
+            ShaderManager.EndShader();
             return false;
+        }
 
-        Raylib.BeginShaderMode(shader);
-        ShaderManager.SetFloat(shader, "u_Time", (float)Raylib.GetTime());
         ShaderManager.SetFloat(shader, "u_HasPotion", 0f);
-        ShaderManager.SetVec2(shader, "u_Resolution", new Vector2(Raylib.GetScreenWidth(), Raylib.GetScreenHeight()));
-        ShaderManager.SetVec2(shader, "u_CameraPos", CameraManager.Target);
 
         if (ShaderId.Equals(BuiltInShaders.SpriteLutId, StringComparison.OrdinalIgnoreCase))
         {
@@ -68,10 +70,10 @@ public class RenderMaterial
         return true;
     }
 
-    public void End(bool shaderWasStarted)
+    public void End(bool shaderWasStarted, bool keepShaderBound = false)
     {
-        if (shaderWasStarted)
-            Raylib.EndShaderMode();
+        if (shaderWasStarted && (!keepShaderBound || BlendMode != BlendMode.BLEND_ALPHA))
+            ShaderManager.EndShader();
 
         if (BlendMode != BlendMode.BLEND_ALPHA)
             Raylib.EndBlendMode();
