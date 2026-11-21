@@ -5,11 +5,35 @@ public class SkillController
 {
     private const int FastPokeMaxStartupFrames = 5;
 
-    public Dictionary<string, SkillData> Skills { get; } = new();
+    public Dictionary<string, SkillData> Skills { get; } = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<SkillData> _skillList = new();
+    public IReadOnlyList<SkillData> SkillList => _skillList;
     public LuaFloatStore SkillCooldowns { get; } = new();
     public SkillData? ActiveSkill { get; set; }
     public int CurrentActionFrame { get; private set; } = 0;
     public bool HasHit { get; set; } = false;
+
+    public SkillController()
+    {
+        SkillCooldowns.BindSkillBacking(Skills);
+    }
+
+    public void AddSkill(string name, SkillData skill)
+    {
+        if (Skills.TryGetValue(name, out SkillData? existing))
+        {
+            int idx = _skillList.IndexOf(existing);
+            if (idx >= 0)
+                _skillList[idx] = skill;
+            else
+                _skillList.Add(skill);
+        }
+        else
+        {
+            _skillList.Add(skill);
+        }
+        Skills[name] = skill;
+    }
 
     public bool IsHitboxActive
     {
@@ -35,32 +59,31 @@ public class SkillController
 
     public void ExecuteSkill(Player p, string skillName)
     {
-        if (SkillCooldowns.TryGetValue(skillName, out float cd) && cd > 0f) return;
         if (ActiveSkill != null) return;
         if (p.IsCrouching) return;
 
-        if (Skills.TryGetValue(skillName, out var skill))
-        {
-            ActiveSkill = skill;
-            CurrentActionFrame = 0;
-            HasHit = false;
-            SkillCooldowns[skillName] = skill.CooldownTime;
-            p.Velocity.X = 0;
-            p.Velocity.Y = 0;
+        if (!Skills.TryGetValue(skillName, out var skill)) return;
+        if (skill.CurrentCooldown > 0f) return;
 
-            if (skill.IsCounter)
-                p.JustExecutedAction = GameAction.Counter;
-            else if (skill.IsBlockBreak)
-                p.JustExecutedAction = GameAction.GuardBreak;
-            else if (skill.Height == AttackHeight.Low)
-                p.JustExecutedAction = GameAction.LowAttack;
-            else if (skill.Height == AttackHeight.Overhead)
-                p.JustExecutedAction = GameAction.OverheadAttack;
-            else if (skill.StartupFrames <= FastPokeMaxStartupFrames)
-                p.JustExecutedAction = GameAction.FastPoke;
-            else
-                p.JustExecutedAction = GameAction.HeavyAttack;
-        }
+        ActiveSkill = skill;
+        CurrentActionFrame = 0;
+        HasHit = false;
+        skill.CurrentCooldown = skill.CooldownTime;
+        p.Velocity.X = 0;
+        p.Velocity.Y = 0;
+
+        if (skill.IsCounter)
+            p.JustExecutedAction = GameAction.Counter;
+        else if (skill.IsBlockBreak)
+            p.JustExecutedAction = GameAction.GuardBreak;
+        else if (skill.Height == AttackHeight.Low)
+            p.JustExecutedAction = GameAction.LowAttack;
+        else if (skill.Height == AttackHeight.Overhead)
+            p.JustExecutedAction = GameAction.OverheadAttack;
+        else if (skill.StartupFrames <= FastPokeMaxStartupFrames)
+            p.JustExecutedAction = GameAction.FastPoke;
+        else
+            p.JustExecutedAction = GameAction.HeavyAttack;
     }
 
     public bool HandleHitstunInterrupt(Player p)
@@ -95,11 +118,12 @@ public class SkillController
 
     public void UpdateCooldowns(float dt)
     {
-        foreach (string skill in Skills.Keys)
+        for (int i = 0; i < _skillList.Count; i++)
         {
-            if (SkillCooldowns.TryGetValue(skill, out float cd) && cd > 0f)
+            SkillData skill = _skillList[i];
+            if (skill.CurrentCooldown > 0f)
             {
-                SkillCooldowns[skill] = MathF.Max(0f, cd - dt);
+                skill.CurrentCooldown = MathF.Max(0f, skill.CurrentCooldown - dt);
             }
         }
     }
@@ -114,6 +138,10 @@ public class SkillController
     public void ResetAll()
     {
         CancelActiveSkill();
+        for (int i = 0; i < _skillList.Count; i++)
+        {
+            _skillList[i].CurrentCooldown = 0f;
+        }
         SkillCooldowns.Clear();
     }
 }

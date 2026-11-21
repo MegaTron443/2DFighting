@@ -18,6 +18,7 @@ public enum SoundType
 public class Character_Sounds : IDisposable
 {
     public const string SHARED_BANK_NAME = "__SHARED__";
+    private static readonly string[] SoundTypeNames = Enum.GetNames<SoundType>();
 
     public string CharacterName { get; }
     public bool IsSharedBank => CharacterName == SHARED_BANK_NAME;
@@ -183,8 +184,10 @@ public class Character_Sounds : IDisposable
         if (type == SoundType.Skill)
         {
             DiagnosticsLogger.LogSilentIssueOnce(
-                $"sound_{CharacterName}_{type}_noskill",
-                $"PlaySound(SoundType.Skill) called on '{CharacterName}' without a skillName; falling back to 'default' skill sound.",
+                "sound_noskill",
+                CharacterName,
+                SoundTypeNames[(int)type],
+                static (charName, soundType) => $"PlaySound(SoundType.{soundType}) called on '{charName}' without a skillName; falling back to 'default' skill sound.",
                 LogSeverity.Info
             );
             return TryGetSound(SoundType.Skill, "default", out sound);
@@ -217,8 +220,10 @@ public class Character_Sounds : IDisposable
                 if (!IsSharedBank && !string.Equals(skillName, "default", StringComparison.OrdinalIgnoreCase))
                 {
                     DiagnosticsLogger.LogSilentIssueOnce(
-                        $"sound_{CharacterName}_skill_default_{skillName}",
-                        $"Character '{CharacterName}' has no custom audio for skill '{skillName}'; using character default Skill.wav.",
+                        "sound_skill_default",
+                        CharacterName,
+                        skillName,
+                        static (charName, skill) => $"Character '{charName}' has no custom audio for skill '{skill}'; using character default Skill.wav.",
                         LogSeverity.Info
                     );
                 }
@@ -231,8 +236,10 @@ public class Character_Sounds : IDisposable
         }
 
         DiagnosticsLogger.LogSilentIssueOnce(
-            $"sound_{CharacterName}_wrong_overload_{type}",
-            $"TryGetSound(SoundType.{type}, \"{skillName}\") called for non-skill SoundType. Routing to standard TryGetSound.",
+            "sound_wrong_overload",
+            CharacterName,
+            SoundTypeNames[(int)type],
+            static (charName, soundType) => $"TryGetSound(SoundType.{soundType}) called for non-skill SoundType on '{charName}'. Routing to standard TryGetSound.",
             LogSeverity.Warning
         );
         return TryGetSound(type, out sound);

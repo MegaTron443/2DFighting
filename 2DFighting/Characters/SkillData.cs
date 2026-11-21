@@ -18,6 +18,7 @@ public class SkillData
     public Rectangle HitboxOffsetPct { get; set; }
     public float HitStun { get; set; }
     public float CooldownTime { get; set; }
+    public float CurrentCooldown { get; set; } = 0f;
     public bool IsBlockBreak { get; set; }
     public DynValue? OnBlockBreak { get; set; }
     public bool IsCounter { get; set; }

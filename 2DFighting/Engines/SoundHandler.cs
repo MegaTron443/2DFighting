@@ -7,6 +7,7 @@ using Raylib_cs;
 public class SoundHandler : IDisposable
 {
     public static SoundHandler? Current { get; private set; }
+    private static readonly string[] SoundTypeNames = Enum.GetNames<SoundType>();
 
     private readonly List<Character_Sounds> _activeSoundBanks = new();
     private Character_Sounds? _sharedSoundBank;
@@ -141,11 +142,13 @@ public class SoundHandler : IDisposable
         return true;
     }
 
-    private void PlayFallbackSound(string missingKey, float volume, float pitch)
+    private void PlayFallbackSound(string ownerName, string soundKey, float volume, float pitch)
     {
         DiagnosticsLogger.LogSilentIssueOnce(
-            $"sound_missing_fallback_{missingKey}",
-            $"Sound '{missingKey}' not found in character or shared banks; using procedural fallback.",
+            "sound_missing_fallback",
+            ownerName,
+            soundKey,
+            static (owner, key) => $"Sound '{owner}:{key}' not found in character or shared banks; using procedural fallback.",
             LogSeverity.Warning
         );
 
@@ -200,7 +203,7 @@ public class SoundHandler : IDisposable
                 return;
             }
 
-            PlayFallbackSound($"{targetName}:{soundType}", volume, pitch);
+            PlayFallbackSound(targetName, SoundTypeNames[(int)soundType], volume, pitch);
             return;
         }
 
@@ -220,7 +223,7 @@ public class SoundHandler : IDisposable
             }
         }
 
-        PlayFallbackSound($"Global:{soundType}", volume, pitch);
+        PlayFallbackSound("Global", SoundTypeNames[(int)soundType], volume, pitch);
     }
 
     private void PlaySkillSoundInternal(Player? player, string skillName, float volume, float pitch)
@@ -249,7 +252,7 @@ public class SoundHandler : IDisposable
             return;
         }
 
-        PlayFallbackSound($"{targetName}:Skill:{skillName}", volume, pitch);
+        PlayFallbackSound(targetName, skillName, volume, pitch);
     }
 
     public void ReloadCharacterBanks(Player? p1, Player? p2)

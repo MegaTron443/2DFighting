@@ -10,7 +10,25 @@ public enum LogSeverity
 
 public static class DiagnosticsLogger
 {
+    private sealed class CompositeKeyComparer : IEqualityComparer<(string, string, string)>
+    {
+        public static readonly CompositeKeyComparer Instance = new();
+
+        public bool Equals((string, string, string) x, (string, string, string) y) =>
+            StringComparer.OrdinalIgnoreCase.Equals(x.Item1, y.Item1) &&
+            StringComparer.OrdinalIgnoreCase.Equals(x.Item2, y.Item2) &&
+            StringComparer.OrdinalIgnoreCase.Equals(x.Item3, y.Item3);
+
+        public int GetHashCode((string, string, string) obj) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Item1),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Item2),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Item3)
+            );
+    }
+
     private static readonly HashSet<string> _loggedOnce = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<(string, string, string)> _loggedCompositeOnce = new(CompositeKeyComparer.Instance);
 
     [Conditional("DEBUG")]
     public static void LogSilentIssueOnce(
@@ -23,7 +41,48 @@ public static class DiagnosticsLogger
         [CallerLineNumber] int lineNumber = 0)
     {
         if (!_loggedOnce.Add(key)) return;
+        EmitLog(message, severity, includeStackTrace, memberName, filePath, lineNumber);
+    }
 
+    [Conditional("DEBUG")]
+    public static void LogSilentIssueOnce(
+        string keyPrefix,
+        string keyArg,
+        Func<string, string> messageFactory,
+        LogSeverity severity = LogSeverity.Warning,
+        bool includeStackTrace = false,
+        [CallerMemberName] string memberName = "",
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0)
+    {
+        if (!_loggedCompositeOnce.Add((keyPrefix, keyArg, ""))) return;
+        EmitLog(messageFactory(keyArg), severity, includeStackTrace, memberName, filePath, lineNumber);
+    }
+
+    [Conditional("DEBUG")]
+    public static void LogSilentIssueOnce(
+        string keyPrefix,
+        string keyArg1,
+        string keyArg2,
+        Func<string, string, string> messageFactory,
+        LogSeverity severity = LogSeverity.Warning,
+        bool includeStackTrace = false,
+        [CallerMemberName] string memberName = "",
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0)
+    {
+        if (!_loggedCompositeOnce.Add((keyPrefix, keyArg1, keyArg2))) return;
+        EmitLog(messageFactory(keyArg1, keyArg2), severity, includeStackTrace, memberName, filePath, lineNumber);
+    }
+
+    private static void EmitLog(
+        string message,
+        LogSeverity severity,
+        bool includeStackTrace,
+        string memberName,
+        string filePath,
+        int lineNumber)
+    {
         string fileName = Path.GetFileName(filePath);
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
         string tag = severity switch
@@ -44,7 +103,6 @@ public static class DiagnosticsLogger
             Debug.WriteLine(formatted);
         }
 
-        ConsoleColor prevColor = Console.ForegroundColor;
         Console.ForegroundColor = severity switch
         {
             LogSeverity.Error   => ConsoleColor.Red,
@@ -56,5 +114,9 @@ public static class DiagnosticsLogger
         Console.ResetColor();
     }
 
-    public static void ClearHistory() => _loggedOnce.Clear();
+    public static void ClearHistory()
+    {
+        _loggedOnce.Clear();
+        _loggedCompositeOnce.Clear();
+    }
 }
