@@ -49,6 +49,7 @@ public class RenderMaterial
 
         Raylib.BeginShaderMode(shader);
         ShaderManager.SetFloat(shader, "u_Time", (float)Raylib.GetTime());
+        ShaderManager.SetFloat(shader, "u_HasPotion", 0f);
         ShaderManager.SetVec2(shader, "u_Resolution", new Vector2(Raylib.GetScreenWidth(), Raylib.GetScreenHeight()));
         ShaderManager.SetVec2(shader, "u_CameraPos", CameraManager.Target);
 
