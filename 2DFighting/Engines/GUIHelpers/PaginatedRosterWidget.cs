@@ -28,6 +28,10 @@ public class PaginatedRosterWidget : IDisposable
     public int TotalPages => Math.Max(1, (int)MathF.Ceiling(_fighters.Length / (float)ItemsPerPage));
     public string? SelectedFighterId { get; set; }
 
+    private int _cachedPage = -1;
+    private int _cachedTotalPages = -1;
+    private string _cachedPageLabel = "PAGE 1 / 1";
+
     public RenderMaterial PanelMaterial { get; set; } = new() { ShaderId = BuiltInShaders.UiButtonId };
     public Texture2D? PanelTexture { get; set; }
     public bool OwnsPanelTexture { get; private set; }
@@ -232,8 +236,25 @@ public class PaginatedRosterWidget : IDisposable
             isSelected: false,
             AccentColor,
             new Color(18, 20, 30, 215),
-            new Color(80, 90, 115, 200)
+            new Color(80, 90, 115, 200),
+            keepShaderBound: true
         );
+
+        if (_fighters.Length > 0)
+        {
+            for (int i = 0; i < _pageButtons.Count; i++)
+            {
+                _pageButtons[i].DrawPanel(keepShaderBound: true);
+            }
+        }
+
+        if (CurrentPage > 0)
+            PrevButton.DrawPanel(keepShaderBound: true);
+
+        if (CurrentPage < TotalPages - 1)
+            NextButton.DrawPanel(keepShaderBound: true);
+
+        ShaderManager.EndShader();
 
         if (_fighters.Length == 0)
         {
@@ -246,17 +267,24 @@ public class PaginatedRosterWidget : IDisposable
         {
             for (int i = 0; i < _pageButtons.Count; i++)
             {
-                _pageButtons[i].Draw();
+                _pageButtons[i].DrawContent();
             }
         }
 
         if (CurrentPage > 0)
-            PrevButton.Draw();
+            PrevButton.DrawContent();
 
         if (CurrentPage < TotalPages - 1)
-            NextButton.Draw();
+            NextButton.DrawContent();
 
-        string pageLabel = $"PAGE {CurrentPage + 1} / {TotalPages}";
+        int totalPages = TotalPages;
+        if (CurrentPage != _cachedPage || totalPages != _cachedTotalPages)
+        {
+            _cachedPage = CurrentPage;
+            _cachedTotalPages = totalPages;
+            _cachedPageLabel = $"PAGE {CurrentPage + 1} / {totalPages}";
+        }
+        string pageLabel = _cachedPageLabel;
         int pageFont = Math.Max(12, (int)(Raylib.GetScreenHeight() * 0.019f));
         int pw = Raylib.MeasureText(pageLabel, pageFont);
         Rectangle prevRect = PrevButton.GetPixelBounds();

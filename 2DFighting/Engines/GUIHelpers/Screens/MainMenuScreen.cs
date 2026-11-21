@@ -28,9 +28,13 @@ public class MainMenuScreen : IUIScreen
 
     private LobbyQueueMode _queueMode = LobbyQueueMode.None;
     private int _knownCatalogVersion = -1;
-    private string _knownDescCharKey = "";
+    private string _knownDescCharName = "";
+    private string _knownDescCharHash = "";
     private string _toastText = "";
     private float _toastTimer = 0f;
+    private int _lastDummyHp = -1;
+    private int _lastP1Combo = -1;
+    private string _cachedDummyInfo = "";
 
     public void Initialize()
     {
@@ -38,9 +42,13 @@ public class MainMenuScreen : IUIScreen
         _worldButtons.Clear();
         _queueMode = LobbyQueueMode.None;
         _knownCatalogVersion = -1;
-        _knownDescCharKey = "";
+        _knownDescCharName = "";
+        _knownDescCharHash = "";
         _toastText = "";
         _toastTimer = 0f;
+        _lastDummyHp = -1;
+        _lastP1Combo = -1;
+        _cachedDummyInfo = "";
 
         BuildMainArenaButtons();
         BuildDeveloperAlcoveButtons();
@@ -347,7 +355,8 @@ public class MainMenuScreen : IUIScreen
         }
 
         ctx.Data.SoundHandler?.ReloadCharacterBanks(p1, p2);
-        _knownDescCharKey = "";
+        _knownDescCharName = "";
+        _knownDescCharHash = "";
         RefreshRoster(ctx.Data);
         ShowToast("MODS & SCRIPTS RELOADED!");
     }
@@ -385,11 +394,13 @@ public class MainMenuScreen : IUIScreen
         {
             Character loaded = ctx.Data.LuaEngine.CreateCharacter(fighterId, slot: 0);
             p1.ChangeCharacter(loaded);
+            services?.PruneUnusedCharacterSpriteSheets();
             ctx.Data.SoundHandler?.ReloadCharacterBanks(p1, ctx.Data.Player2);
             VFXManager.SpawnPreset(VFXPreset.Shockwave, p1.Position, p1.FacingRight);
         }
 
-        _knownDescCharKey = "";
+        _knownDescCharName = "";
+        _knownDescCharHash = "";
     }
 
     private void SyncDynamicLabels(GameData data)
@@ -428,10 +439,11 @@ public class MainMenuScreen : IUIScreen
         Character? activeChar = data.Player1?.CurrentCharacter;
         if (_descPanel != null && activeChar != null)
         {
-            string descKey = $"{activeChar.Name}|{activeChar.ScriptHash}";
-            if (!string.Equals(_knownDescCharKey, descKey, StringComparison.Ordinal))
+            if (!string.Equals(_knownDescCharName, activeChar.Name, StringComparison.Ordinal) ||
+                !string.Equals(_knownDescCharHash, activeChar.ScriptHash, StringComparison.Ordinal))
             {
-                _knownDescCharKey = descKey;
+                _knownDescCharName = activeChar.Name;
+                _knownDescCharHash = activeChar.ScriptHash;
                 _descPanel.Title = activeChar.Name.ToUpperInvariant();
                 _descPanel.Text = activeChar.Description;
             }
@@ -487,7 +499,13 @@ public class MainMenuScreen : IUIScreen
 
         for (int i = 0; i < _worldButtons.Count; i++)
         {
-            _worldButtons[i].Draw();
+            _worldButtons[i].DrawPanel(keepShaderBound: true);
+        }
+        ShaderManager.EndShader();
+
+        for (int i = 0; i < _worldButtons.Count; i++)
+        {
+            _worldButtons[i].DrawOverlay();
         }
 
         DrawWorldFighterTags(data, sh);
@@ -598,10 +616,17 @@ public class MainMenuScreen : IUIScreen
             });
 
             int labelFont = Math.Max(12, (int)(sh * 0.018f));
-            string dummyInfo = $"DUMMY HP: {data.Player2.Health}/{Player.MAX_HEALTH}";
-            if (data.Player1 != null && data.Player1.ComboCount > 1)
-                dummyInfo += $"   |   {data.Player1.ComboCount} HIT COMBO!";
-            Raylib.DrawText(dummyInfo, (int)hpRect.x, (int)(hpRect.y + hpRect.height + 5f), labelFont, Color.RAYWHITE);
+            int dummyHp = data.Player2.Health;
+            int p1Combo = data.Player1?.ComboCount ?? 0;
+            if (dummyHp != _lastDummyHp || p1Combo != _lastP1Combo)
+            {
+                _lastDummyHp = dummyHp;
+                _lastP1Combo = p1Combo;
+                _cachedDummyInfo = p1Combo > 1
+                    ? $"DUMMY HP: {dummyHp}/{Player.MAX_HEALTH}   |   {p1Combo} HIT COMBO!"
+                    : $"DUMMY HP: {dummyHp}/{Player.MAX_HEALTH}";
+            }
+            Raylib.DrawText(_cachedDummyInfo, (int)hpRect.x, (int)(hpRect.y + hpRect.height + 5f), labelFont, Color.RAYWHITE);
         }
 
         int hintFont = Math.Max(12, (int)(sh * 0.018f));

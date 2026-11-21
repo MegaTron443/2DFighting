@@ -54,6 +54,14 @@ public static class CombatHUD
 
     private static float _p1TrailPct = 1.0f;
     private static float _p2TrailPct = 1.0f;
+    private static int _lastTimerSec = -1;
+    private static string _cachedTimerText = "00";
+    private static int _lastRound = -1;
+    private static string _cachedRoundLabel = "ROUND 1";
+    private static int _lastP1Combo = -1;
+    private static string _cachedP1ComboText = "";
+    private static int _lastP2Combo = -1;
+    private static string _cachedP2ComboText = "";
 
     private static void DrawHealthBars(Player p1, Player p2)
     {
@@ -124,13 +132,24 @@ public static class CombatHUD
         float roundTimer = match?.RoundTimer ?? PhysicsEngine.RoundTimer;
         int currentRound = match?.CurrentRound ?? PhysicsEngine.CurrentRound;
 
-        string timeText = ((int)MathF.Ceiling(roundTimer)).ToString("00");
+        int timerSec = (int)MathF.Ceiling(roundTimer);
+        if (timerSec != _lastTimerSec)
+        {
+            _lastTimerSec = timerSec;
+            _cachedTimerText = timerSec.ToString("00");
+        }
+        string timeText = _cachedTimerText;
         int fontSize = (int)(sh * 0.045f);
         int textW = Raylib.MeasureText(timeText, fontSize);
         Raylib.DrawText(timeText, (sw - textW) / 2, (int)(box.y + (box.height - fontSize) / 2f), fontSize, Color.WHITE);
 
         int roundFont = Math.Max(12, (int)(sh * 0.02f));
-        string roundLabel = $"ROUND {currentRound}";
+        if (currentRound != _lastRound)
+        {
+            _lastRound = currentRound;
+            _cachedRoundLabel = $"ROUND {currentRound}";
+        }
+        string roundLabel = _cachedRoundLabel;
         int rw = Raylib.MeasureText(roundLabel, roundFont);
         Raylib.DrawText(roundLabel, (sw - rw) / 2, (int)(box.y + box.height + 6), roundFont, Color.DARKGRAY);
     }
@@ -162,12 +181,14 @@ public static class CombatHUD
         float spacing = 0.006f;
         float yPct = 0.105f;
 
+        var skills = player.CurrentCharacter.SkillController.SkillList;
         int index = 0;
-        foreach (var skill in player.CurrentCharacter.Skills.Values)
+        for (int i = 0; i < skills.Count; i++)
         {
+            var skill = skills[i];
             if (skill.CooldownTime <= 0f) continue;
 
-            float currentCd = player.CurrentCharacter.SkillCooldowns.TryGetValue(skill.Name, out float cd) ? cd : 0f;
+            float currentCd = skill.CurrentCooldown;
             float readyPct = 1f - Math.Clamp(currentCd / skill.CooldownTime, 0f, 1f);
 
             float slotXPct = rightAlign
@@ -193,7 +214,25 @@ public static class CombatHUD
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
         int fontSize = (int)(sh * 0.045f);
-        string text = $"{player.ComboCount} HIT COMBO!";
+        string text;
+        if (!rightAlign)
+        {
+            if (player.ComboCount != _lastP1Combo)
+            {
+                _lastP1Combo = player.ComboCount;
+                _cachedP1ComboText = $"{player.ComboCount} HIT COMBO!";
+            }
+            text = _cachedP1ComboText;
+        }
+        else
+        {
+            if (player.ComboCount != _lastP2Combo)
+            {
+                _lastP2Combo = player.ComboCount;
+                _cachedP2ComboText = $"{player.ComboCount} HIT COMBO!";
+            }
+            text = _cachedP2ComboText;
+        }
         int textW = Raylib.MeasureText(text, fontSize);
 
         int drawX = rightAlign ? (int)(sw * xPct) - textW : (int)(sw * xPct);

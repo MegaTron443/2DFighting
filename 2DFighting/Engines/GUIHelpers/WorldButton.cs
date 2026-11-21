@@ -10,9 +10,37 @@ public class WorldButton : IDisposable
     private const float MicroHitstopSeconds = 0.03f;
     private const float RecoilDecaySpeed = 18f;
 
+    private string _label = "";
+    private string _subLabel = "";
+
     public string Id { get; set; } = "";
-    public string Label { get; set; } = "";
-    public string SubLabel { get; set; } = "";
+    public string Label
+    {
+        get => _label;
+        set
+        {
+            string normalized = value ?? "";
+            if (!string.Equals(_label, normalized, StringComparison.Ordinal))
+            {
+                _label = normalized;
+                _textLayoutDirty = true;
+            }
+        }
+    }
+
+    public string SubLabel
+    {
+        get => _subLabel;
+        set
+        {
+            string normalized = value ?? "";
+            if (!string.Equals(_subLabel, normalized, StringComparison.Ordinal))
+            {
+                _subLabel = normalized;
+                _textLayoutDirty = true;
+            }
+        }
+    }
     public Vector2 WorldPositionPct { get; set; }
     public Vector2 SizePct { get; set; }
     public Texture2D? Texture { get; set; }
@@ -29,6 +57,14 @@ public class WorldButton : IDisposable
     private float _hoverLerp;
     private float _hitFlashTimer;
     private Vector2 _recoilOffsetPx;
+    private int _cachedMainFont;
+    private int _cachedMainWidth;
+    private int _cachedSubFont;
+    private int _cachedSubWidth;
+    private int _cachedScreenW = -1;
+    private int _cachedScreenH = -1;
+    private Vector2 _cachedSizePct = new(-1f, -1f);
+    private bool _textLayoutDirty = true;
 
     public bool LoadTexture(string relativeOrFullPath)
     {
@@ -152,6 +188,12 @@ public class WorldButton : IDisposable
 
     public void Draw()
     {
+        DrawPanel(keepShaderBound: false);
+        DrawOverlay();
+    }
+
+    public void DrawPanel(bool keepShaderBound = false)
+    {
         Rectangle baseBounds = GetWorldBounds();
         Rectangle bounds = new Rectangle(
             baseBounds.x + _recoilOffsetPx.X,
@@ -178,14 +220,52 @@ public class WorldButton : IDisposable
             IsSelected,
             AccentColor,
             fallbackBg,
-            fallbackBorder
+            fallbackBorder,
+            keepShaderBound
+        );
+    }
+
+    public void DrawOverlay()
+    {
+        Rectangle baseBounds = GetWorldBounds();
+        Rectangle bounds = new Rectangle(
+            baseBounds.x + _recoilOffsetPx.X,
+            baseBounds.y + _recoilOffsetPx.Y,
+            baseBounds.width,
+            baseBounds.height
+        );
+        Color accentFallback = new Color(
+            (byte)Math.Clamp(AccentColor.X * 255f, 0f, 255f),
+            (byte)Math.Clamp(AccentColor.Y * 255f, 0f, 255f),
+            (byte)Math.Clamp(AccentColor.Z * 255f, 0f, 255f),
+            (byte)255
         );
 
-        float sh = Raylib.GetScreenHeight();
-        bool hasSub = !string.IsNullOrWhiteSpace(SubLabel);
-        int mainPref = Math.Max(14, (int)(sh * (hasSub ? 0.023f : 0.026f)));
-        int mainFont = UIRenderer.FitFontSize(Label, mainPref, 11, bounds.width - 14f);
-        int mainW = Raylib.MeasureText(Label, mainFont);
+        int sw = Raylib.GetScreenWidth();
+        int sh = Raylib.GetScreenHeight();
+        bool hasSub = !string.IsNullOrWhiteSpace(_subLabel);
+        if (_textLayoutDirty || sw != _cachedScreenW || sh != _cachedScreenH || SizePct != _cachedSizePct)
+        {
+            int mainPref = Math.Max(14, (int)(sh * (hasSub ? 0.023f : 0.026f)));
+            _cachedMainFont = UIRenderer.FitFontSize(_label, mainPref, 11, bounds.width - 14f, out _cachedMainWidth);
+            if (hasSub)
+            {
+                int subPref = Math.Max(11, (int)(sh * 0.017f));
+                _cachedSubFont = UIRenderer.FitFontSize(_subLabel, subPref, 10, bounds.width - 14f, out _cachedSubWidth);
+            }
+            else
+            {
+                _cachedSubFont = 0;
+                _cachedSubWidth = 0;
+            }
+            _cachedScreenW = sw;
+            _cachedScreenH = sh;
+            _cachedSizePct = SizePct;
+            _textLayoutDirty = false;
+        }
+
+        int mainFont = _cachedMainFont;
+        int mainW = _cachedMainWidth;
         int mainX = (int)(bounds.x + (bounds.width - mainW) * 0.5f);
 
         int mainY = hasSub
@@ -196,20 +276,19 @@ public class WorldButton : IDisposable
             ? Color.WHITE
             : (IsHovered ? Color.GOLD : (IsSelected ? new Color(255, 240, 150, 255) : Color.RAYWHITE));
 
-        Raylib.DrawText(Label, mainX + 1, mainY + 1, mainFont, Color.BLACK);
-        Raylib.DrawText(Label, mainX, mainY, mainFont, mainCol);
+        Raylib.DrawText(_label, mainX + 1, mainY + 1, mainFont, Color.BLACK);
+        Raylib.DrawText(_label, mainX, mainY, mainFont, mainCol);
 
         if (hasSub)
         {
-            int subPref = Math.Max(11, (int)(sh * 0.017f));
-            int subFont = UIRenderer.FitFontSize(SubLabel, subPref, 10, bounds.width - 14f);
-            int subW = Raylib.MeasureText(SubLabel, subFont);
+            int subFont = _cachedSubFont;
+            int subW = _cachedSubWidth;
             int subX = (int)(bounds.x + (bounds.width - subW) * 0.5f);
             int subY = (int)(bounds.y + bounds.height * 0.66f - subFont * 0.4f);
 
             Color subCol = IsSelected ? accentFallback : new Color(185, 200, 220, 240);
-            Raylib.DrawText(SubLabel, subX + 1, subY + 1, subFont, Color.BLACK);
-            Raylib.DrawText(SubLabel, subX, subY, subFont, subCol);
+            Raylib.DrawText(_subLabel, subX + 1, subY + 1, subFont, Color.BLACK);
+            Raylib.DrawText(_subLabel, subX, subY, subFont, subCol);
         }
 
         if (IsToggle)

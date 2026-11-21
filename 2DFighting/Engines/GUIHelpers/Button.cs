@@ -10,6 +10,13 @@ public class Button : IDisposable
 
     private string _text = "";
     private TextScrollController? _scrollController;
+    private int _cachedFontSize;
+    private int _cachedTextWidth;
+    private int _cachedScreenW = -1;
+    private int _cachedScreenH = -1;
+    private float _cachedWidthPct = -1f;
+    private float _cachedFontSizePct = -1f;
+    private bool _textLayoutDirty = true;
 
     public float XPct { get; set; }
     public float YPct { get; set; }
@@ -27,6 +34,7 @@ public class Button : IDisposable
             if (!string.Equals(_text, normalized, StringComparison.Ordinal))
             {
                 _text = normalized;
+                _textLayoutDirty = true;
                 _scrollController?.NotifyTextChanged();
             }
         }
@@ -197,10 +205,21 @@ public class Button : IDisposable
 
     public void Draw()
     {
+        DrawPanel(keepShaderBound: false);
+        DrawContent();
+    }
+
+    public void DrawPanel(bool keepShaderBound = false)
+    {
         Rectangle bounds = GetPixelBounds();
         Color bg = IsHovered ? HoverColor : NormalColor;
         Color border = IsSelected ? SelectedColor : (IsHovered ? Color.SKYBLUE : Color.GRAY);
-        UIRenderer.DrawStyledPanel(bounds, Material, BackgroundTexture, _hoverLerp, IsSelected, AccentColor, bg, border);
+        UIRenderer.DrawStyledPanel(bounds, Material, BackgroundTexture, _hoverLerp, IsSelected, AccentColor, bg, border, keepShaderBound);
+    }
+
+    public void DrawContent()
+    {
+        Rectangle bounds = GetPixelBounds();
 
         if (IsScrollable)
         {
@@ -209,8 +228,20 @@ public class Button : IDisposable
             return;
         }
 
-        int preferredFont = Math.Max(12, (int)(Raylib.GetScreenHeight() * FontSizePct));
-        int fontSize = UIRenderer.FitFontSize(_text, preferredFont, 10, MathF.Max(20f, bounds.width - 8f));
+        int sw = Raylib.GetScreenWidth();
+        int sh = Raylib.GetScreenHeight();
+        if (_textLayoutDirty || sw != _cachedScreenW || sh != _cachedScreenH ||
+            WidthPct != _cachedWidthPct || FontSizePct != _cachedFontSizePct)
+        {
+            int preferredFont = Math.Max(12, (int)(sh * FontSizePct));
+            _cachedFontSize = UIRenderer.FitFontSize(_text, preferredFont, 10, MathF.Max(20f, bounds.width - 8f), out _cachedTextWidth);
+            _cachedScreenW = sw;
+            _cachedScreenH = sh;
+            _cachedWidthPct = WidthPct;
+            _cachedFontSizePct = FontSizePct;
+            _textLayoutDirty = false;
+        }
+        int fontSize = _cachedFontSize;
 
         if (Icon.HasValue && Icon.Value.id > 0)
         {
@@ -228,7 +259,7 @@ public class Button : IDisposable
             Raylib.DrawTexturePro(tex, srcRect, destRect, Vector2.Zero, 0f, Color.WHITE);
         }
 
-        int textWidth = Raylib.MeasureText(_text, fontSize);
+        int textWidth = _cachedTextWidth;
         int textX = (int)(bounds.x + (bounds.width - textWidth) / 2f);
 
         int textY = Alignment switch
