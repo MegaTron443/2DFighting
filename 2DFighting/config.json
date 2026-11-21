@@ -1,11 +1,8 @@
 {
-  "Sound": {
-    "Volume": 100
-  },
   "Display": {
-    "ScreenWidth": 800,
-    "ScreenHeight": 600,
-    "TargetFps": 60,
+    "ScreenWidth": 1600,
+    "ScreenHeight": 900,
+    "TargetFps": 240,
     "Title": "2D Fighting Game"
   },
   "Controls": {
@@ -30,5 +27,9 @@
       "KeyLeft": "KEY_J",
       "KeyBottom": "KEY_K"
     }
-  }
+  },
+  "Sound": {
+    "Volume": 100
+  },
+  "AIDifficulty": "Hard"
 }
