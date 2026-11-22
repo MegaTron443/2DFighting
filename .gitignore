@@ -15,7 +15,6 @@
 *.sln.docstates
 
 # Keep these if you actually want to ignore them
-*.png
 .editorconfig
 StyleCop.json
 *.sln
