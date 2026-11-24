@@ -209,7 +209,7 @@ public class CharacterRenderer
     private static void DrawGroundShadow(Character character, Rectangle hurtbox)
     {
         ShaderManager.EndShader();
-        float groundY = PhysicsEngine.GroundY;
+        float groundY = PhysicsEngine.GetEffectiveGroundY(new Vector2(hurtbox.CenterX(), hurtbox.CenterY()));
         float feetY = hurtbox.y + hurtbox.height;
         float heightAboveGround = MathF.Max(0f, feetY < groundY ? groundY - feetY : 0f);
         float maxJumpRef = MathF.Max(1f, Raylib.GetScreenHeight() * 0.45f);

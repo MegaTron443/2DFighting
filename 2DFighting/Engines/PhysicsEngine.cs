@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using MoonSharp.Interpreter;
 using Raylib_cs;
 
@@ -10,6 +11,8 @@ public class PhysicsEngine
     public const float GROUND_Y_PCT = 0.85f;
     public const float LEFT_BOUNDARY_PCT = 0.01f;
     public const float RIGHT_BOUNDARY_PCT = 0.99f;
+    public const float LOBBY_HATCH_LEFT_PCT = 0.425f;
+    public const float LOBBY_HATCH_RIGHT_PCT = 0.575f;
     private const float AUTO_FACE_DEADZONE_PX = 2f;
     private const float PUSHBACK_SPLIT_FACTOR = 0.5f;
     private const float LOBBY_DUMMY_REGEN_DELAY_SEC = 3.0f;
@@ -59,6 +62,15 @@ public class PhysicsEngine
     public static float GroundY => GROUND_Y_PCT * Raylib.GetScreenHeight();
     public static float LeftBoundary => LEFT_BOUNDARY_PCT * Raylib.GetScreenWidth();
     public static float RightBoundary => RIGHT_BOUNDARY_PCT * Raylib.GetScreenWidth();
+
+    public static float GetEffectiveGroundY(Vector2 position)
+    {
+        float sh = Raylib.GetScreenHeight();
+        if (SceneManager.CurrentScene is { HasTrainingLab: true } && position.Y > sh)
+            return (1.0f + GROUND_Y_PCT) * sh;
+
+        return GROUND_Y_PCT * sh;
+    }
 
     public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackPct) =>
         CombatResolver.ApplyHitForce(source, target, damage, stun, groundKnockbackPct);
@@ -163,13 +175,16 @@ public class PhysicsEngine
 
     private static void UpdateLobbyAutoRegen(GameData data, Player p1, Player p2)
     {
-        bool dummyShouldHeal = p2.Health <= 0 || (p2.Health < Player.MAX_HEALTH && p2.TimeSinceHitstun >= LOBBY_DUMMY_REGEN_DELAY_SEC);
-        if (dummyShouldHeal)
+        if (p2.AutoHealEnabled)
         {
-            p2.Health = Player.MAX_HEALTH;
-            p2.TimeSinceHitstun = 0f;
-            VFXManager.SpawnPreset(VFXPreset.HealGlow, p2.Position, p2.FacingRight);
-            data.SoundHandler?.PlaySound(SoundType.RoundStart);
+            bool dummyShouldHeal = p2.Health <= 0 || (p2.Health < Player.MAX_HEALTH && p2.TimeSinceHitstun >= LOBBY_DUMMY_REGEN_DELAY_SEC);
+            if (dummyShouldHeal)
+            {
+                p2.Health = Player.MAX_HEALTH;
+                p2.TimeSinceHitstun = 0f;
+                VFXManager.SpawnPreset(VFXPreset.HealGlow, p2.Position, p2.FacingRight);
+                data.SoundHandler?.PlaySound(SoundType.RoundStart);
+            }
         }
 
         if (p1.Health <= 0)
@@ -198,13 +213,18 @@ public class PhysicsEngine
         float halfW = ch.Width / 2f;
         float halfH = ch.Height / 2f;
 
+        float sw = Raylib.GetScreenWidth();
+        float sh = Raylib.GetScreenHeight();
+        Scene? scene = SceneManager.CurrentScene;
+        bool inBottomRoom = scene is { HasTrainingLab: true } && p.Position.Y > sh;
+
         float prevFeetY = p.PreviousPosition.Y + halfH;
         float currFeetY = p.Position.Y + halfH;
         bool landedOnPlatform = false;
 
         if (p.Velocity.Y >= 0f &&
             p.PlatformDropTimer <= 0f &&
-            SceneManager.CurrentScene is { Platforms.Count: > 0 } scene)
+            scene is { Platforms.Count: > 0 })
         {
             float bestTopY = float.MaxValue;
             float feetHalfW = halfW * 0.65f;
@@ -236,28 +256,57 @@ public class PhysicsEngine
 
         if (!landedOnPlatform)
         {
-            if (currFeetY >= GroundY && p.Velocity.Y >= 0f)
+            float activeGroundY = inBottomRoom ? (1.0f + GROUND_Y_PCT) * sh : GroundY;
+            bool overHatchGap = !inBottomRoom &&
+                                allowExtendedBounds &&
+                                scene is { HasTrainingLab: true } &&
+                                p.Position.X >= sw * LOBBY_HATCH_LEFT_PCT &&
+                                p.Position.X <= sw * LOBBY_HATCH_RIGHT_PCT;
+
+            if (!overHatchGap && currFeetY >= activeGroundY && p.Velocity.Y >= 0f)
             {
-                p.Position.Y = GroundY - halfH;
+                p.Position.Y = activeGroundY - halfH;
                 p.Velocity.Y = 0f;
                 p.IsGrounded = true;
                 p.IsOnPlatform = false;
                 p.IsAirStalled = false;
                 p.HasUsedAirStall = false;
             }
-            else if (currFeetY < GroundY || p.PlatformDropTimer > 0f || p.Velocity.Y < 0f)
+            else if (overHatchGap || currFeetY < activeGroundY || p.PlatformDropTimer > 0f || p.Velocity.Y < 0f)
             {
                 p.IsGrounded = false;
                 p.IsOnPlatform = false;
             }
         }
 
-        float sw = Raylib.GetScreenWidth();
-        float leftBound = (allowExtendedBounds && SceneManager.CurrentScene != null)
-            ? SceneManager.CurrentScene.PlayableLeftPct * sw
+        if (inBottomRoom)
+        {
+            float labCeiling = sh * 1.02f;
+            if (p.Velocity.Y < 0f && p.Position.Y - halfH < labCeiling)
+            {
+                p.Position.Y = labCeiling + halfH;
+                p.Velocity.Y = 0f;
+            }
+
+            float maxBottom = (allowExtendedBounds && scene != null ? scene.PlayableBottomPct : 2.0f) * sh;
+            if (p.Position.Y + halfH > maxBottom)
+                p.Position.Y = maxBottom - halfH;
+        }
+        else if (allowExtendedBounds && scene != null)
+        {
+            float topBound = scene.PlayableTopPct * sh;
+            if (p.Position.Y - halfH < topBound)
+            {
+                p.Position.Y = topBound + halfH;
+                if (p.Velocity.Y < 0f) p.Velocity.Y = 0f;
+            }
+        }
+
+        float leftBound = (!inBottomRoom && allowExtendedBounds && scene != null)
+            ? scene.PlayableLeftPct * sw
             : LeftBoundary;
-        float rightBound = (allowExtendedBounds && SceneManager.CurrentScene != null)
-            ? SceneManager.CurrentScene.PlayableRightPct * sw
+        float rightBound = (!inBottomRoom && allowExtendedBounds && scene != null)
+            ? scene.PlayableRightPct * sw
             : RightBoundary;
 
         if (p.Position.X - halfW < leftBound)

@@ -2,6 +2,13 @@ using System.Numerics;
 using Raylib_cs;
 using MoonSharp.Interpreter;
 
+public enum DummyBlockMode
+{
+    Off,
+    Stand,
+    Crouch
+}
+
 [MoonSharpUserData]
 public class Player : IDisposable
 {
@@ -27,6 +34,8 @@ public class Player : IDisposable
     public string Name => _name;
     public bool IsAI => _isAI;
     public bool IsPassiveDummy { get; set; } = false;
+    public DummyBlockMode DummyBlock { get; set; } = DummyBlockMode.Off;
+    public bool AutoHealEnabled { get; set; } = true;
     public float TimeSinceHitstun { get; set; } = 0f;
     public float HitstunTimer { get; set; } = 0f;
     public float InvulnerableTimer { get; set; } = 0f;
@@ -53,7 +62,7 @@ public class Player : IDisposable
     public bool IsHoldingBack { get; set; } = false;
 
     public bool IsNeutralBlocking =>
-        !IsPassiveDummy &&
+        (!IsPassiveDummy || DummyBlock != DummyBlockMode.Off) &&
         IsGrounded &&
         (IsInputIdle || IsHoldingBack || IsCrouching) &&
         CurrentCharacter?.ActiveSkill == null &&
@@ -275,8 +284,8 @@ public class Player : IDisposable
         if (_isAI && IsPassiveDummy)
         {
             IsInputIdle = true;
-            IsCrouching = false;
-            IsHoldingBack = false;
+            IsCrouching = DummyBlock == DummyBlockMode.Crouch;
+            IsHoldingBack = DummyBlock != DummyBlockMode.Off;
             return;
         }
 

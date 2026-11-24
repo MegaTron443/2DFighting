@@ -50,6 +50,7 @@ public class WorldButton : IDisposable
 
     public bool IsToggle { get; set; } = false;
     public bool IsSelected { get; set; } = false;
+    public bool AllowCombatTrigger { get; set; } = true;
     public float HitCooldownTimer { get; set; } = 0f;
     public Action<ButtonContext>? OnTrigger { get; set; }
     public bool IsHovered { get; private set; }
@@ -125,6 +126,8 @@ public class WorldButton : IDisposable
             Trigger(context, isCombatHit: false, hitDir: 0f, impactPos: center);
             return;
         }
+
+        if (!AllowCombatTrigger) return;
 
         if (HitCooldownTimer > 0f) return;
 

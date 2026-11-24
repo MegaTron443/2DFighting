@@ -1,6 +1,14 @@
 using System.Numerics;
 using Raylib_cs;
 
+public enum LobbyRoom
+{
+    Center,
+    LeftOffline,
+    RightDev,
+    BottomTraining
+}
+
 public static class CameraManager
 {
     public static CameraConfig Config { get; } = new();
@@ -10,13 +18,13 @@ public static class CameraManager
 
     private static Vector2 _currentTarget;
     private static float _currentZoom = 1f;
-    private static bool _inLobbyAlcove = false;
 
     private static Vector2? _overrideTarget;
     private static float? _overrideZoom;
     private static float _overrideTimer;
 
-    public static bool IsInLobbyAlcove => _inLobbyAlcove;
+    public static LobbyRoom CurrentLobbyRoom { get; private set; } = LobbyRoom.Center;
+    public static bool IsInLobbyAlcove => CurrentLobbyRoom == LobbyRoom.RightDev;
 
     public static void Initialize() => Reset();
 
@@ -27,7 +35,7 @@ public static class CameraManager
 
         _currentTarget = new Vector2(sw * 0.5f, sh * 0.5f);
         _currentZoom = 1f;
-        _inLobbyAlcove = false;
+        CurrentLobbyRoom = LobbyRoom.Center;
         ClearOverride();
 
         RawCamera = new Camera2D
@@ -44,16 +52,21 @@ public static class CameraManager
         float sw = Raylib.GetScreenWidth();
         float sh = Raylib.GetScreenHeight();
 
-        if (scene?.HasDeveloperAlcove == true)
+        if (scene?.HasTrainingLab == true && playerPos.Y > sh)
         {
-            if (!_inLobbyAlcove && playerPos.X > sw * 1.01f)
-                _inLobbyAlcove = true;
-            else if (_inLobbyAlcove && playerPos.X < sw * 0.97f)
-                _inLobbyAlcove = false;
+            CurrentLobbyRoom = LobbyRoom.BottomTraining;
+        }
+        else if (scene?.HasOfflineWing == true && playerPos.X < 0f)
+        {
+            CurrentLobbyRoom = LobbyRoom.LeftOffline;
+        }
+        else if (scene?.HasDeveloperAlcove == true && playerPos.X > sw)
+        {
+            CurrentLobbyRoom = LobbyRoom.RightDev;
         }
         else
         {
-            _inLobbyAlcove = false;
+            CurrentLobbyRoom = LobbyRoom.Center;
         }
 
         Vector2 desiredTarget;
@@ -68,9 +81,13 @@ public static class CameraManager
         }
         else
         {
-            desiredTarget = _inLobbyAlcove
-                ? new Vector2(sw * 1.50f, sh * 0.50f)
-                : new Vector2(sw * 0.50f, sh * 0.50f);
+            desiredTarget = CurrentLobbyRoom switch
+            {
+                LobbyRoom.LeftOffline    => new Vector2(sw * -0.50f, sh * 0.50f),
+                LobbyRoom.RightDev       => new Vector2(sw * 1.50f, sh * 0.50f),
+                LobbyRoom.BottomTraining => new Vector2(sw * 0.50f, sh * 1.50f),
+                _                        => new Vector2(sw * 0.50f, sh * 0.50f)
+            };
             desiredZoom = 1.0f;
         }
 

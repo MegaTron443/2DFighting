@@ -209,13 +209,13 @@ public static class VFXManager
 
         ShaderManager.EndShader();
         float sh = Raylib.GetScreenHeight();
-        float groundY = PhysicsEngine.GroundY;
 
         Raylib.BeginBlendMode(BlendMode.BLEND_ADDITIVE);
 
         for (int i = 0; i < _activeVfx.Count; i++)
         {
             var vfx = _activeVfx[i];
+            float groundY = PhysicsEngine.GetEffectiveGroundY(vfx.Position);
             float t = vfx.Progress;
             float easeOut = 1f - MathF.Pow(1f - t, 3f);
             byte alpha = (byte)(255 * Math.Clamp(1f - t, 0f, 1f));

@@ -8,9 +8,15 @@ public class Scene : IDisposable
     public string Id { get; }
     public float ExtraLeftScreens { get; set; } = 0f;
     public float ExtraRightScreens { get; set; } = 0f;
+    public float ExtraTopScreens { get; set; } = 0f;
+    public float ExtraBottomScreens { get; set; } = 0f;
     public float PlayableLeftPct { get; set; } = PhysicsEngine.LEFT_BOUNDARY_PCT;
     public float PlayableRightPct { get; set; } = PhysicsEngine.RIGHT_BOUNDARY_PCT;
+    public float PlayableTopPct { get; set; } = -0.25f;
+    public float PlayableBottomPct { get; set; } = 1.0f;
+    public bool HasOfflineWing => ExtraLeftScreens > 0.1f;
     public bool HasDeveloperAlcove => ExtraRightScreens > 0.1f;
+    public bool HasTrainingLab => ExtraBottomScreens > 0.1f;
 
     public Rectangle Bounds
     {
@@ -28,8 +34,15 @@ public class Scene : IDisposable
 
             float leftExt = ExtraLeftScreens * sw;
             float rightExt = ExtraRightScreens * sw;
+            float topExt = ExtraTopScreens * sh;
+            float bottomExt = ExtraBottomScreens * sh;
 
-            return new Rectangle(-padX - leftExt, -padY, sw + padX * 2f + leftExt + rightExt, sh + padY * 2f);
+            return new Rectangle(
+                -padX - leftExt,
+                -padY - topExt,
+                sw + padX * 2f + leftExt + rightExt,
+                sh + padY * 2f + topExt + bottomExt
+            );
         }
     }
 

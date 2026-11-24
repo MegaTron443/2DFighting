@@ -17,7 +17,7 @@ public class Projectile
     public float PosY => Position.Y;
     public float VelX => Velocity.X;
     public float VelY => Velocity.Y;
-    public float GroundY => PhysicsEngine.GroundY;
+    public float GroundY => PhysicsEngine.GetEffectiveGroundY(Position);
 
     public float WidthPct { get; set; } = 0.035f;
     public float HeightPct { get; set; } = 0.055f;
