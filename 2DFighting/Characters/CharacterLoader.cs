@@ -71,13 +71,19 @@ public static class CharacterLoader
         _textureCache.Clear();
     }
 
-    public static void LoadFromLua(Character character, string path, Script script)
+    public static void LoadFromLua(
+        Character character,
+        string path,
+        Script script,
+        bool skipGpuAssets = false,
+        bool applyStoredBalance = true)
     {
         Table env = CreateIsolatedEnvironment(script);
 
         string code = File.ReadAllText(path);
         character.RawLuaCode = code;
         character.ScriptHash = ModManager.ComputeStringHash(code);
+        character.BaseScriptHash = character.ScriptHash;
         DynValue result = script.DoString(code, env, path);
 
         Table? t = result.Type == DataType.Table ? result.Table : env.Get("Character").Table;
@@ -90,14 +96,87 @@ public static class CharacterLoader
         character.Description = string.IsNullOrWhiteSpace(desc) ? "No description provided." : desc.Trim();
         character.OnPassive = t.Get("on_passive");
 
+        bool headless = skipGpuAssets || PhysicsEngine.IsHeadlessThread;
         ParsePhysics(character, t.Get("physics").Table);
-        ParseRendering(character, t.Get("rendering").Table);
+        ParseRendering(character, t.Get("rendering").Table, headless);
         ParseAnimations(character, t.Get("animations").Table);
         ParseSkills(character, t.Get("skills").Table);
 
-        if (LuaMoveTranslator.HasValidCache(character.Name, character.ScriptHash))
+        character.BaseStatsSnapshot = CharacterBalanceGenome.FromCharacter(character);
+
+        bool appliedBalance = false;
+        if (applyStoredBalance &&
+            BalanceOverrideStore.IsEnabled &&
+            BalanceOverrideStore.TryGetGenome(character.CharacterId, character.BaseScriptHash, out CharacterBalanceGenome? genome) &&
+            genome != null)
+        {
+            ApplyGenome(character, genome);
+            appliedBalance = true;
+        }
+
+        if (!headless && (appliedBalance || LuaMoveTranslator.HasValidCache(character.Name, character.ScriptHash)))
         {
             character.RawLuaCode = string.Empty;
+        }
+    }
+
+    public static void ApplyGenome(Character character, CharacterBalanceGenome genome)
+    {
+        if (character.BaseStatsSnapshot != null)
+        {
+            ApplyRawValues(character, character.BaseStatsSnapshot);
+        }
+
+        ApplyRawValues(character, genome);
+
+        string baseHash = !string.IsNullOrEmpty(character.BaseScriptHash)
+            ? character.BaseScriptHash
+            : character.ScriptHash;
+        character.BaseScriptHash = baseHash;
+        character.ScriptHash = $"{baseHash}_ga_{genome.ComputeCompactSignature()}";
+        character.TransientSemanticsCache = null;
+
+        LuaMoveTranslator.AnalyzeCharacter(character, out _);
+    }
+
+    public static void ResetToBaseStats(Character character)
+    {
+        if (character.BaseStatsSnapshot != null)
+        {
+            ApplyRawValues(character, character.BaseStatsSnapshot);
+        }
+
+        if (!string.IsNullOrEmpty(character.BaseScriptHash))
+        {
+            character.ScriptHash = character.BaseScriptHash;
+        }
+        character.TransientSemanticsCache = null;
+        LuaMoveTranslator.AnalyzeCharacter(character, out _);
+    }
+
+    private static void ApplyRawValues(Character character, CharacterBalanceGenome genome)
+    {
+        if (genome.WalkSpeedPct > 0.01f)
+        {
+            character.WalkSpeedPct = Math.Clamp(genome.WalkSpeedPct, 0.08f, 0.65f);
+        }
+        if (genome.JumpForcePct < -0.05f)
+        {
+            character.JumpForcePct = Math.Clamp(genome.JumpForcePct, -1.25f, -0.30f);
+        }
+
+        foreach (var kvp in genome.Skills)
+        {
+            if (!character.Skills.TryGetValue(kvp.Key, out SkillData? skill))
+                continue;
+
+            SkillBalanceGene gene = kvp.Value;
+            skill.Damage = gene.Damage;
+            skill.StartupFrames = gene.StartupFrames;
+            skill.ActiveFrames = gene.ActiveFrames;
+            skill.RecoveryFrames = gene.RecoveryFrames;
+            skill.HitStun = gene.HitStun;
+            skill.CooldownTime = gene.CooldownTime;
         }
     }
 
@@ -128,7 +207,7 @@ public static class CharacterLoader
         character.Friction = (float)(phys.Get("friction").CastToNumber() ?? 0.85);
     }
 
-    private static void ParseRendering(Character character, Table? rend)
+    private static void ParseRendering(Character character, Table? rend, bool headless)
     {
         if (rend == null) return;
 
@@ -144,8 +223,11 @@ public static class CharacterLoader
             string? fullSheetPath = ModManager.ResolveFile(sheetRelPath);
             if (fullSheetPath != null && File.Exists(fullSheetPath))
             {
-                renderer.SpriteSheet = GetOrLoadSpriteSheet(fullSheetPath);
                 renderer.SpriteSheetPath = fullSheetPath;
+                if (!headless)
+                {
+                    renderer.SpriteSheet = GetOrLoadSpriteSheet(fullSheetPath);
+                }
             }
         }
 
@@ -167,10 +249,10 @@ public static class CharacterLoader
             renderer.BaseMaterial.SetColor("u_PrimaryColor", character.PrimaryColor.r, character.PrimaryColor.g, character.PrimaryColor.b);
         }
 
-        ParseParts(renderer, rend.Get("parts").Table);
+        ParseParts(renderer, rend.Get("parts").Table, headless);
     }
 
-    private static void ParseParts(CharacterRenderer renderer, Table? partsTbl)
+    private static void ParseParts(CharacterRenderer renderer, Table? partsTbl, bool headless)
     {
         if (partsTbl == null) return;
 
@@ -199,8 +281,11 @@ public static class CharacterLoader
                 string? resolvedPartTex = ModManager.ResolveFile(partSheet);
                 if (resolvedPartTex != null && File.Exists(resolvedPartTex))
                 {
-                    part.Texture = GetOrLoadSpriteSheet(resolvedPartTex);
                     part.TexturePath = resolvedPartTex;
+                    if (!headless)
+                    {
+                        part.Texture = GetOrLoadSpriteSheet(resolvedPartTex);
+                    }
                 }
             }
 

@@ -18,6 +18,9 @@ public class Character
     public static bool ShowDebugBoxes { get; set; } = false;
 
     public string CharacterId { get; internal set; } = "";
+    public string BaseScriptHash { get; internal set; } = "";
+    internal CharacterBalanceGenome? BaseStatsSnapshot { get; set; }
+    internal CharacterSemanticsCacheFile? TransientSemanticsCache { get; set; }
     public string Name { get; internal set; } = "";
     public string Description { get; set; } = "No description provided.";
 
@@ -31,11 +34,11 @@ public class Character
     public float HitStun { get; set; } = 0.25f;
 
     // --- Computed Pixel Physics Parameters ---
-    public float Width => Raylib.GetScreenWidth() * WidthPct;
-    public float Height => Raylib.GetScreenHeight() * HeightPct;
-    public float WalkSpeed => Raylib.GetScreenWidth() * WalkSpeedPct;
-    public float JumpForce => Raylib.GetScreenHeight() * JumpForcePct;
-    public float Gravity => Raylib.GetScreenHeight() * GravityPct;
+    public float Width => PhysicsEngine.ViewportWidth * WidthPct;
+    public float Height => PhysicsEngine.ViewportHeight * HeightPct;
+    public float WalkSpeed => PhysicsEngine.ViewportWidth * WalkSpeedPct;
+    public float JumpForce => PhysicsEngine.ViewportHeight * JumpForcePct;
+    public float Gravity => PhysicsEngine.ViewportHeight * GravityPct;
 
     // --- Rendering & Animation ---
     public float DrawOffsetX => Width * Renderer.DrawOffsetXPct;
@@ -94,9 +97,20 @@ public class Character
     public void CollectTexturePaths(HashSet<string> activePaths) => Renderer.CollectTexturePaths(activePaths);
     public void EnsureTexturesLoaded() => Renderer.EnsureTexturesLoaded();
 
+    private Character()
+    {
+    }
+
     public Character(string luaFilePath, Script script)
     {
         CharacterLoader.LoadFromLua(this, luaFilePath, script);
+    }
+
+    public static Character CreateHeadless(string luaFilePath, Script script)
+    {
+        var character = new Character();
+        CharacterLoader.LoadFromLua(character, luaFilePath, script, skipGpuAssets: true, applyStoredBalance: false);
+        return character;
     }
 
     public void SetPartVisible(string partName, bool visible) => Renderer.SetPartVisible(partName, visible);
@@ -108,7 +122,11 @@ public class Character
         Renderer.SetPartShaderColor(partName, uniform, r, g, b);
     public void SetShaderColor(string uniform, float r, float g, float b) => Renderer.SetShaderColor(uniform, r, g, b);
     public void SetShaderFloat(string uniform, float val) => Renderer.SetShaderFloat(uniform, val);
-    public void SpawnAfterimage(float r = 165f, float g = 50f, float b = 255f) => Afterimages.RequestAfterimage(r, g, b);
+    public void SpawnAfterimage(float r = 165f, float g = 50f, float b = 255f)
+    {
+        if (!PhysicsEngine.IsHeadlessThread)
+            Afterimages.RequestAfterimage(r, g, b);
+    }
     public void SetPartShaderVec2(string partName, string uniform, float x, float y) =>
         Renderer.SetPartShaderVec2(partName, uniform, x, y);
 
@@ -155,15 +173,18 @@ public class Character
             Afterimages.StopEmission();
         }
 
-        UpdateAnimationState(p);
-        Animator.Update(dt, Animations);
+        if (!PhysicsEngine.IsHeadlessThread)
+        {
+            UpdateAnimationState(p);
+            Animator.Update(dt, Animations);
 
-        Afterimages.Update(
-            p,
-            Animator.GetAtlasFrameIndex(Animations),
-            Animator.GetCurrentKeyframe(Animations),
-            dt
-        );
+            Afterimages.Update(
+                p,
+                Animator.GetAtlasFrameIndex(Animations),
+                Animator.GetCurrentKeyframe(Animations),
+                dt
+            );
+        }
 
         if (OnPassive != null && OnPassive.Type == DataType.Function)
         {

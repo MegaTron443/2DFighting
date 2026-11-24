@@ -131,7 +131,10 @@ public class CharacterTacticalSummary
 
 public static class LuaMoveTranslator
 {
+    private static readonly object _cacheLock = new();
     private static readonly Dictionary<string, CharacterSemanticsCacheFile> _memoryCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, Dictionary<string, string>> _luaSkillBlocksCache =
         new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
@@ -142,8 +145,11 @@ public static class LuaMoveTranslator
 
     public static bool HasValidCache(string characterName, string scriptHash)
     {
-        return _memoryCache.TryGetValue(characterName, out var cached) &&
-               string.Equals(cached.ScriptHash, scriptHash, StringComparison.OrdinalIgnoreCase);
+        lock (_cacheLock)
+        {
+            return _memoryCache.TryGetValue(characterName, out var cached) &&
+                   string.Equals(cached.ScriptHash, scriptHash, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>
@@ -153,7 +159,11 @@ public static class LuaMoveTranslator
     public static void InitializeCache(LuaEngine luaEngine)
     {
         Directory.CreateDirectory(ModManager.CacheDir);
-        _memoryCache.Clear();
+        lock (_cacheLock)
+        {
+            _memoryCache.Clear();
+            _luaSkillBlocksCache.Clear();
+        }
 
         foreach (var (charId, scriptPath) in ModManager.CharacterScripts)
         {
@@ -166,8 +176,11 @@ public static class LuaMoveTranslator
                 CharacterSemanticsCacheFile? cached = TryLoadCacheFromDisk(cacheFilePath);
                 if (cached != null && string.Equals(cached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
                 {
-                    _memoryCache[cached.CharacterName] = cached;
-                    _memoryCache[charId] = cached;
+                    lock (_cacheLock)
+                    {
+                        _memoryCache[cached.CharacterName] = cached;
+                        _memoryCache[charId] = cached;
+                    }
                     continue;
                 }
 
@@ -183,8 +196,11 @@ public static class LuaMoveTranslator
                     SaveCacheToDisk(namedCachePath, generated);
                 }
 
-                _memoryCache[tempChar.Name] = generated;
-                _memoryCache[charId] = generated;
+                lock (_cacheLock)
+                {
+                    _memoryCache[tempChar.Name] = generated;
+                    _memoryCache[charId] = generated;
+                }
 
                 DiagnosticsLogger.LogSilentIssueOnce(
                     $"semantics_cached_{charId}",
@@ -212,19 +228,44 @@ public static class LuaMoveTranslator
     {
         string currentHash = character.ScriptHash;
 
-        if (_memoryCache.TryGetValue(character.Name, out var cached) &&
-            string.Equals(cached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
+        if (character.TransientSemanticsCache != null &&
+            string.Equals(character.TransientSemanticsCache.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
         {
-            character.RawLuaCode = string.Empty;
-            summary = cached.Summary;
-            return HydrateFromCache(character, cached);
+            summary = character.TransientSemanticsCache.Summary;
+            return HydrateFromCache(character, character.TransientSemanticsCache);
+        }
+
+        if (PhysicsEngine.IsHeadlessThread || currentHash.Contains("_ga_", StringComparison.Ordinal))
+        {
+            CharacterSemanticsCacheFile gaCache = BuildSemanticsCache(character, currentHash);
+            character.TransientSemanticsCache = gaCache;
+            if (!PhysicsEngine.IsHeadlessThread)
+            {
+                character.RawLuaCode = string.Empty;
+            }
+            summary = gaCache.Summary;
+            return HydrateFromCache(character, gaCache);
+        }
+
+        lock (_cacheLock)
+        {
+            if (_memoryCache.TryGetValue(character.Name, out var cached) &&
+                string.Equals(cached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
+            {
+                character.RawLuaCode = string.Empty;
+                summary = cached.Summary;
+                return HydrateFromCache(character, cached);
+            }
         }
 
         string diskPath = GetCacheFilePath(character.Name);
         var diskCached = TryLoadCacheFromDisk(diskPath);
         if (diskCached != null && string.Equals(diskCached.ScriptHash, currentHash, StringComparison.OrdinalIgnoreCase))
         {
-            _memoryCache[character.Name] = diskCached;
+            lock (_cacheLock)
+            {
+                _memoryCache[character.Name] = diskCached;
+            }
             character.RawLuaCode = string.Empty;
             summary = diskCached.Summary;
             return HydrateFromCache(character, diskCached);
@@ -233,7 +274,10 @@ public static class LuaMoveTranslator
         var generated = BuildSemanticsCache(character, currentHash);
         character.RawLuaCode = string.Empty;
         SaveCacheToDisk(diskPath, generated);
-        _memoryCache[character.Name] = generated;
+        lock (_cacheLock)
+        {
+            _memoryCache[character.Name] = generated;
+        }
 
         summary = generated.Summary;
         return HydrateFromCache(character, generated);
@@ -298,7 +342,7 @@ public static class LuaMoveTranslator
         var summary = new CharacterTacticalSummary();
         var moves = new Dictionary<string, MoveSemanticCacheEntry>();
 
-        Dictionary<string, string> skillLuaBlocks = ExtractSkillSourceBlocks(character.RawLuaCode);
+        Dictionary<string, string> skillLuaBlocks = GetOrExtractSkillBlocks(character);
 
         int zonerPoints = 0;
         int rushdownPoints = 0;
@@ -528,6 +572,38 @@ public static class LuaMoveTranslator
             return val;
         }
         return defaultVal;
+    }
+
+    private static Dictionary<string, string> GetOrExtractSkillBlocks(Character character)
+    {
+        string baseHash = !string.IsNullOrEmpty(character.BaseScriptHash) ? character.BaseScriptHash : character.ScriptHash;
+        string key = $"{character.Name}_{baseHash}";
+
+        lock (_cacheLock)
+        {
+            if (_luaSkillBlocksCache.TryGetValue(key, out Dictionary<string, string>? cachedBlocks))
+                return cachedBlocks;
+        }
+
+        string source = character.RawLuaCode;
+        if (string.IsNullOrEmpty(source) && !string.IsNullOrWhiteSpace(character.CharacterId))
+        {
+            string? scriptPath = ModManager.ResolveCharacterScript(character.CharacterId);
+            if (!string.IsNullOrEmpty(scriptPath) && File.Exists(scriptPath))
+            {
+                try { source = File.ReadAllText(scriptPath); } catch { }
+            }
+        }
+
+        Dictionary<string, string> extracted = ExtractSkillSourceBlocks(source);
+        if (extracted.Count > 0)
+        {
+            lock (_cacheLock)
+            {
+                _luaSkillBlocksCache[key] = extracted;
+            }
+        }
+        return extracted;
     }
 
     private static Dictionary<string, string> ExtractSkillSourceBlocks(string rawLua)
