@@ -63,6 +63,7 @@ public class EngineServices
         SceneManager.Initialize();
         CameraManager.Initialize();
         LuaMoveTranslator.InitializeCache(Lua);
+        UIRenderer.InitializeFont();
         GUIEngine.Initialize();
     }
 
@@ -243,6 +244,7 @@ public class EngineServices
         Player1 = null;
         Player2 = null;
         GUIEngine.Dispose();
+        UIRenderer.DisposeFont();
         VFXManager.Dispose();
         PostFXManager.Dispose();
         SceneManager.Dispose();

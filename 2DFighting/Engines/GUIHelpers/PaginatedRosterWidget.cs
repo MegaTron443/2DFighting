@@ -266,8 +266,8 @@ public class PaginatedRosterWidget : IDisposable
         {
             int emptyFont = Math.Max(14, (int)(Raylib.GetScreenHeight() * 0.022f));
             string emptyMsg = "NO FIGHTERS MATCH FILTER";
-            int ew = Raylib.MeasureText(emptyMsg, emptyFont);
-            Raylib.DrawText(emptyMsg, (int)(bounds.x + (bounds.width - ew) * 0.5f), (int)(bounds.y + bounds.height * 0.38f), emptyFont, Color.LIGHTGRAY);
+            int ew = UIRenderer.MeasureText(emptyMsg, emptyFont);
+            UIRenderer.DrawText(emptyMsg, bounds.x + (bounds.width - ew) * 0.5f, bounds.y + bounds.height * 0.38f, emptyFont, Color.LIGHTGRAY);
         }
         else
         {
@@ -292,13 +292,12 @@ public class PaginatedRosterWidget : IDisposable
         }
         string pageLabel = _cachedPageLabel;
         int pageFont = Math.Max(12, (int)(Raylib.GetScreenHeight() * 0.019f));
-        int pw = Raylib.MeasureText(pageLabel, pageFont);
+        int pw = UIRenderer.MeasureText(pageLabel, pageFont);
         Rectangle prevRect = PrevButton.GetPixelBounds();
-        int px = (int)(bounds.x + (bounds.width - pw) * 0.5f);
-        int py = (int)(prevRect.y + (prevRect.height - pageFont) * 0.5f);
+        float px = bounds.x + (bounds.width - pw) * 0.5f;
+        float py = prevRect.y + (prevRect.height - pageFont) * 0.5f;
 
-        Raylib.DrawText(pageLabel, px + 1, py + 1, pageFont, Color.BLACK);
-        Raylib.DrawText(pageLabel, px, py, pageFont, Color.RAYWHITE);
+        UIRenderer.DrawTextShadowed(pageLabel, px, py, pageFont, Color.RAYWHITE, shadowOffset: 1f);
     }
 
     private void UnloadThumbnails()

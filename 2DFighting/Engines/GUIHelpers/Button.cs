@@ -272,9 +272,8 @@ public class Button : IDisposable
             _                    => (int)(bounds.y + (bounds.height - fontSize) / 2f)
         };
 
-        Raylib.DrawText(_text, textX + 1, textY + 1, fontSize, Color.BLACK);
         Color finalTextCol = IsHovered ? Color.GOLD : TextColor;
-        Raylib.DrawText(_text, textX, textY, fontSize, finalTextCol);
+        UIRenderer.DrawTextShadowed(_text, textX, textY, fontSize, finalTextCol, shadowOffset: 1f);
     }
 
     public void Dispose()

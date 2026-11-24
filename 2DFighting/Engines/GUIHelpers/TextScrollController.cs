@@ -70,8 +70,7 @@ public class TextScrollController
 
         if (!string.IsNullOrWhiteSpace(title))
         {
-            Raylib.DrawText(title, (int)(bounds.x + pad + 1), (int)(bounds.y + 7), titleFont, Color.BLACK);
-            Raylib.DrawText(title, (int)(bounds.x + pad), (int)(bounds.y + 6), titleFont, Color.GOLD);
+            UIRenderer.DrawTextShadowed(title, bounds.x + pad, bounds.y + 6f, titleFont, Color.GOLD, shadowOffset: 1f);
             Raylib.DrawLine(
                 (int)(bounds.x + pad),
                 (int)(bounds.y + headerH),
@@ -100,8 +99,7 @@ public class TextScrollController
                 string line = _wrappedLines[i];
                 if (line.Length > 0)
                 {
-                    Raylib.DrawText(line, (int)clipRect.x + 1, (int)drawY + 1, bodyFont, Color.BLACK);
-                    Raylib.DrawText(line, (int)clipRect.x, (int)drawY, bodyFont, textColor);
+                    UIRenderer.DrawTextShadowed(line, clipRect.x, drawY, bodyFont, textColor, shadowOffset: 1f);
                 }
             }
             drawY += lineHeight;
@@ -204,7 +202,7 @@ public class TextScrollController
             foreach (string word in words)
             {
                 string candidate = string.IsNullOrEmpty(current) ? word : $"{current} {word}";
-                if (Raylib.MeasureText(candidate, fontSize) <= maxWidth)
+                if (UIRenderer.MeasureText(candidate, fontSize) <= maxWidth)
                 {
                     current = candidate;
                 }
@@ -216,7 +214,7 @@ public class TextScrollController
                         current = "";
                     }
 
-                    if (Raylib.MeasureText(word, fontSize) <= maxWidth)
+                    if (UIRenderer.MeasureText(word, fontSize) <= maxWidth)
                     {
                         current = word;
                     }
@@ -238,7 +236,7 @@ public class TextScrollController
         for (int i = 0; i < word.Length; i++)
         {
             string next = chunk + word[i];
-            if (!string.IsNullOrEmpty(chunk) && Raylib.MeasureText(next, fontSize) > maxWidth)
+            if (!string.IsNullOrEmpty(chunk) && UIRenderer.MeasureText(next, fontSize) > maxWidth)
             {
                 _wrappedLines.Add(chunk);
                 chunk = word[i].ToString();

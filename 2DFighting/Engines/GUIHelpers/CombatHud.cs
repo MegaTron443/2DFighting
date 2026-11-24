@@ -1,22 +1,26 @@
+using System.Numerics;
 using Raylib_cs;
 
 public static class CombatHUD
 {
+    private static readonly RenderMaterial TimerPanelMaterial = new() { ShaderId = BuiltInShaders.UiButtonId };
+    private static readonly Vector3 TimerAccentColor = new(1.0f, 0.82f, 0.28f);
+
     private static UIBarStyle P1HealthStyle = new()
     {
-        BackgroundColor = Color.GRAY,
-        FillColor = Color.RED,
-        BorderColor = Color.BLACK,
-        BorderThickness = 2f,
+        BackgroundColor = new Color(22, 24, 34, 225),
+        FillColor = new Color(235, 45, 60, 255),
+        BorderColor = new Color(220, 225, 240, 255),
+        BorderThickness = 2.2f,
         RightToLeft = false
     };
 
     private static UIBarStyle P2HealthStyle = new()
     {
-        BackgroundColor = Color.GRAY,
-        FillColor = Color.BLUE,
-        BorderColor = Color.BLACK,
-        BorderThickness = 2f,
+        BackgroundColor = new Color(22, 24, 34, 225),
+        FillColor = new Color(50, 135, 255, 255),
+        BorderColor = new Color(220, 225, 240, 255),
+        BorderThickness = 2.2f,
         RightToLeft = true
     };
 
@@ -81,21 +85,8 @@ public static class CombatHUD
         Rectangle p1Rect = UIRenderer.GetPctRect(0.10f, 0.05f, 0.32f, 0.045f);
         Rectangle p2Rect = UIRenderer.GetPctRect(0.58f, 0.05f, 0.32f, 0.045f);
 
-        var p1TrailStyle = P1HealthStyle;
-        p1TrailStyle.FillColor = new Color(255, 215, 90, 255);
-        UIRenderer.DrawProgressBar(p1Rect, _p1TrailPct, p1TrailStyle);
-
-        var p2TrailStyle = P2HealthStyle;
-        p2TrailStyle.FillColor = new Color(255, 215, 90, 255);
-        UIRenderer.DrawProgressBar(p2Rect, _p2TrailPct, p2TrailStyle);
-
-        var p1LiveStyle = P1HealthStyle;
-        p1LiveStyle.BackgroundColor = new Color(0, 0, 0, 0);
-        UIRenderer.DrawProgressBar(p1Rect, p1Pct, p1LiveStyle);
-
-        var p2LiveStyle = P2HealthStyle;
-        p2LiveStyle.BackgroundColor = new Color(0, 0, 0, 0);
-        UIRenderer.DrawProgressBar(p2Rect, p2Pct, p2LiveStyle);
+        UIRenderer.DrawProgressBar(p1Rect, p1Pct, _p1TrailPct, P1HealthStyle);
+        UIRenderer.DrawProgressBar(p2Rect, p2Pct, _p2TrailPct, P2HealthStyle);
     }
 
     private static void DrawRoundPips(Player p1, Player p2)
@@ -126,8 +117,16 @@ public static class CombatHUD
         int sh = Raylib.GetScreenHeight();
 
         Rectangle box = UIRenderer.GetPctRect(0.46f, 0.04f, 0.08f, 0.065f);
-        Raylib.DrawRectangleRec(box, new Color(40, 40, 40, 230));
-        Raylib.DrawRectangleLinesEx(box, 2f, Color.GOLD);
+        UIRenderer.DrawStyledPanel(
+            box,
+            TimerPanelMaterial,
+            texture: null,
+            hover: 0f,
+            isSelected: false,
+            TimerAccentColor,
+            new Color(28, 30, 42, 235),
+            Color.GOLD
+        );
 
         float roundTimer = match?.RoundTimer ?? PhysicsEngine.RoundTimer;
         int currentRound = match?.CurrentRound ?? PhysicsEngine.CurrentRound;
@@ -140,8 +139,8 @@ public static class CombatHUD
         }
         string timeText = _cachedTimerText;
         int fontSize = (int)(sh * 0.045f);
-        int textW = Raylib.MeasureText(timeText, fontSize);
-        Raylib.DrawText(timeText, (sw - textW) / 2, (int)(box.y + (box.height - fontSize) / 2f), fontSize, Color.WHITE);
+        int textW = UIRenderer.MeasureText(timeText, fontSize);
+        UIRenderer.DrawTextShadowed(timeText, (sw - textW) * 0.5f, box.y + (box.height - fontSize) * 0.5f, fontSize, Color.WHITE);
 
         int roundFont = Math.Max(12, (int)(sh * 0.02f));
         if (currentRound != _lastRound)
@@ -150,8 +149,8 @@ public static class CombatHUD
             _cachedRoundLabel = $"ROUND {currentRound}";
         }
         string roundLabel = _cachedRoundLabel;
-        int rw = Raylib.MeasureText(roundLabel, roundFont);
-        Raylib.DrawText(roundLabel, (sw - rw) / 2, (int)(box.y + box.height + 6), roundFont, Color.DARKGRAY);
+        int rw = UIRenderer.MeasureText(roundLabel, roundFont);
+        UIRenderer.DrawTextShadowed(roundLabel, (sw - rw) * 0.5f, box.y + box.height + 6f, roundFont, new Color(215, 220, 235, 255));
     }
 
     private static void DrawRoundAnnouncement(MatchManager? match)
@@ -162,12 +161,11 @@ public static class CombatHUD
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
         int fontSize = (int)(sh * 0.055f);
-        int textW = Raylib.MeasureText(announcement, fontSize);
-        int x = (sw - textW) / 2;
-        int y = (int)(sh * 0.35f);
+        int textW = UIRenderer.MeasureText(announcement, fontSize);
+        float x = (sw - textW) * 0.5f;
+        float y = sh * 0.35f;
 
-        Raylib.DrawText(announcement, x + 3, y + 3, fontSize, Color.BLACK);
-        Raylib.DrawText(announcement, x, y, fontSize, Color.GOLD);
+        UIRenderer.DrawTextShadowed(announcement, x, y, fontSize, Color.GOLD, shadowOffset: 3f);
     }
 
     private static void DrawSkillCooldowns(Player player, float xPct, bool rightAlign)
@@ -201,7 +199,7 @@ public static class CombatHUD
 
             UIRenderer.DrawProgressBar(slotRect, readyPct, style);
 
-            Raylib.DrawText(skill.ShortLabel, (int)slotRect.x + 4, (int)slotRect.y + 2, fontSize, Color.WHITE);
+            UIRenderer.DrawTextShadowed(skill.ShortLabel, slotRect.x + 6f, slotRect.y + 2f, fontSize, Color.WHITE, shadowOffset: 1f);
 
             index++;
         }
@@ -233,12 +231,11 @@ public static class CombatHUD
             }
             text = _cachedP2ComboText;
         }
-        int textW = Raylib.MeasureText(text, fontSize);
+        int textW = UIRenderer.MeasureText(text, fontSize);
 
-        int drawX = rightAlign ? (int)(sw * xPct) - textW : (int)(sw * xPct);
-        int drawY = (int)(sh * 0.16f);
+        float drawX = rightAlign ? (sw * xPct) - textW : (sw * xPct);
+        float drawY = sh * 0.16f;
 
-        Raylib.DrawText(text, drawX + 2, drawY + 2, fontSize, Color.BLACK);
-        Raylib.DrawText(text, drawX, drawY, fontSize, Color.GOLD);
+        UIRenderer.DrawTextShadowed(text, drawX, drawY, fontSize, Color.GOLD, shadowOffset: 2f);
     }
 }

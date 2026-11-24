@@ -519,7 +519,7 @@ public class MainMenuScreen : IUIScreen
         // Passable boundary marker between Main Lobby and Hidden Developer Alcove
         Raylib.DrawRectangle((int)(portalX - 3f), (int)dividerTop, 6, (int)(groundY - dividerTop), new Color(0, 235, 220, 75));
         int signFont = Math.Max(12, (int)(sh * 0.018f));
-        Raylib.DrawText("> DEV", (int)(portalX - 44), (int)(dividerTop - signFont - 4), signFont, new Color(110, 220, 255, 175));
+        UIRenderer.DrawText("> DEV", portalX - 44f, dividerTop - signFont - 4f, signFont, new Color(110, 220, 255, 175));
 
         // Alcove floor & cyber grid (only visible when player crosses portal into alcove!)
         Rectangle alcoveRect = new Rectangle(sw * 1.01f, 0f, sw * 0.99f, groundY);
@@ -533,13 +533,13 @@ public class MainMenuScreen : IUIScreen
 
         int devTitleSize = Math.Max(18, (int)(sh * 0.036f));
         string devHeader = "// DEVELOPER SANDBOX ALCOVE //";
-        int hw = Raylib.MeasureText(devHeader, devTitleSize);
-        Raylib.DrawText(devHeader, (int)(sw * 1.50f - hw * 0.5f), (int)(sh * 0.16f), devTitleSize, new Color(90, 250, 235, 255));
+        int hw = UIRenderer.MeasureText(devHeader, devTitleSize);
+        UIRenderer.DrawText(devHeader, sw * 1.50f - hw * 0.5f, sh * 0.16f, devTitleSize, new Color(90, 250, 235, 255));
 
         int hintSize = Math.Max(13, (int)(sh * 0.020f));
         string devHint = "PUNCH OR CLICK TOOLS   |   <- WALK LEFT TO RETURN TO LOBBY";
-        int dhw = Raylib.MeasureText(devHint, hintSize);
-        Raylib.DrawText(devHint, (int)(sw * 1.50f - dhw * 0.5f), (int)(sh * 0.22f), hintSize, Color.LIGHTGRAY);
+        int dhw = UIRenderer.MeasureText(devHint, hintSize);
+        UIRenderer.DrawText(devHint, sw * 1.50f - dhw * 0.5f, sh * 0.22f, hintSize, Color.LIGHTGRAY);
     }
 
     private static void DrawWorldFighterTags(GameData data, int sh)
@@ -549,21 +549,19 @@ public class MainMenuScreen : IUIScreen
         if (data.Player1?.CurrentCharacter != null)
         {
             string p1Tag = "P1";
-            int tw = Raylib.MeasureText(p1Tag, tagFont);
-            int tx = (int)(data.Player1.Position.X - tw * 0.5f);
-            int ty = (int)(data.Player1.Position.Y - data.Player1.CurrentCharacter.Height * 0.72f);
-            Raylib.DrawText(p1Tag, tx + 1, ty + 1, tagFont, Color.BLACK);
-            Raylib.DrawText(p1Tag, tx, ty, tagFont, Color.SKYBLUE);
+            int tw = UIRenderer.MeasureText(p1Tag, tagFont);
+            float tx = data.Player1.Position.X - tw * 0.5f;
+            float ty = data.Player1.Position.Y - data.Player1.CurrentCharacter.Height * 0.72f;
+            UIRenderer.DrawTextShadowed(p1Tag, tx, ty, tagFont, Color.SKYBLUE, shadowOffset: 1f);
         }
 
         if (data.Player2?.CurrentCharacter != null)
         {
             string dummyTag = data.Player2.IsPassiveDummy ? "SPARRING DUMMY" : "DUMMY [AI HARD]";
-            int tw = Raylib.MeasureText(dummyTag, tagFont);
-            int tx = (int)(data.Player2.Position.X - tw * 0.5f);
-            int ty = (int)(data.Player2.Position.Y - data.Player2.CurrentCharacter.Height * 0.72f);
-            Raylib.DrawText(dummyTag, tx + 1, ty + 1, tagFont, Color.BLACK);
-            Raylib.DrawText(dummyTag, tx, ty, tagFont, data.Player2.IsPassiveDummy ? Color.GOLD : Color.RED);
+            int tw = UIRenderer.MeasureText(dummyTag, tagFont);
+            float tx = data.Player2.Position.X - tw * 0.5f;
+            float ty = data.Player2.Position.Y - data.Player2.CurrentCharacter.Height * 0.72f;
+            UIRenderer.DrawTextShadowed(dummyTag, tx, ty, tagFont, data.Player2.IsPassiveDummy ? Color.GOLD : Color.RED, shadowOffset: 1f);
         }
     }
 
@@ -591,7 +589,7 @@ public class MainMenuScreen : IUIScreen
 
         int sh = Raylib.GetScreenHeight();
         int fontSize = UIRenderer.FitFontSize(modeText, Math.Max(13, (int)(sh * 0.020f)), 11, banner.width * 0.54f);
-        Raylib.DrawText(modeText, (int)(banner.x + 12f), (int)(banner.y + (banner.height - fontSize) * 0.5f), fontSize, bannerBorder);
+        UIRenderer.DrawText(modeText, banner.x + 12f, banner.y + (banner.height - fontSize) * 0.5f, fontSize, bannerBorder);
 
         _launchQueueButton?.Draw();
         _cancelQueueButton?.Draw();
@@ -626,27 +624,27 @@ public class MainMenuScreen : IUIScreen
                     ? $"DUMMY HP: {dummyHp}/{Player.MAX_HEALTH}   |   {p1Combo} HIT COMBO!"
                     : $"DUMMY HP: {dummyHp}/{Player.MAX_HEALTH}";
             }
-            Raylib.DrawText(_cachedDummyInfo, (int)hpRect.x, (int)(hpRect.y + hpRect.height + 5f), labelFont, Color.RAYWHITE);
+            UIRenderer.DrawTextShadowed(_cachedDummyInfo, hpRect.x, hpRect.y + hpRect.height + 5f, labelFont, Color.RAYWHITE, shadowOffset: 1f);
         }
 
         int hintFont = Math.Max(12, (int)(sh * 0.018f));
         string hint = CameraManager.IsInLobbyAlcove
             ? "DEV ALCOVE: JUMP PLATFORMS TO HIT TOOLS   |   TAP CROUCH TO DROP   |   WALK LEFT TO EXIT"
             : "JUMP PLATFORMS TO REACH HIGH BUTTONS   |   TAP CROUCH TO DROP   |   WALK RIGHT FOR DEV ROOM";
-        int hw = Raylib.MeasureText(hint, hintFont);
-        Raylib.DrawText(hint, (int)(sw * 0.985f - hw), (int)(groundY + (sh - groundY - hintFont) * 0.5f), hintFont, Color.LIGHTGRAY);
+        int hw = UIRenderer.MeasureText(hint, hintFont);
+        UIRenderer.DrawTextShadowed(hint, sw * 0.985f - hw, groundY + (sh - groundY - hintFont) * 0.5f, hintFont, Color.LIGHTGRAY, shadowOffset: 1f);
 
         if (_toastTimer > 0f && !string.IsNullOrEmpty(_toastText))
         {
             int toastFont = Math.Max(16, (int)(sh * 0.026f));
-            int tw = Raylib.MeasureText(_toastText, toastFont);
+            int tw = UIRenderer.MeasureText(_toastText, toastFont);
             int boxW = tw + 36;
             int boxH = toastFont + 16;
             int bx = (sw - boxW) / 2;
             int by = (int)(sh * 0.27f);
             Raylib.DrawRectangle(bx, by, boxW, boxH, new Color(16, 20, 32, 235));
             Raylib.DrawRectangleLines(bx, by, boxW, boxH, Color.GOLD);
-            Raylib.DrawText(_toastText, bx + 18, by + 8, toastFont, Color.GOLD);
+            UIRenderer.DrawText(_toastText, bx + 18, by + 8, toastFont, Color.GOLD);
         }
     }
 

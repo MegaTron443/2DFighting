@@ -278,8 +278,7 @@ public class WorldButton : IDisposable
             ? Color.WHITE
             : (IsHovered ? Color.GOLD : (IsSelected ? new Color(255, 240, 150, 255) : Color.RAYWHITE));
 
-        Raylib.DrawText(_label, mainX + 1, mainY + 1, mainFont, Color.BLACK);
-        Raylib.DrawText(_label, mainX, mainY, mainFont, mainCol);
+        UIRenderer.DrawTextShadowed(_label, mainX, mainY, mainFont, mainCol, shadowOffset: 1f);
 
         if (hasSub)
         {
@@ -289,8 +288,7 @@ public class WorldButton : IDisposable
             int subY = (int)(bounds.y + bounds.height * 0.66f - subFont * 0.4f);
 
             Color subCol = IsSelected ? accentFallback : new Color(185, 200, 220, 240);
-            Raylib.DrawText(_subLabel, subX + 1, subY + 1, subFont, Color.BLACK);
-            Raylib.DrawText(_subLabel, subX, subY, subFont, subCol);
+            UIRenderer.DrawTextShadowed(_subLabel, subX, subY, subFont, subCol, shadowOffset: 1f);
         }
 
         if (IsToggle)
