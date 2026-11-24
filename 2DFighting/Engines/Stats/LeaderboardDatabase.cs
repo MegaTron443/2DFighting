@@ -5,6 +5,14 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+public enum LeaderboardSortMode
+{
+    Rating,
+    WinRate,
+    MaxCombo,
+    Diversity
+}
+
 public static class LeaderboardDatabase
 {
     private const int MaxRecentMatches = 2000;
@@ -167,7 +175,7 @@ public static class LeaderboardDatabase
         }
     }
 
-    public static List<LeaderboardEntry> GetTopEntries(ModFilterMode filter, int maxRows = 50)
+    public static List<string> GetDistinctCharacterIds(ModFilterMode filter)
     {
         lock (_sync)
         {
@@ -175,14 +183,69 @@ public static class LeaderboardDatabase
                 InitializeLocked();
 
             return _entries.Values
-                .Where(e => e.FilterMode == filter)
-                .OrderByDescending(e => e.Rating)
-                .ThenByDescending(e => e.Wins)
-                .ThenByDescending(e => e.BestCombo)
-                .ThenByDescending(e => e.TotalDamage)
-                .Take(Math.Max(0, maxRows))
+                .Where(e => e.FilterMode == filter &&
+                            !string.IsNullOrWhiteSpace(e.CharacterId) &&
+                            !string.Equals(e.CharacterId, "unknown", StringComparison.OrdinalIgnoreCase))
+                .Select(e => e.CharacterId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
+    }
+
+    public static List<LeaderboardEntry> GetTopEntries(
+        ModFilterMode filter,
+        string? characterFilter = null,
+        LeaderboardSortMode sortBy = LeaderboardSortMode.Rating,
+        int limit = 50)
+    {
+        lock (_sync)
+        {
+            if (!_initialized)
+                InitializeLocked();
+
+            IEnumerable<LeaderboardEntry> query = _entries.Values.Where(e => e.FilterMode == filter);
+
+            if (!string.IsNullOrWhiteSpace(characterFilter) &&
+                !string.Equals(characterFilter, "ALL", StringComparison.OrdinalIgnoreCase))
+            {
+                string normalizedChar = NormalizeCharacterId(characterFilter);
+                query = query.Where(e => string.Equals(e.CharacterId, normalizedChar, StringComparison.OrdinalIgnoreCase));
+            }
+
+            IOrderedEnumerable<LeaderboardEntry> ordered = sortBy switch
+            {
+                LeaderboardSortMode.WinRate => query
+                    .OrderByDescending(GetWinRate)
+                    .ThenByDescending(e => e.Rating)
+                    .ThenByDescending(e => e.Wins)
+                    .ThenByDescending(e => e.BestCombo),
+
+                LeaderboardSortMode.MaxCombo => query
+                    .OrderByDescending(e => e.BestCombo)
+                    .ThenByDescending(e => e.Rating)
+                    .ThenByDescending(e => e.Wins),
+
+                LeaderboardSortMode.Diversity => query
+                    .OrderByDescending(e => e.SkillDiversityScore)
+                    .ThenByDescending(e => e.Rating)
+                    .ThenByDescending(e => e.Wins),
+
+                _ => query
+                    .OrderByDescending(e => e.Rating)
+                    .ThenByDescending(e => e.Wins)
+                    .ThenByDescending(e => e.BestCombo)
+                    .ThenByDescending(e => e.TotalDamage)
+            };
+
+            return ordered.Take(Math.Max(0, limit)).ToList();
+        }
+    }
+
+    private static double GetWinRate(LeaderboardEntry entry)
+    {
+        int totalGames = entry.Wins + entry.Losses;
+        return totalGames > 0 ? (double)entry.Wins / totalGames : 0.0;
     }
 
     public static List<MatchTelemetryRecord> GetRecentMatches(int maxCount = 100)
