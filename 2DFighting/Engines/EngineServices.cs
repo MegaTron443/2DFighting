@@ -246,6 +246,7 @@ public class EngineServices
 
     public void DisposeAll()
     {
+        GeneticBalanceTrainer.StopAndWait(1500);
         LeaderboardDatabase.Flush();
         MacroTacticalModel.SharedInstance.SaveWeights();
         Player1?.Dispose();

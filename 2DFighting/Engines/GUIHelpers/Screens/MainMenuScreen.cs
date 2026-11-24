@@ -27,12 +27,17 @@ public class MainMenuScreen : IUIScreen
     private WorldButton? _leaderboardsBtn;
     private WorldButton? _debugHitboxBtn;
     private WorldButton? _dummyModeBtn;
+    private WorldButton? _gaRunBtn;
+    private WorldButton? _gaToggleBtn;
+    private WorldButton? _gaResetBtn;
     private WorldButton? _labDummyBtn;
     private WorldButton? _labBlockBtn;
     private WorldButton? _labAutoHealBtn;
 
     private LobbyQueueMode _queueMode = LobbyQueueMode.None;
     private int _knownCatalogVersion = -1;
+    private int _knownGaVersion = -1;
+    private bool _wasGaRunning = false;
     private string _knownDescCharName = "";
     private string _knownDescCharHash = "";
     private string _toastText = "";
@@ -47,6 +52,8 @@ public class MainMenuScreen : IUIScreen
         _worldButtons.Clear();
         _queueMode = LobbyQueueMode.None;
         _knownCatalogVersion = -1;
+        _knownGaVersion = GeneticBalanceTrainer.CompletedVersion;
+        _wasGaRunning = GeneticBalanceTrainer.IsRunning;
         _knownDescCharName = "";
         _knownDescCharHash = "";
         _toastText = "";
@@ -140,9 +147,11 @@ public class MainMenuScreen : IUIScreen
 
     private void BuildDeveloperAlcoveButtons()
     {
+        Vector2 devBtnSize = new Vector2(0.195f, 0.088f);
+
         _debugHitboxBtn = CreateWorldButton(
             "dev_hitboxes", "DEBUG HITBOXES", Character.ShowDebugBoxes ? "ON" : "OFF",
-            new Vector2(1.23f, 0.37f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.15f, 0.370f), devBtnSize,
             new Vector3(0.0f, 1.0f, 0.95f), isToggle: true,
             _ =>
             {
@@ -150,27 +159,33 @@ public class MainMenuScreen : IUIScreen
                 ShowToast($"DEBUG HITBOXES: {(Character.ShowDebugBoxes ? "ON" : "OFF")}");
             });
 
-        WorldButton aiTrainBtn = CreateWorldButton(
-            "dev_ai_train", "AI VS AI", "TURBO TRAIN",
-            new Vector2(1.50f, 0.37f), new Vector2(0.21f, 0.095f),
-            new Vector3(1.0f, 0.18f, 0.85f), isToggle: false,
-            OnLaunchAiTraining);
-
         _dummyModeBtn = CreateWorldButton(
             "dev_dummy_mode", "DUMMY MODE", "PASSIVE",
-            new Vector2(1.77f, 0.37f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.383f, 0.370f), devBtnSize,
             new Vector3(0.38f, 1.0f, 0.30f), isToggle: true,
             ToggleDummyMode);
 
+        WorldButton aiTrainBtn = CreateWorldButton(
+            "dev_ai_train", "AI VS AI", "TURBO TRAIN",
+            new Vector2(1.617f, 0.370f), devBtnSize,
+            new Vector3(1.0f, 0.18f, 0.85f), isToggle: false,
+            OnLaunchAiTraining);
+
+        _gaRunBtn = CreateWorldButton(
+            "dev_ga_run", "GA AUTO-BALANCE", "EVOLVE ROSTER",
+            new Vector2(1.85f, 0.370f), devBtnSize,
+            new Vector3(0.20f, 1.0f, 0.62f), isToggle: true,
+            OnToggleGaRun);
+
         WorldButton reloadModsBtn = CreateWorldButton(
             "dev_reload_mods", "RELOAD MODS", "HOT REFRESH",
-            new Vector2(1.36f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.15f, 0.500f), devBtnSize,
             new Vector3(1.0f, 0.72f, 0.12f), isToggle: false,
             OnReloadMods);
 
         WorldButton resetWeightsBtn = CreateWorldButton(
             "dev_reset_weights", "RESET AI WEIGHTS", "CLEAR RL MODEL",
-            new Vector2(1.64f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.383f, 0.500f), devBtnSize,
             new Vector3(1.0f, 0.25f, 0.30f), isToggle: false,
             _ =>
             {
@@ -178,10 +193,22 @@ public class MainMenuScreen : IUIScreen
                 ShowToast("AI WEIGHTS RESET TO PRETRAINED");
             });
 
+        _gaToggleBtn = CreateWorldButton(
+            "dev_ga_toggle", "GA PATCHES", BalanceOverrideStore.IsEnabled ? "ON" : "OFF",
+            new Vector2(1.617f, 0.500f), devBtnSize,
+            new Vector3(0.35f, 0.85f, 1.0f), isToggle: true,
+            OnToggleGaPatches);
+
+        _gaResetBtn = CreateWorldButton(
+            "dev_ga_reset", "RESET GA PATCHES", "RESTORE LUA",
+            new Vector2(1.85f, 0.500f), devBtnSize,
+            new Vector3(1.0f, 0.42f, 0.25f), isToggle: false,
+            OnResetGaPatches);
+
         _worldButtons.AddRange(new[]
         {
-            _debugHitboxBtn, aiTrainBtn, _dummyModeBtn,
-            reloadModsBtn, resetWeightsBtn
+            _debugHitboxBtn, _dummyModeBtn, aiTrainBtn, _gaRunBtn,
+            reloadModsBtn, resetWeightsBtn, _gaToggleBtn, _gaResetBtn
         });
     }
 
@@ -523,6 +550,89 @@ public class MainMenuScreen : IUIScreen
         ctx.SetP2(services.Player2);
     }
 
+    private void OnToggleGaRun(ButtonContext ctx)
+    {
+        if (GeneticBalanceTrainer.IsRunning)
+        {
+            GeneticBalanceTrainer.Cancel();
+            ShowToast("STOPPING GA AUTO-BALANCE...");
+            return;
+        }
+
+        EngineServices? services = ctx.Data.Services ?? EngineServices.Current;
+        string[] pool = GetPlayablePool(services);
+        if (GeneticBalanceTrainer.StartAsync(pool, GeneticBalanceTrainer.DefaultGenerations))
+        {
+            _knownGaVersion = GeneticBalanceTrainer.CompletedVersion;
+            _wasGaRunning = true;
+            ShowToast("GA AUTO-BALANCE STARTED");
+        }
+    }
+
+    private void OnToggleGaPatches(ButtonContext ctx)
+    {
+        BalanceOverrideStore.IsEnabled = !BalanceOverrideStore.IsEnabled;
+        RefreshActiveCharactersForBalance(ctx.Data);
+        ShowToast($"GA PATCHES: {(BalanceOverrideStore.IsEnabled ? "ON" : "OFF")}");
+    }
+
+    private void OnResetGaPatches(ButtonContext ctx)
+    {
+        GeneticBalanceTrainer.StopAndWait(500);
+        int cleared = BalanceOverrideStore.ClearAllGenomes();
+        GeneticBalanceTrainer.ResetStatus();
+        RefreshActiveCharactersForBalance(ctx.Data);
+        ShowToast(cleared > 0
+            ? $"CLEARED {cleared} GA PATCHES — DEFAULT LUA RESTORED"
+            : "NO GA PATCHES TO CLEAR — DEFAULT LUA ACTIVE");
+    }
+
+    private void RefreshActiveCharactersForBalance(GameData data)
+    {
+        data.LuaEngine.ClearCharacterCache();
+
+        Player? p1 = data.Player1;
+        if (p1?.CurrentCharacter != null)
+        {
+            string p1Id = string.IsNullOrWhiteSpace(p1.CurrentCharacter.CharacterId)
+                ? data.Services?.SelectedLobbyFighterId ?? "brawler"
+                : p1.CurrentCharacter.CharacterId;
+            Vector2 pos = p1.Position;
+            Vector2 prevPos = p1.PreviousPosition;
+            bool facing = p1.FacingRight;
+            int hp = p1.Health;
+
+            p1.ChangeCharacter(data.LuaEngine.CreateCharacter(p1Id, slot: 0));
+            p1.Position = pos;
+            p1.PreviousPosition = prevPos;
+            p1.FacingRight = facing;
+            p1.Health = Math.Clamp(hp, 1, Player.MAX_HEALTH);
+        }
+
+        Player? p2 = data.Player2;
+        if (p2?.CurrentCharacter != null)
+        {
+            string p2Id = string.IsNullOrWhiteSpace(p2.CurrentCharacter.CharacterId)
+                ? "titan"
+                : p2.CurrentCharacter.CharacterId;
+            Vector2 pos = p2.Position;
+            Vector2 prevPos = p2.PreviousPosition;
+            bool facing = p2.FacingRight;
+            int hp = p2.Health;
+
+            p2.ChangeCharacter(data.LuaEngine.CreateCharacter(p2Id, slot: 1));
+            p2.Position = pos;
+            p2.PreviousPosition = prevPos;
+            p2.FacingRight = facing;
+            p2.Health = Math.Clamp(hp, 1, Player.MAX_HEALTH);
+        }
+
+        data.Services?.PruneUnusedCharacterSpriteSheets();
+        data.SoundHandler?.ReloadCharacterBanks(p1, p2);
+        _knownDescCharName = "";
+        _knownDescCharHash = "";
+    }
+
     private void OnReloadMods(ButtonContext ctx)
     {
         ModManager.Initialize();
@@ -643,6 +753,22 @@ public class MainMenuScreen : IUIScreen
             _dummyModeBtn.SubLabel = fighting ? "AI (HARD)" : "PASSIVE";
         }
 
+        if (_gaRunBtn != null)
+        {
+            bool running = GeneticBalanceTrainer.IsRunning;
+            _gaRunBtn.IsSelected = running;
+            _gaRunBtn.SubLabel = running
+                ? $"GEN {GeneticBalanceTrainer.CurrentGeneration}/{GeneticBalanceTrainer.TotalGenerations}"
+                : "EVOLVE ROSTER";
+        }
+
+        if (_gaToggleBtn != null)
+        {
+            bool enabled = BalanceOverrideStore.IsEnabled;
+            _gaToggleBtn.IsSelected = enabled;
+            _gaToggleBtn.SubLabel = enabled ? "ON" : "OFF";
+        }
+
         if (_labDummyBtn != null && data.Player2 != null)
         {
             bool fighting = !data.Player2.IsPassiveDummy;
@@ -690,6 +816,22 @@ public class MainMenuScreen : IUIScreen
 
         if (_knownCatalogVersion != ModManager.CatalogVersion)
             RefreshRoster(context.Data);
+
+        bool gaRunningNow = GeneticBalanceTrainer.IsRunning;
+        int gaVersionNow = GeneticBalanceTrainer.CompletedVersion;
+        if (gaVersionNow != _knownGaVersion)
+        {
+            _knownGaVersion = gaVersionNow;
+            if (!gaRunningNow && _wasGaRunning)
+            {
+                if (BalanceOverrideStore.IsEnabled)
+                    RefreshActiveCharactersForBalance(context.Data);
+
+                string status = GeneticBalanceTrainer.StatusMessage;
+                ShowToast(string.IsNullOrEmpty(status) ? "GA AUTO-BALANCE FINISHED" : status);
+            }
+        }
+        _wasGaRunning = gaRunningNow;
 
         SyncDynamicLabels(context.Data);
 
@@ -825,12 +967,31 @@ public class MainMenuScreen : IUIScreen
         int devTitleSize = Math.Max(18, (int)(sh * 0.036f));
         string devHeader = "// DEVELOPER SANDBOX ALCOVE //";
         int hw = UIRenderer.MeasureText(devHeader, devTitleSize);
-        UIRenderer.DrawText(devHeader, sw * 1.50f - hw * 0.5f, sh * 0.24f, devTitleSize, new Color(90, 250, 235, 255));
+        UIRenderer.DrawText(devHeader, sw * 1.50f - hw * 0.5f, sh * 0.210f, devTitleSize, new Color(90, 250, 235, 255));
 
         int hintSize = Math.Max(13, (int)(sh * 0.019f));
         string devHint = "PUNCH OR CLICK TOOLS   |   <- WALK LEFT TO CENTER HUB";
         int dhw = UIRenderer.MeasureText(devHint, hintSize);
-        UIRenderer.DrawText(devHint, sw * 1.50f - dhw * 0.5f, sh * 0.29f, hintSize, Color.LIGHTGRAY);
+        UIRenderer.DrawText(devHint, sw * 1.50f - dhw * 0.5f, sh * 0.250f, hintSize, Color.LIGHTGRAY);
+
+        string gaStatus = GeneticBalanceTrainer.StatusMessage;
+        if (!string.IsNullOrEmpty(gaStatus))
+        {
+            int statusFont = Math.Max(12, (int)(sh * 0.018f));
+            int stW = UIRenderer.MeasureText(gaStatus, statusFont);
+            int padX = 18;
+            int boxW = stW + padX * 2;
+            int boxH = statusFont + 10;
+            float bx = sw * 1.50f - boxW * 0.5f;
+            float by = sh * 0.278f;
+            Color borderCol = GeneticBalanceTrainer.IsRunning
+                ? new Color(55, 255, 165, 235)
+                : new Color(115, 220, 255, 220);
+
+            Raylib.DrawRectangle((int)bx, (int)by, boxW, boxH, new Color(12, 18, 30, 230));
+            Raylib.DrawRectangleLines((int)bx, (int)by, boxW, boxH, borderCol);
+            UIRenderer.DrawTextShadowed(gaStatus, bx + padX, by + 5f, statusFont, borderCol, shadowOffset: 1f);
+        }
     }
 
     private static void DrawTrainingLabDecor(int sw, int sh)
@@ -901,6 +1062,21 @@ public class MainMenuScreen : IUIScreen
             DrawQueueBanner();
 
         DrawBottomLobbyBar(data);
+
+        if (GeneticBalanceTrainer.IsRunning &&
+            CameraManager.CurrentLobbyRoom != LobbyRoom.RightDev &&
+            !string.IsNullOrEmpty(GeneticBalanceTrainer.StatusMessage))
+        {
+            int sh = Raylib.GetScreenHeight();
+            int font = Math.Max(11, (int)(sh * 0.016f));
+            string status = GeneticBalanceTrainer.StatusMessage;
+            int w = UIRenderer.MeasureText(status, font);
+            int bx = (int)(Raylib.GetScreenWidth() * 0.015f);
+            int by = (int)(PhysicsEngine.GroundY - font - 18f);
+            Raylib.DrawRectangle(bx, by, w + 20, font + 10, new Color(12, 18, 30, 225));
+            Raylib.DrawRectangleLines(bx, by, w + 20, font + 10, new Color(55, 255, 165, 225));
+            UIRenderer.DrawTextShadowed(status, bx + 10f, by + 5f, font, new Color(55, 255, 165, 255), shadowOffset: 1f);
+        }
 
         _leaderboardOverlay?.Draw();
     }
