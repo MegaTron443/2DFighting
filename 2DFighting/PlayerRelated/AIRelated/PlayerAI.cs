@@ -55,6 +55,7 @@ public class PlayerAI : IDisposable
     public MacroTactic CurrentMacroTactic { get; private set; } = MacroTactic.NeutralFootsies;
 
     private Character? _analyzedCharacter = null;
+    private string _analyzedScriptHash = "";
     private Dictionary<string, TranslatedMoveSemantic> _moveSemantics = new();
     private CharacterTacticalSummary _characterSummary = new();
 
@@ -87,7 +88,7 @@ public class PlayerAI : IDisposable
 
     public void OnRoundEnd(bool wonRound)
     {
-        if (_episodeTrajectory.Count == 0) return;
+        if (PhysicsEngine.IsHeadlessThread || _episodeTrajectory.Count == 0) return;
 
         float terminalReward = wonRound ? 2.5f : -2.0f;
         _macroBrain.TrainOnEpisode(_episodeTrajectory, terminalReward);
@@ -101,9 +102,11 @@ public class PlayerAI : IDisposable
     {
         if (_opponent == null || _self.CurrentCharacter == null) return;
 
-        if (_analyzedCharacter != _self.CurrentCharacter)
+        if (_analyzedCharacter != _self.CurrentCharacter ||
+            !string.Equals(_analyzedScriptHash, _self.CurrentCharacter.ScriptHash, StringComparison.Ordinal))
         {
             _analyzedCharacter = _self.CurrentCharacter;
+            _analyzedScriptHash = _analyzedCharacter.ScriptHash;
             _moveSemantics = LuaMoveTranslator.AnalyzeCharacter(_analyzedCharacter, out _characterSummary);
             _lastSelfHealth = _self.Health;
             _lastOppHealth = _opponent.Health;
@@ -142,8 +145,15 @@ public class PlayerAI : IDisposable
 
             MacroStateVector stateVec = _evaluator.BuildMacroStateVector(_characterSummary);
             OpponentPattern spam = CanAdaptByDifficulty() ? _patternTracker.DetectSpamPattern() : OpponentPattern.None;
-            CurrentMacroTactic = _macroBrain.SampleTacticWithTrace(stateVec, Difficulty, spam, out ExperienceStep trace);
-            _episodeTrajectory.Add(trace);
+            if (PhysicsEngine.IsHeadlessThread)
+            {
+                CurrentMacroTactic = _macroBrain.SampleTactic(stateVec, Difficulty, spam);
+            }
+            else
+            {
+                CurrentMacroTactic = _macroBrain.SampleTacticWithTrace(stateVec, Difficulty, spam, out ExperienceStep trace);
+                _episodeTrajectory.Add(trace);
+            }
 
             _macroDecisionTimer = Difficulty == AIDifficulty.Hard ? 0.15f : 0.25f;
         }

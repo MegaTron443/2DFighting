@@ -92,7 +92,7 @@ public static class VFXManager
         Color? customColor = null,
         float scaleMultiplier = 1.0f)
     {
-        if (PhysicsEngine.IsTrainingMode) return;
+        if (PhysicsEngine.IsHeadlessThread || PhysicsEngine.IsTrainingMode) return;
 
         float sh = Raylib.GetScreenHeight();
         string spriteKey = preset.ToString();
@@ -141,7 +141,7 @@ public static class VFXManager
     /// </summary>
     public static void SpawnFromLua(Player owner, Table config)
     {
-        if (PhysicsEngine.IsTrainingMode || owner == null) return;
+        if (PhysicsEngine.IsHeadlessThread || PhysicsEngine.IsTrainingMode || owner == null) return;
 
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();

@@ -86,8 +86,11 @@ public class CharacterRenderer
         string? resolved = ModManager.ResolveFile(relativePath);
         if (resolved != null && System.IO.File.Exists(resolved))
         {
-            part.Texture = CharacterLoader.GetOrLoadSpriteSheet(resolved);
             part.TexturePath = resolved;
+            if (!PhysicsEngine.IsHeadlessThread)
+            {
+                part.Texture = CharacterLoader.GetOrLoadSpriteSheet(resolved);
+            }
         }
     }
 

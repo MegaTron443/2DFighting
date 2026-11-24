@@ -152,8 +152,11 @@ public class MatchManager
         RoundAnnouncement = "";
         p1.ResetState(faceRight: true);
         p2.ResetState(faceRight: false);
-        PostFXManager.ResetAll();
-        VFXManager.Clear();
-        CameraManager.SnapTo(p1.Position, p2.Position, SceneManager.CurrentScene?.Bounds); // <-- added
+        if (!PhysicsEngine.IsHeadlessThread)
+        {
+            PostFXManager.ResetAll();
+            VFXManager.Clear();
+            CameraManager.SnapTo(p1.Position, p2.Position, SceneManager.CurrentScene?.Bounds);
+        }
     }
 }

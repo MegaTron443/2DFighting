@@ -24,7 +24,7 @@ public class AIStateEvaluator
     public float GetDistancePct()
     {
         if (_opponent == null) return 1f;
-        float sw = Math.Max(1, Raylib.GetScreenWidth());
+        float sw = PhysicsEngine.ViewportWidth;
         return Math.Abs(_self.Position.X - _opponent.Position.X) / sw;
     }
 
@@ -51,7 +51,7 @@ public class AIStateEvaluator
     public bool IsNearCorner(Player? target)
     {
         if (target == null) return false;
-        float sw = Math.Max(1f, Raylib.GetScreenWidth());
+        float sw = PhysicsEngine.ViewportWidth;
         float xPct = target.Position.X / sw;
         return xPct < CornerMarginPct || xPct > (1f - CornerMarginPct);
     }
@@ -62,7 +62,7 @@ public class AIStateEvaluator
     /// </summary>
     public Projectile? GetApproachingProjectile(float maxDistPct)
     {
-        float sw = Math.Max(1f, Raylib.GetScreenWidth());
+        float sw = PhysicsEngine.ViewportWidth;
         Projectile? closest = null;
         float closestDist = float.MaxValue;
 
@@ -90,7 +90,7 @@ public class AIStateEvaluator
         if (_opponent == null) return false;
         float minX = MathF.Min(_self.Position.X, _opponent.Position.X);
         float maxX = MathF.Max(_self.Position.X, _opponent.Position.X);
-        float sw = Math.Max(1f, Raylib.GetScreenWidth());
+        float sw = PhysicsEngine.ViewportWidth;
 
         foreach (var proj in PhysicsEngine.ActiveProjectiles)
         {

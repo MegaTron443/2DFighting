@@ -43,8 +43,8 @@ public class Projectile
     public DynValue? Trajectory { get; set; }
     public DynValue? OnHit { get; set; }
 
-    public float Width => WidthPct * Raylib.GetScreenWidth();
-    public float Height => HeightPct * Raylib.GetScreenHeight();
+    public float Width => WidthPct * PhysicsEngine.ViewportWidth;
+    public float Height => HeightPct * PhysicsEngine.ViewportHeight;
 
     public Projectile(Player owner, Player target, Vector2 spawnPos, Vector2 initialVelocity)
     {
@@ -103,8 +103,8 @@ public class Projectile
 
         Position += Velocity * dt;
 
-        float sw = Raylib.GetScreenWidth();
-        Rectangle? sceneBounds = SceneManager.CurrentScene?.Bounds;
+        float sw = PhysicsEngine.ViewportWidth;
+        Rectangle? sceneBounds = PhysicsEngine.IsHeadlessThread ? null : SceneManager.CurrentScene?.Bounds;
         float leftLimit = (sceneBounds?.x ?? 0f) - (sw * 0.25f);
         float rightLimit = (sceneBounds.HasValue ? sceneBounds.Value.x + sceneBounds.Value.width : sw) + (sw * 0.25f);
         if (Position.X < leftLimit || Position.X > rightLimit)
@@ -184,8 +184,8 @@ public static class ProjectileFactory
     {
         Player target = owner.TargetOpponent!;
         float dir = owner.FacingRight ? 1f : -1f;
-        int sw = Raylib.GetScreenWidth();
-        int sh = Raylib.GetScreenHeight();
+        int sw = PhysicsEngine.ViewportWidth;
+        int sh = PhysicsEngine.ViewportHeight;
 
         Vector2 spawnPos = new Vector2(
             owner.Position.X + (dir * offsetPct.X * sw),
@@ -214,8 +214,8 @@ public static class ProjectileFactory
     {
         Player target = owner.TargetOpponent!;
         float dir = owner.FacingRight ? 1f : -1f;
-        int sw = Raylib.GetScreenWidth();
-        int sh = Raylib.GetScreenHeight();
+        int sw = PhysicsEngine.ViewportWidth;
+        int sh = PhysicsEngine.ViewportHeight;
 
         float offXPct = (float)(config.Get("x_offset_pct").CastToNumber() ?? 0.06);
         float offYPct = (float)(config.Get("y_offset_pct").CastToNumber() ?? 0.0);

@@ -18,56 +18,78 @@ public class PhysicsEngine
     private const float LOBBY_DUMMY_REGEN_DELAY_SEC = 3.0f;
     private const float LOBBY_FACING_MIN_SPEED_PX = 20f;
 
-    private static PhysicsEngine _activeInstance = new();
+    private static PhysicsEngine _mainInstance = new(setAsMainInstance: false);
+    [ThreadStatic] private static PhysicsEngine? _threadLocalInstance;
+    [ThreadStatic] public static bool IsHeadlessThread;
+
+    private static PhysicsEngine ActiveInstance => _threadLocalInstance ?? _mainInstance;
+
+    public const int HeadlessViewportWidth = 1280;
+    public const int HeadlessViewportHeight = 720;
+    public static int ViewportWidth => IsHeadlessThread ? HeadlessViewportWidth : Math.Max(1, Raylib.GetScreenWidth());
+    public static int ViewportHeight => IsHeadlessThread ? HeadlessViewportHeight : Math.Max(1, Raylib.GetScreenHeight());
 
     public MatchManager Match { get; }
     public ProjectileManager Projectiles { get; }
     public CombatResolver Combat { get; }
 
-    public PhysicsEngine()
+    public PhysicsEngine() : this(setAsMainInstance: true)
+    {
+    }
+
+    public PhysicsEngine(bool setAsMainInstance)
     {
         Match = new MatchManager();
         Projectiles = new ProjectileManager();
         Combat = new CombatResolver(Match);
-        _activeInstance = this;
+        if (setAsMainInstance && !IsHeadlessThread)
+        {
+            _mainInstance = this;
+        }
+    }
+
+    public static void BindHeadlessInstance(PhysicsEngine? instance)
+    {
+        _threadLocalInstance = instance;
+        IsHeadlessThread = instance != null;
     }
 
     // --- Static Compatibility Facade (Lua / Legacy Callers) ---
     public static bool IsTrainingMode
     {
-        get => _activeInstance.Match.IsTrainingMode;
-        set => _activeInstance.Match.IsTrainingMode = value;
+        get => ActiveInstance.Match.IsTrainingMode;
+        set => ActiveInstance.Match.IsTrainingMode = value;
     }
 
-    public static int CurrentRound => _activeInstance.Match.CurrentRound;
+    public static int CurrentRound => ActiveInstance.Match.CurrentRound;
 
     public static float RoundTimer
     {
-        get => _activeInstance.Match.RoundTimer;
-        set => _activeInstance.Match.RoundTimer = value;
+        get => ActiveInstance.Match.RoundTimer;
+        set => ActiveInstance.Match.RoundTimer = value;
     }
 
-    public static float RoundTransitionTimer => _activeInstance.Match.RoundTransitionTimer;
-    public static string RoundAnnouncement => _activeInstance.Match.RoundAnnouncement;
-    public static string MatchWinnerText => _activeInstance.Match.MatchWinnerText;
+    public static float RoundTransitionTimer => ActiveInstance.Match.RoundTransitionTimer;
+    public static string RoundAnnouncement => ActiveInstance.Match.RoundAnnouncement;
+    public static string MatchWinnerText => ActiveInstance.Match.MatchWinnerText;
 
     public static float HitstopTimer
     {
-        get => _activeInstance.Match.HitstopTimer;
-        set => _activeInstance.Match.HitstopTimer = value;
+        get => ActiveInstance.Match.HitstopTimer;
+        set => ActiveInstance.Match.HitstopTimer = value;
     }
 
-    public static MatchTelemetryTracker? ActiveTelemetry => _activeInstance?.Match.Telemetry;
-    public static List<Projectile> ActiveProjectiles => _activeInstance.Projectiles.ActiveProjectiles;
+    public static MatchTelemetryTracker? ActiveTelemetry => ActiveInstance?.Match.Telemetry;
+    public static List<Projectile> ActiveProjectiles => ActiveInstance.Projectiles.ActiveProjectiles;
 
-    public static float GroundY => GROUND_Y_PCT * Raylib.GetScreenHeight();
-    public static float LeftBoundary => LEFT_BOUNDARY_PCT * Raylib.GetScreenWidth();
-    public static float RightBoundary => RIGHT_BOUNDARY_PCT * Raylib.GetScreenWidth();
+    public static float GroundY => GROUND_Y_PCT * ViewportHeight;
+    public static float LeftBoundary => LEFT_BOUNDARY_PCT * ViewportWidth;
+    public static float RightBoundary => RIGHT_BOUNDARY_PCT * ViewportWidth;
 
     public static float GetEffectiveGroundY(Vector2 position)
     {
-        float sh = Raylib.GetScreenHeight();
-        if (SceneManager.CurrentScene is { HasTrainingLab: true } && position.Y > sh)
+        float sh = ViewportHeight;
+        if (!IsHeadlessThread && SceneManager.CurrentScene is { HasTrainingLab: true } && position.Y > sh)
             return (1.0f + GROUND_Y_PCT) * sh;
 
         return GROUND_Y_PCT * sh;
@@ -80,16 +102,47 @@ public class PhysicsEngine
         CombatResolver.ApplyLaunchForce(source, target, damage, stun, launchXPct, launchYPct);
 
     public static void ResetMatch(Player p1, Player p2) =>
-        _activeInstance.Match.ResetMatch(p1, p2, _activeInstance.Projectiles);
+        ActiveInstance.Match.ResetMatch(p1, p2, ActiveInstance.Projectiles);
 
     public static void StartNextRound(Player p1, Player p2) =>
-        _activeInstance.Match.StartNextRound(p1, p2, _activeInstance.Projectiles);
+        ActiveInstance.Match.StartNextRound(p1, p2, ActiveInstance.Projectiles);
 
-    public static void SpawnProjectile(Projectile p) => _activeInstance.Projectiles.Spawn(p);
+    public static void SpawnProjectile(Projectile p) => ActiveInstance.Projectiles.Spawn(p);
 
-    public static void DrawProjectiles(float alpha) => _activeInstance.Projectiles.Draw(alpha);
+    public static void DrawProjectiles(float alpha) => ActiveInstance.Projectiles.Draw(alpha);
 
     public void Initialize() { }
+
+    public void StepHeadlessTick(Player p1, Player p2, GameData data)
+    {
+        float dt = Timer.FixedDeltaTime;
+
+        p1.ConsumeInput();
+        p2.ConsumeInput();
+
+        p1.SavePreviousState();
+        p2.SavePreviousState();
+
+        p1.Update(dt);
+        p2.Update(dt);
+
+        ClampPlayer(p1, allowExtendedBounds: false);
+        ClampPlayer(p2, allowExtendedBounds: false);
+
+        ResolvePushback(p1, p2);
+
+        UpdateAutoFacing(p1, p2);
+        UpdateAutoFacing(p2, p1);
+
+        Combat.ResolveSimultaneousHits(data, p1, p2);
+
+        Projectiles.Update(dt, Match);
+
+        if (!p1.IsInHitstun) p2.ComboCount = 0;
+        if (!p2.IsInHitstun) p1.ComboCount = 0;
+
+        Match.TickRoundTimer(dt);
+    }
 
     public void Update(GameData data)
     {
@@ -214,9 +267,9 @@ public class PhysicsEngine
         float halfW = ch.Width / 2f;
         float halfH = ch.Height / 2f;
 
-        float sw = Raylib.GetScreenWidth();
-        float sh = Raylib.GetScreenHeight();
-        Scene? scene = SceneManager.CurrentScene;
+        float sw = ViewportWidth;
+        float sh = ViewportHeight;
+        Scene? scene = IsHeadlessThread ? null : SceneManager.CurrentScene;
         bool inBottomRoom = scene is { HasTrainingLab: true } && p.Position.Y > sh;
 
         float prevFeetY = p.PreviousPosition.Y + halfH;

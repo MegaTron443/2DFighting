@@ -14,23 +14,36 @@ public enum ActionButtonMask
 public class LuaEngine
 {
     private static readonly string RootPath = AppDomain.CurrentDomain.BaseDirectory;
+    private static readonly object _userDataLock = new();
+    private static bool _typesRegistered = false;
+
     public Script ScriptRuntime { get; }
     private readonly Dictionary<string, Character> _characterCache = new(StringComparer.OrdinalIgnoreCase);
 
-
-    public LuaEngine()
+    private static void EnsureTypesRegistered()
     {
-        UserData.RegisterType<Character>();
-        UserData.RegisterType<Player>();
-        UserData.RegisterType<SkillData>();
-        UserData.RegisterType<LuaFloatStore>();
-        UserData.RegisterType<PhysicsEngine>();
-        UserData.RegisterType<Projectile>();
-        UserData.RegisterType<Vector2>();
-        UserData.RegisterType<RenderMaterial>();
-        UserData.RegisterType(typeof(PostFXManager));
-        UserData.RegisterType<Scene>();
-        UserData.RegisterType<SceneLayer>();
+        if (_typesRegistered) return;
+        lock (_userDataLock)
+        {
+            if (_typesRegistered) return;
+            UserData.RegisterType<Character>();
+            UserData.RegisterType<Player>();
+            UserData.RegisterType<SkillData>();
+            UserData.RegisterType<LuaFloatStore>();
+            UserData.RegisterType<PhysicsEngine>();
+            UserData.RegisterType<Projectile>();
+            UserData.RegisterType<Vector2>();
+            UserData.RegisterType<RenderMaterial>();
+            UserData.RegisterType(typeof(PostFXManager));
+            UserData.RegisterType<Scene>();
+            UserData.RegisterType<SceneLayer>();
+            _typesRegistered = true;
+        }
+    }
+
+    public LuaEngine(bool isHeadless = false)
+    {
+        EnsureTypesRegistered();
 
         ScriptRuntime = new Script();
 
@@ -41,46 +54,80 @@ public class LuaEngine
         ScriptRuntime.Globals["create_projectile"] = (Func<Player, Vector2, Vector2, DynValue?, DynValue?, Projectile>)ProjectileFactory.CreateShorthand;
         ScriptRuntime.Globals["CreateProjectile"] = (Func<Player, Table, Projectile>)ProjectileFactory.CreateFromTable;
 
-        ScriptRuntime.Globals["PlaySound"] = (Action<Player?, DynValue>)SoundHandler.PlayFromLua;
-        ScriptRuntime.Globals["TriggerAudioDuck"] = (Action<float, int, float>)SoundHandler.TriggerDuckFromLua;
-        ScriptRuntime.Globals["SetAudioBusVolume"] = (Action<string, float>)SoundHandler.SetBusVolumeFromLua;
-        ScriptRuntime.Globals["SetAudioBusLowPass"] = (Action<string, float>)SoundHandler.SetBusLowPassFromLua;
-
-        ScriptRuntime.Globals["Log"] = (Action<DynValue>)(msg =>
+        if (isHeadless)
         {
-            DiagnosticsLogger.LogSilentIssueOnce(
-                $"lua_log_{Guid.NewGuid()}",
-                msg.ToPrintString(),
-                LogSeverity.Info
-            );
-        });
+            ScriptRuntime.Globals["PlaySound"] = (Action<Player?, DynValue>)((_, _) => { });
+            ScriptRuntime.Globals["TriggerAudioDuck"] = (Action<float, int, float>)((_, _, _) => { });
+            ScriptRuntime.Globals["SetAudioBusVolume"] = (Action<string, float>)((_, _) => { });
+            ScriptRuntime.Globals["SetAudioBusLowPass"] = (Action<string, float>)((_, _) => { });
+            ScriptRuntime.Globals["Log"] = (Action<DynValue>)(_ => { });
+            ScriptRuntime.Globals["EnablePostFX"] = (Action<string, int>)((_, _) => { });
+            ScriptRuntime.Globals["DisablePostFX"] = (Action<string>)(_ => { });
+            ScriptRuntime.Globals["SetPostFXFloat"] = (Action<string, string, float>)((_, _, _) => { });
+            ScriptRuntime.Globals["SetPostFXVec2"] = (Action<string, string, float, float>)((_, _, _, _) => { });
+            ScriptRuntime.Globals["SetPostFXColor"] = (Action<string, string, float, float, float>)((_, _, _, _, _) => { });
+            ScriptRuntime.Globals["TriggerScreenShake"] = (Action<float, float, int>)((_, _, _) => { });
+            ScriptRuntime.Globals["TriggerImpactFrame"] = (Action<int, int>)((_, _) => { });
+            ScriptRuntime.Globals["TriggerPaletteShift"] = (Action<float, float, float, float, int, float>)((_, _, _, _, _, _) => { });
+            ScriptRuntime.Globals["TriggerGravityPinch"] = (Action<float, int, float, float, float>)((_, _, _, _, _) => { });
+            ScriptRuntime.Globals["SetHitstop"] = (Action<float>)(_ => { });
+            ScriptRuntime.Globals["SpawnVFX"] = (Action<Player, Table>)((_, _) => { });
+            ScriptRuntime.Globals["AddSceneLayer"] = (Func<string, string?, string?, bool, SceneLayer?>)((_, _, _, _) => null);
+            ScriptRuntime.Globals["GetSceneLayer"] = (Func<string, SceneLayer?>)(_ => null);
+            ScriptRuntime.Globals["SetSceneLayerTexture"] = (Action<string, string>)((_, _) => { });
+            ScriptRuntime.Globals["SetSceneLayerShader"] = (Action<string, string>)((_, _) => { });
+            ScriptRuntime.Globals["SetSceneLayerFloat"] = (Action<string, string, float>)((_, _, _) => { });
+            ScriptRuntime.Globals["SetSceneLayerVec2"] = (Action<string, string, float, float>)((_, _, _, _) => { });
+            ScriptRuntime.Globals["SetSceneLayerColor"] = (Action<string, string, float, float, float>)((_, _, _, _, _) => { });
+            ScriptRuntime.Globals["SetSceneLayerTint"] = (Action<string, int, int, int, int>)((_, _, _, _, _) => { });
+            ScriptRuntime.Globals["TriggerCameraFocus"] = (Action<float, float, float, float>)((_, _, _, _) => { });
+            ScriptRuntime.Globals["ClearCameraFocus"] = (Action)(() => { });
+            ScriptRuntime.Globals["SetCameraZoomLimits"] = (Action<float, float>)((_, _) => { });
+            ScriptRuntime.Globals["GetCameraZoom"] = (Func<float>)(() => 1f);
+        }
+        else
+        {
+            ScriptRuntime.Globals["PlaySound"] = (Action<Player?, DynValue>)SoundHandler.PlayFromLua;
+            ScriptRuntime.Globals["TriggerAudioDuck"] = (Action<float, int, float>)SoundHandler.TriggerDuckFromLua;
+            ScriptRuntime.Globals["SetAudioBusVolume"] = (Action<string, float>)SoundHandler.SetBusVolumeFromLua;
+            ScriptRuntime.Globals["SetAudioBusLowPass"] = (Action<string, float>)SoundHandler.SetBusLowPassFromLua;
 
-        ScriptRuntime.Globals["EnablePostFX"] = (Action<string, int>)PostFXManager.EnablePassFromLua;
-        ScriptRuntime.Globals["DisablePostFX"] = (Action<string>)PostFXManager.DisablePassFromLua;
-        ScriptRuntime.Globals["SetPostFXFloat"] = (Action<string, string, float>)PostFXManager.SetUniformFloatFromLua;
-        ScriptRuntime.Globals["SetPostFXVec2"] = (Action<string, string, float, float>)PostFXManager.SetUniformVec2FromLua;
-        ScriptRuntime.Globals["SetPostFXColor"] = (Action<string, string, float, float, float>)PostFXManager.SetUniformColorFromLua;
-        ScriptRuntime.Globals["TriggerScreenShake"] = (Action<float, float, int>)PostFXManager.TriggerScreenShakeFromLua;
-        ScriptRuntime.Globals["TriggerImpactFrame"] = (Action<int, int>)PostFXManager.TriggerImpactFrameFromLua;
-        ScriptRuntime.Globals["TriggerPaletteShift"] = (Action<float, float, float, float, int, float>)PostFXManager.TriggerPaletteShiftFromLua;
-        ScriptRuntime.Globals["TriggerGravityPinch"] = (Action<float, int, float, float, float>)PostFXManager.TriggerGravityPinchFromLua;
-        ScriptRuntime.Globals["SetHitstop"] = (Action<float>)(frames => PhysicsEngine.HitstopTimer = MathF.Max(PhysicsEngine.HitstopTimer, frames * Timer.FixedDeltaTime));
-        
-        ScriptRuntime.Globals["SpawnVFX"] = (Action<Player, Table>)VFXManager.SpawnFromLua;
+            ScriptRuntime.Globals["Log"] = (Action<DynValue>)(msg =>
+            {
+                DiagnosticsLogger.LogSilentIssueOnce(
+                    $"lua_log_{Guid.NewGuid()}",
+                    msg.ToPrintString(),
+                    LogSeverity.Info
+                );
+            });
 
-        ScriptRuntime.Globals["AddSceneLayer"] = (Func<string, string?, string?, bool, SceneLayer?>)SceneManager.AddLayerFromLua;
-        ScriptRuntime.Globals["GetSceneLayer"] = (Func<string, SceneLayer?>)SceneManager.GetLayerFromLua;
-        ScriptRuntime.Globals["SetSceneLayerTexture"] = (Action<string, string>)SceneManager.SetLayerTextureFromLua;
-        ScriptRuntime.Globals["SetSceneLayerShader"] = (Action<string, string>)SceneManager.SetLayerShaderFromLua;
-        ScriptRuntime.Globals["SetSceneLayerFloat"] = (Action<string, string, float>)SceneManager.SetLayerFloatFromLua;
-        ScriptRuntime.Globals["SetSceneLayerVec2"] = (Action<string, string, float, float>)SceneManager.SetLayerVec2FromLua;
-        ScriptRuntime.Globals["SetSceneLayerColor"] = (Action<string, string, float, float, float>)SceneManager.SetLayerColorFromLua;
-        ScriptRuntime.Globals["SetSceneLayerTint"] = (Action<string, int, int, int, int>)SceneManager.SetLayerTintFromLua;
+            ScriptRuntime.Globals["EnablePostFX"] = (Action<string, int>)PostFXManager.EnablePassFromLua;
+            ScriptRuntime.Globals["DisablePostFX"] = (Action<string>)PostFXManager.DisablePassFromLua;
+            ScriptRuntime.Globals["SetPostFXFloat"] = (Action<string, string, float>)PostFXManager.SetUniformFloatFromLua;
+            ScriptRuntime.Globals["SetPostFXVec2"] = (Action<string, string, float, float>)PostFXManager.SetUniformVec2FromLua;
+            ScriptRuntime.Globals["SetPostFXColor"] = (Action<string, string, float, float, float>)PostFXManager.SetUniformColorFromLua;
+            ScriptRuntime.Globals["TriggerScreenShake"] = (Action<float, float, int>)PostFXManager.TriggerScreenShakeFromLua;
+            ScriptRuntime.Globals["TriggerImpactFrame"] = (Action<int, int>)PostFXManager.TriggerImpactFrameFromLua;
+            ScriptRuntime.Globals["TriggerPaletteShift"] = (Action<float, float, float, float, int, float>)PostFXManager.TriggerPaletteShiftFromLua;
+            ScriptRuntime.Globals["TriggerGravityPinch"] = (Action<float, int, float, float, float>)PostFXManager.TriggerGravityPinchFromLua;
+            ScriptRuntime.Globals["SetHitstop"] = (Action<float>)(frames => PhysicsEngine.HitstopTimer = MathF.Max(PhysicsEngine.HitstopTimer, frames * Timer.FixedDeltaTime));
 
-        ScriptRuntime.Globals["TriggerCameraFocus"] = (Action<float, float, float, float>)CameraManager.TriggerFocusFromLua;
-        ScriptRuntime.Globals["ClearCameraFocus"] = (Action)CameraManager.ClearFocusFromLua;
-        ScriptRuntime.Globals["SetCameraZoomLimits"] = (Action<float, float>)CameraManager.SetZoomLimitsFromLua;
-        ScriptRuntime.Globals["GetCameraZoom"] = (Func<float>)CameraManager.GetZoomFromLua;
+            ScriptRuntime.Globals["SpawnVFX"] = (Action<Player, Table>)VFXManager.SpawnFromLua;
+
+            ScriptRuntime.Globals["AddSceneLayer"] = (Func<string, string?, string?, bool, SceneLayer?>)SceneManager.AddLayerFromLua;
+            ScriptRuntime.Globals["GetSceneLayer"] = (Func<string, SceneLayer?>)SceneManager.GetLayerFromLua;
+            ScriptRuntime.Globals["SetSceneLayerTexture"] = (Action<string, string>)SceneManager.SetLayerTextureFromLua;
+            ScriptRuntime.Globals["SetSceneLayerShader"] = (Action<string, string>)SceneManager.SetLayerShaderFromLua;
+            ScriptRuntime.Globals["SetSceneLayerFloat"] = (Action<string, string, float>)SceneManager.SetLayerFloatFromLua;
+            ScriptRuntime.Globals["SetSceneLayerVec2"] = (Action<string, string, float, float>)SceneManager.SetLayerVec2FromLua;
+            ScriptRuntime.Globals["SetSceneLayerColor"] = (Action<string, string, float, float, float>)SceneManager.SetLayerColorFromLua;
+            ScriptRuntime.Globals["SetSceneLayerTint"] = (Action<string, int, int, int, int>)SceneManager.SetLayerTintFromLua;
+
+            ScriptRuntime.Globals["TriggerCameraFocus"] = (Action<float, float, float, float>)CameraManager.TriggerFocusFromLua;
+            ScriptRuntime.Globals["ClearCameraFocus"] = (Action)CameraManager.ClearFocusFromLua;
+            ScriptRuntime.Globals["SetCameraZoomLimits"] = (Action<float, float>)CameraManager.SetZoomLimitsFromLua;
+            ScriptRuntime.Globals["GetCameraZoom"] = (Func<float>)CameraManager.GetZoomFromLua;
+        }
 
         ScriptRuntime.Globals["SetHitbox"] = (Action<SkillData, float, float, float, float>)((skill, xOffsetPct, yOffsetPct, widthPct, heightPct) =>
         {
@@ -197,6 +244,17 @@ public class LuaEngine
         var character = new Character(resolvedPath, ScriptRuntime);
         _characterCache[cacheKey] = character;
         return character;
+    }
+
+    public Character CreateHeadlessCharacter(string characterId)
+    {
+        string? resolvedPath = ModManager.ResolveCharacterScript(characterId)
+            ?? Path.Combine(RootPath, "Scripts", "characters", $"{characterId}.lua");
+
+        if (!File.Exists(resolvedPath))
+            throw new FileNotFoundException($"Character script '{characterId}.lua' not found.");
+
+        return Character.CreateHeadless(resolvedPath, ScriptRuntime);
     }
 
     public void ClearCharacterCache() => _characterCache.Clear();

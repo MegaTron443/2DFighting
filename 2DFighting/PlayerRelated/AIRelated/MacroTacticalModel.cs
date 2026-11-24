@@ -222,7 +222,7 @@ public class MacroTacticalModel
         }
 
         float invSumExp = 1f / sumExp;
-        float roll = (float)_rng.NextDouble();
+        float roll = (float)Random.Shared.NextDouble();
         float cumulative = 0f;
         int chosen = O - 1;
         bool picked = false;

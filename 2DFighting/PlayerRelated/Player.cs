@@ -84,8 +84,8 @@ public class Player : IDisposable
 
     public float PosX => Position.X;
     public float PosY => Position.Y;
-    public float ScreenWidth => Raylib.GetScreenWidth();
-    public float ScreenHeight => Raylib.GetScreenHeight();
+    public float ScreenWidth => PhysicsEngine.ViewportWidth;
+    public float ScreenHeight => PhysicsEngine.ViewportHeight;
 
     public bool InRecoveryFrames
     {
@@ -250,7 +250,7 @@ public class Player : IDisposable
 
     public void PollInput()
     {
-        if (!GameState.IsLiveArena || CurrentCharacter == null) return;
+        if ((!GameState.IsLiveArena && !PhysicsEngine.IsHeadlessThread) || CurrentCharacter == null) return;
         if (!_isAI) _keyHandler.PollHardwareInput(_playerIndex);
     }
 
@@ -282,7 +282,7 @@ public class Player : IDisposable
         JustExecutedMotion = SpecialMotion.None;
         JustCompletedComboSignature = null;
 
-        if (!GameState.IsLiveArena || CurrentCharacter == null) return;
+        if ((!GameState.IsLiveArena && !PhysicsEngine.IsHeadlessThread) || CurrentCharacter == null) return;
 
         if (_isAI && IsPassiveDummy)
         {
@@ -326,8 +326,8 @@ public class Player : IDisposable
 
     public void TranslatePct(float dxPct, float dyPct)
     {
-        Position.X += dxPct * Raylib.GetScreenWidth();
-        Position.Y += dyPct * Raylib.GetScreenHeight();
+        Position.X += dxPct * PhysicsEngine.ViewportWidth;
+        Position.Y += dyPct * PhysicsEngine.ViewportHeight;
     }
 
     public void NotifyRoundEnd(bool wonRound)
@@ -343,8 +343,8 @@ public class Player : IDisposable
 
     public void SetVelocityPct(float vxPct, float vyPct)
     {
-        Velocity.X = vxPct * Raylib.GetScreenWidth();
-        Velocity.Y = vyPct * Raylib.GetScreenHeight();
+        Velocity.X = vxPct * PhysicsEngine.ViewportWidth;
+        Velocity.Y = vyPct * PhysicsEngine.ViewportHeight;
     }
 
     public void RequestPlatformDrop()
@@ -365,7 +365,7 @@ public class Player : IDisposable
 
     public void Update(float dt)
     {
-        if (!GameState.IsLiveArena) return;
+        if (!GameState.IsLiveArena && !PhysicsEngine.IsHeadlessThread) return;
 
         if (HitstunTimer > 0f)
         {

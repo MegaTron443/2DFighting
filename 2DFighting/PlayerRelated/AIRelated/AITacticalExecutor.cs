@@ -284,7 +284,7 @@ public class AITacticalExecutor
         float gap,
         Func<bool> canAdapt)
     {
-        float projDistPct = MathF.Abs(imminentProj.Position.X - self.Position.X) / Math.Max(1f, Raylib.GetScreenWidth());
+        float projDistPct = MathF.Abs(imminentProj.Position.X - self.Position.X) / PhysicsEngine.ViewportWidth;
 
         var projCounter = _executor.SelectBestMove(moves, m =>
         {

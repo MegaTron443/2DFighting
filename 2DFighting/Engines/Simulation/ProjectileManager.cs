@@ -96,7 +96,10 @@ public class ProjectileManager
                 }
                 else
                 {
-                    matchManager.AddHitstop(CombatResolver.LightHitstopDuration);
+                    if (!PhysicsEngine.IsHeadlessThread)
+                    {
+                        matchManager.AddHitstop(CombatResolver.LightHitstopDuration);
+                    }
                     if (proj.OnHit != null && proj.OnHit.Type == DataType.Function)
                     {
                         try

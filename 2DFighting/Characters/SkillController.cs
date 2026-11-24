@@ -70,7 +70,7 @@ public class SkillController
         HasHit = false;
         skill.CurrentCooldown = skill.CooldownTime;
         p.LastExecutedSkillName = skillName;
-        if (GameState.CurrentState == State.Playing)
+        if (GameState.CurrentState == State.Playing || PhysicsEngine.IsHeadlessThread)
             PhysicsEngine.ActiveTelemetry?.RecordSkillUse(p, skillName);
         p.Velocity.X = 0;
         p.Velocity.Y = 0;

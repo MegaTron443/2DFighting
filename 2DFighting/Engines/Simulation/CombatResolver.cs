@@ -55,7 +55,7 @@ public class CombatResolver
     {
         int scaledDamage = CalculateScaledDamage(source, damage);
         target.Health = Math.Max(0, target.Health - scaledDamage);
-        if (scaledDamage > 0 && GameState.CurrentState == State.Playing)
+        if (scaledDamage > 0 && (GameState.CurrentState == State.Playing || PhysicsEngine.IsHeadlessThread))
         {
             PhysicsEngine.ActiveTelemetry?.RecordDamageDealt(source, scaledDamage);
         }
@@ -76,7 +76,7 @@ public class CombatResolver
         {
             target.IsAirStalled = false;
             float dir = source.FacingRight ? 1f : -1f;
-            float speedPx = groundKnockbackPct * Raylib.GetScreenWidth();
+            float speedPx = groundKnockbackPct * PhysicsEngine.ViewportWidth;
             target.SetVelocity(dir * speedPx, 0f);
         }
         else
@@ -88,7 +88,7 @@ public class CombatResolver
         if (!isBlocked && scaledDamage > 0 && stun > 0f)
         {
             source.ComboCount++;
-            if (GameState.CurrentState == State.Playing)
+            if (GameState.CurrentState == State.Playing || PhysicsEngine.IsHeadlessThread)
             {
                 PhysicsEngine.ActiveTelemetry?.RecordCleanHit(source, source.LastExecutedSkillName, source.ComboCount);
             }
@@ -99,7 +99,7 @@ public class CombatResolver
     {
         int scaledDamage = CalculateScaledDamage(source, damage);
         target.Health = Math.Max(0, target.Health - scaledDamage);
-        if (scaledDamage > 0 && GameState.CurrentState == State.Playing)
+        if (scaledDamage > 0 && (GameState.CurrentState == State.Playing || PhysicsEngine.IsHeadlessThread))
         {
             PhysicsEngine.ActiveTelemetry?.RecordDamageDealt(source, scaledDamage);
         }
@@ -120,14 +120,14 @@ public class CombatResolver
         target.IsAirStalled = false;
 
         float dir = source.FacingRight ? 1f : -1f;
-        float vx = dir * launchXPct * Raylib.GetScreenWidth();
-        float vy = launchYPct * Raylib.GetScreenHeight();
+        float vx = dir * launchXPct * PhysicsEngine.ViewportWidth;
+        float vy = launchYPct * PhysicsEngine.ViewportHeight;
         target.SetVelocity(vx, vy);
 
         if (scaledDamage > 0 && stun > 0f)
         {
             source.ComboCount++;
-            if (GameState.CurrentState == State.Playing)
+            if (GameState.CurrentState == State.Playing || PhysicsEngine.IsHeadlessThread)
             {
                 PhysicsEngine.ActiveTelemetry?.RecordCleanHit(source, source.LastExecutedSkillName, source.ComboCount);
             }
@@ -188,7 +188,10 @@ public class CombatResolver
         float hitstop = attackSkill.Damage >= HeavyHitstopDamageThreshold
             ? HeavyHitstopDuration
             : LightHitstopDuration;
-        _matchManager.AddHitstop(hitstop);
+        if (!PhysicsEngine.IsHeadlessThread)
+        {
+            _matchManager.AddHitstop(hitstop);
+        }
 
         if (TryResolveCounter(gamedata, attacker, defender))
             return;
