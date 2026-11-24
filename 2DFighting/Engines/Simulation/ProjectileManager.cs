@@ -89,7 +89,8 @@ public class ProjectileManager
                         defender,
                         nonLethalChip,
                         proj.HitStun * CombatResolver.BlockStunMultiplier,
-                        CombatResolver.DefaultBlockKnockbackPct * ProjectileBlockKnockbackFactor
+                        CombatResolver.DefaultBlockKnockbackPct * ProjectileBlockKnockbackFactor,
+                        isBlocked: true
                     );
                     proj.Owner.ComboCount = prevCombo;
                 }

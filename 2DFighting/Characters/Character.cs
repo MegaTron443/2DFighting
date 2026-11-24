@@ -17,6 +17,7 @@ public class Character
     public string RawLuaCode { get; internal set; } = "";
     public static bool ShowDebugBoxes { get; set; } = false;
 
+    public string CharacterId { get; internal set; } = "";
     public string Name { get; internal set; } = "";
     public string Description { get; set; } = "No description provided.";
 

@@ -57,6 +57,7 @@ public class PhysicsEngine
         set => _activeInstance.Match.HitstopTimer = value;
     }
 
+    public static MatchTelemetryTracker? ActiveTelemetry => _activeInstance?.Match.Telemetry;
     public static List<Projectile> ActiveProjectiles => _activeInstance.Projectiles.ActiveProjectiles;
 
     public static float GroundY => GROUND_Y_PCT * Raylib.GetScreenHeight();

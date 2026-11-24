@@ -69,6 +69,9 @@ public class SkillController
         CurrentActionFrame = 0;
         HasHit = false;
         skill.CurrentCooldown = skill.CooldownTime;
+        p.LastExecutedSkillName = skillName;
+        if (GameState.CurrentState == State.Playing)
+            PhysicsEngine.ActiveTelemetry?.RecordSkillUse(p, skillName);
         p.Velocity.X = 0;
         p.Velocity.Y = 0;
 

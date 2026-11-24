@@ -48,10 +48,18 @@ public class CombatResolver
         return Math.Max(0, Math.Min(rawChip, defenderHealth - 1));
     }
 
-    public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackPct)
+    public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackPct) =>
+        ApplyHitForce(source, target, damage, stun, groundKnockbackPct, isBlocked: false);
+
+    public static void ApplyHitForce(Player source, Player target, int damage, float stun, float groundKnockbackPct, bool isBlocked)
     {
         int scaledDamage = CalculateScaledDamage(source, damage);
         target.Health = Math.Max(0, target.Health - scaledDamage);
+        if (scaledDamage > 0 && GameState.CurrentState == State.Playing)
+        {
+            PhysicsEngine.ActiveTelemetry?.RecordDamageDealt(source, scaledDamage);
+        }
+
         Character? targetChar = target.CurrentCharacter;
 
         if (targetChar != null && targetChar.IsHyperArmorActive)
@@ -77,9 +85,13 @@ public class CombatResolver
             target.SetVelocity(0f, 0f);
         }
 
-        if (scaledDamage > 0 && stun > 0f)
+        if (!isBlocked && scaledDamage > 0 && stun > 0f)
         {
             source.ComboCount++;
+            if (GameState.CurrentState == State.Playing)
+            {
+                PhysicsEngine.ActiveTelemetry?.RecordCleanHit(source, source.LastExecutedSkillName, source.ComboCount);
+            }
         }
     }
 
@@ -87,6 +99,11 @@ public class CombatResolver
     {
         int scaledDamage = CalculateScaledDamage(source, damage);
         target.Health = Math.Max(0, target.Health - scaledDamage);
+        if (scaledDamage > 0 && GameState.CurrentState == State.Playing)
+        {
+            PhysicsEngine.ActiveTelemetry?.RecordDamageDealt(source, scaledDamage);
+        }
+
         Character? targetChar = target.CurrentCharacter;
 
         if (targetChar != null && targetChar.IsHyperArmorActive)
@@ -110,6 +127,10 @@ public class CombatResolver
         if (scaledDamage > 0 && stun > 0f)
         {
             source.ComboCount++;
+            if (GameState.CurrentState == State.Playing)
+            {
+                PhysicsEngine.ActiveTelemetry?.RecordCleanHit(source, source.LastExecutedSkillName, source.ComboCount);
+            }
         }
     }
 
@@ -228,7 +249,7 @@ public class CombatResolver
         float blockStun = skill.HitStun * BlockStunMultiplier;
 
         int prevCombo = attacker.ComboCount;
-        ApplyHitForce(attacker, defender, nonLethalChip, blockStun, DefaultBlockKnockbackPct);
+        ApplyHitForce(attacker, defender, nonLethalChip, blockStun, DefaultBlockKnockbackPct, isBlocked: true);
         gamedata.SoundHandler?.PlaySound(defender, SoundType.Block);
         attacker.ComboCount = prevCombo; // Blocked hits shouldn't inflate combo counter
         VFXManager.SpawnPreset(VFXPreset.BlockSpark, defender.Position, defender.FacingRight);

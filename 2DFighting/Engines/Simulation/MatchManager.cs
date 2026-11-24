@@ -8,6 +8,8 @@ public class MatchManager
     private const float TrainingTransitionDuration = 0.05f;
 
     public bool IsTrainingMode { get; set; } = false;
+    public string CurrentMatchMode { get; set; } = "1v1_Local";
+    public MatchTelemetryTracker Telemetry { get; } = new();
     public int CurrentRound { get; private set; } = 1;
     public float RoundTimer { get; set; } = DefaultRoundDuration;
     public float RoundTransitionTimer { get; private set; } = 0f;
@@ -32,6 +34,11 @@ public class MatchManager
         {
             if (p1.RoundsWon >= RoundsToWin || p2.RoundsWon >= RoundsToWin)
             {
+                if (!Telemetry.HasRecordedCurrentMatch)
+                {
+                    LeaderboardDatabase.RecordMatch(Telemetry.FinalizeMatch(p1, p2));
+                }
+
                 if (IsTrainingMode)
                 {
                     string[] roster = data.Services?.AvailableFighters ?? GUIEngine.RosterIds;
@@ -126,12 +133,13 @@ public class MatchManager
         RoundTransitionTimer = IsTrainingMode ? TrainingTransitionDuration : RoundTransitionDuration;
     }
 
-    public void ResetMatch(Player p1, Player p2, ProjectileManager projectiles)
+    public void ResetMatch(Player p1, Player p2, ProjectileManager projectiles, IPlayerIdentityProvider? identity = null)
     {
         CurrentRound = 1;
         p1.RoundsWon = 0;
         p2.RoundsWon = 0;
         MatchWinnerText = "";
+        Telemetry.BeginMatch(p1, p2, CurrentMatchMode, ModManager.ActiveModFilter, identity ?? EngineServices.Current?.Identity);
         StartNextRound(p1, p2, projectiles);
     }
 

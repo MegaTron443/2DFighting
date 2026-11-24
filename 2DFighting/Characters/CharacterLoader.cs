@@ -84,6 +84,7 @@ public static class CharacterLoader
         if (t == null)
             throw new Exception($"Table 'Character' missing in: {path}");
 
+        character.CharacterId = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
         character.Name = t.Get("name").String ?? "Fighter";
         string? desc = t.Get("description").String;
         character.Description = string.IsNullOrWhiteSpace(desc) ? "No description provided." : desc.Trim();

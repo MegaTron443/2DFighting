@@ -10,6 +10,9 @@ public class AppConfig
     public SoundSettings Sound { get; set; } = new();
     public AIDifficulty AIDifficulty { get; set; } = AIDifficulty.Medium;
 
+    [JsonPropertyName("steam_id")]
+    public ulong SteamId { get; set; } = 0;
+
     public static AppConfig Load(string path)
     {
         if (!File.Exists(path))

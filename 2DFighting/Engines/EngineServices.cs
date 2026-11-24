@@ -12,6 +12,7 @@ public class EngineServices
     public static EngineServices? Current { get; private set; }
 
     public AppConfig Config { get; }
+    public IPlayerIdentityProvider Identity { get; }
     public Timer Timer { get; }
     public LuaEngine Lua { get; }
     public PhysicsEngine Physics { get; }
@@ -44,6 +45,7 @@ public class EngineServices
     public EngineServices(AppConfig config)
     {
         Config = config;
+        Identity = new LocalIdentityProvider(config);
         Timer = new Timer();
         Lua = new LuaEngine();
         Physics = new PhysicsEngine();
@@ -58,6 +60,7 @@ public class EngineServices
         Lua.Initialize();
 
         ModManager.Initialize();
+        LeaderboardDatabase.Initialize();
         ShaderManager.Initialize();
         PostFXManager.Initialize();
         SceneManager.Initialize();
@@ -161,10 +164,12 @@ public class EngineServices
         string? p1CharId,
         string? p2CharId,
         bool startImmediately,
-        bool isTrainingMode)
+        bool isTrainingMode,
+        string matchMode = "1v1_Local")
     {
         DisposeMatchSession(unloadTextures: false);
         Match.IsTrainingMode = isTrainingMode;
+        Match.CurrentMatchMode = string.IsNullOrWhiteSpace(matchMode) ? "1v1_Local" : matchMode;
         SceneManager.LoadMatchScene();
 
         int sw = Raylib.GetScreenWidth();
@@ -217,6 +222,8 @@ public class EngineServices
     public void DisposeMatchSession(bool unloadTextures = true)
     {
         IsLobbySession = false;
+        Match.Telemetry.StopTracking();
+        LeaderboardDatabase.Flush();
         if (Player1 != null || Player2 != null || Sound != null)
         {
             Sound?.Dispose();
@@ -239,6 +246,7 @@ public class EngineServices
 
     public void DisposeAll()
     {
+        LeaderboardDatabase.Flush();
         MacroTacticalModel.SharedInstance.SaveWeights();
         Player1?.Dispose();
         Player2?.Dispose();

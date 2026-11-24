@@ -31,8 +31,10 @@ public class Player : IDisposable
     private readonly KeyHandler _keyHandler;
     private readonly PlayerAI? _aiController;
 
+    public int PlayerIndex => _playerIndex;
     public string Name => _name;
     public bool IsAI => _isAI;
+    public string? LastExecutedSkillName { get; set; }
     public bool IsPassiveDummy { get; set; } = false;
     public DummyBlockMode DummyBlock { get; set; } = DummyBlockMode.Off;
     public bool AutoHealEnabled { get; set; } = true;
@@ -174,6 +176,7 @@ public class Player : IDisposable
         HasUsedAirStall = false;
         FacingRight = faceRight;
         ComboCount = 0;
+        LastExecutedSkillName = null;
         _keyHandler.ClearBuffer(_playerIndex);
 
         CurrentCharacter?.ResetCombatState();
