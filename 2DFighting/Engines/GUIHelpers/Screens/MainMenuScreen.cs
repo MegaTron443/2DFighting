@@ -19,8 +19,7 @@ public class MainMenuScreen : IUIScreen
     private Button? _descPanel;
     private Button? _launchQueueButton;
     private Button? _cancelQueueButton;
-    private Button? _leaderboardPanel;
-    private Button? _closeLeaderboardButton;
+    private LeaderboardOverlay? _leaderboardOverlay;
 
     private WorldButton? _modFilterBtn;
     private WorldButton? _queue1v1Btn;
@@ -33,7 +32,6 @@ public class MainMenuScreen : IUIScreen
     private WorldButton? _labAutoHealBtn;
 
     private LobbyQueueMode _queueMode = LobbyQueueMode.None;
-    private bool _showLeaderboards = false;
     private int _knownCatalogVersion = -1;
     private string _knownDescCharName = "";
     private string _knownDescCharHash = "";
@@ -48,7 +46,6 @@ public class MainMenuScreen : IUIScreen
         Dispose();
         _worldButtons.Clear();
         _queueMode = LobbyQueueMode.None;
-        _showLeaderboards = false;
         _knownCatalogVersion = -1;
         _knownDescCharName = "";
         _knownDescCharHash = "";
@@ -106,14 +103,20 @@ public class MainMenuScreen : IUIScreen
 
     private void BuildOnlineCenterButtons()
     {
+        _modFilterBtn = CreateWorldButton(
+            "mod_filter", "MOD FILTER", GetFilterLabel(ModManager.ActiveModFilter),
+            new Vector2(0.50f, 0.365f), new Vector2(0.23f, 0.090f),
+            new Vector3(1.0f, 0.75f, 0.25f), isToggle: true,
+            OnCycleModFilter);
+
         _leaderboardsBtn = CreateWorldButton(
             "leaderboards", "LEADERBOARDS", "RANKINGS",
-            new Vector2(0.50f, 0.37f), new Vector2(0.23f, 0.095f),
+            new Vector2(0.50f, 0.505f), new Vector2(0.23f, 0.095f),
             new Vector3(1.0f, 0.80f, 0.25f), isToggle: true,
             _ =>
             {
-                _showLeaderboards = !_showLeaderboards;
-                if (_showLeaderboards)
+                _leaderboardOverlay?.Toggle(ModManager.ActiveModFilter);
+                if (_leaderboardOverlay?.IsOpen == true)
                     ShowToast("SEASON 1 LEADERBOARDS");
             });
 
@@ -131,7 +134,7 @@ public class MainMenuScreen : IUIScreen
 
         _worldButtons.AddRange(new[]
         {
-            _leaderboardsBtn, _queue1v1Btn, _queue2v2Btn
+            _modFilterBtn, _leaderboardsBtn, _queue1v1Btn, _queue2v2Btn
         });
     }
 
@@ -161,19 +164,13 @@ public class MainMenuScreen : IUIScreen
 
         WorldButton reloadModsBtn = CreateWorldButton(
             "dev_reload_mods", "RELOAD MODS", "HOT REFRESH",
-            new Vector2(1.23f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.36f, 0.505f), new Vector2(0.21f, 0.095f),
             new Vector3(1.0f, 0.72f, 0.12f), isToggle: false,
             OnReloadMods);
 
-        _modFilterBtn = CreateWorldButton(
-            "mod_filter", "MOD FILTER", GetFilterLabel(ModManager.ActiveModFilter),
-            new Vector2(1.50f, 0.505f), new Vector2(0.21f, 0.095f),
-            new Vector3(1.0f, 0.75f, 0.25f), isToggle: true,
-            OnCycleModFilter);
-
         WorldButton resetWeightsBtn = CreateWorldButton(
             "dev_reset_weights", "RESET AI WEIGHTS", "CLEAR RL MODEL",
-            new Vector2(1.77f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.64f, 0.505f), new Vector2(0.21f, 0.095f),
             new Vector3(1.0f, 0.25f, 0.30f), isToggle: false,
             _ =>
             {
@@ -184,7 +181,7 @@ public class MainMenuScreen : IUIScreen
         _worldButtons.AddRange(new[]
         {
             _debugHitboxBtn, aiTrainBtn, _dummyModeBtn,
-            reloadModsBtn, _modFilterBtn, resetWeightsBtn
+            reloadModsBtn, resetWeightsBtn
         });
     }
 
@@ -356,28 +353,7 @@ public class MainMenuScreen : IUIScreen
             AccentColor = new Vector3(0.95f, 0.35f, 0.35f)
         };
 
-        _leaderboardPanel = new Button(
-            xPct: 0.24f,
-            yPct: 0.28f,
-            widthPct: 0.52f,
-            heightPct: 0.44f,
-            text: "#1  APEX_VOID      — 2,480 ELO  (68W - 11L)\n" +
-                  "#2  AERO_LANCER    — 2,395 ELO  (54W - 14L)\n" +
-                  "#3  CHRONO_MAGE    — 2,310 ELO  (49W - 16L)\n" +
-                  "#4  TIDAL_PRIEST   — 2,240 ELO  (41W - 19L)\n" +
-                  "#5  TITAN_CRUSHER  — 2,185 ELO  (37W - 21L)\n\n" +
-                  "Online matchmaking & seasonal rankings preview."
-        )
-        .WithTitle("SEASON 1 LEADERBOARDS")
-        .WithFontSize(0.018f)
-        .WithAccent(1.0f, 0.80f, 0.25f)
-        .WithScrolling();
-
-        _closeLeaderboardButton = new Button(0.43f, 0.735f, 0.14f, 0.048f, "CLOSE", _ => _showLeaderboards = false)
-        {
-            FontSizePct = 0.018f,
-            AccentColor = new Vector3(1.0f, 0.80f, 0.25f)
-        };
+        _leaderboardOverlay = new LeaderboardOverlay();
     }
 
     private static WorldButton CreateWorldButton(
@@ -433,6 +409,8 @@ public class MainMenuScreen : IUIScreen
 
         ShowToast($"FILTER: {GetFilterLabel(ModManager.ActiveModFilter)}");
         RefreshRoster(ctx.Data);
+        if (_leaderboardOverlay?.IsOpen == true)
+            _leaderboardOverlay.SelectFilter(ModManager.ActiveModFilter);
     }
 
     private void ToggleQueueMode(LobbyQueueMode requested)
@@ -462,7 +440,8 @@ public class MainMenuScreen : IUIScreen
             p1CharId: p1Id,
             p2CharId: p2Id,
             startImmediately: true,
-            isTrainingMode: false
+            isTrainingMode: false,
+            matchMode: "VS_AI"
         );
         ctx.SetP1(services.Player1);
         ctx.SetP2(services.Player2);
@@ -489,7 +468,8 @@ public class MainMenuScreen : IUIScreen
             p1CharId: p1Id,
             p2CharId: null,
             startImmediately: false,
-            isTrainingMode: false
+            isTrainingMode: false,
+            matchMode: is2v2 ? "2v2" : "1v1_Local"
         );
         ctx.SetP1(services.Player1);
         ctx.SetP2(services.Player2);
@@ -505,6 +485,7 @@ public class MainMenuScreen : IUIScreen
         if (!Array.Exists(pool, f => string.Equals(f, p1Id, StringComparison.OrdinalIgnoreCase)))
             p1Id = pool[0];
 
+        string queuedMode = _queueMode == LobbyQueueMode.Queue2v2 ? "2v2" : "1v1_Online";
         _queueMode = LobbyQueueMode.None;
         services.StartMatchFromLobby(
             p1AI: false,
@@ -512,7 +493,8 @@ public class MainMenuScreen : IUIScreen
             p1CharId: p1Id,
             p2CharId: null,
             startImmediately: false,
-            isTrainingMode: false
+            isTrainingMode: false,
+            matchMode: queuedMode
         );
         ctx.SetP1(services.Player1);
         ctx.SetP2(services.Player2);
@@ -534,7 +516,8 @@ public class MainMenuScreen : IUIScreen
             p1CharId: p1Id,
             p2CharId: p2Id,
             startImmediately: true,
-            isTrainingMode: true
+            isTrainingMode: true,
+            matchMode: "AI_GA_Eval"
         );
         ctx.SetP1(services.Player1);
         ctx.SetP2(services.Player2);
@@ -642,8 +625,9 @@ public class MainMenuScreen : IUIScreen
 
         if (_leaderboardsBtn != null)
         {
-            _leaderboardsBtn.IsSelected = _showLeaderboards;
-            _leaderboardsBtn.SubLabel = _showLeaderboards ? "VIEWING" : "RANKINGS";
+            bool overlayOpen = _leaderboardOverlay?.IsOpen == true;
+            _leaderboardsBtn.IsSelected = overlayOpen;
+            _leaderboardsBtn.SubLabel = overlayOpen ? "VIEWING" : "RANKINGS";
         }
 
         if (_debugHitboxBtn != null)
@@ -709,11 +693,19 @@ public class MainMenuScreen : IUIScreen
 
         SyncDynamicLabels(context.Data);
 
-        _roster?.Update(context);
-        _descPanel?.Update(context);
+        bool overlayOpen = _leaderboardOverlay?.IsOpen == true;
+        if (overlayOpen)
+        {
+            _leaderboardOverlay!.Update(context);
+        }
+        else
+        {
+            _roster?.Update(context);
+            _descPanel?.Update(context);
+        }
 
         bool pointerInBanner = false;
-        if (_queueMode != LobbyQueueMode.None)
+        if (!overlayOpen && _queueMode != LobbyQueueMode.None)
         {
             Rectangle bannerBounds = UIRenderer.GetPctRect(0.015f, 0.200f, 0.585f, 0.058f);
             pointerInBanner = Raylib.CheckCollisionPointRec(Raylib.GetMousePosition(), bannerBounds);
@@ -721,19 +713,10 @@ public class MainMenuScreen : IUIScreen
             _cancelQueueButton?.Update(context);
         }
 
-        bool pointerInLeaderboards = false;
-        if (_showLeaderboards)
-        {
-            Rectangle lbBounds = UIRenderer.GetPctRect(0.24f, 0.28f, 0.52f, 0.51f);
-            pointerInLeaderboards = Raylib.CheckCollisionPointRec(Raylib.GetMousePosition(), lbBounds);
-            _leaderboardPanel?.Update(context);
-            _closeLeaderboardButton?.Update(context);
-        }
-
-        bool hudCapturedPointer = (_roster?.CapturesPointer ?? false) ||
+        bool hudCapturedPointer = overlayOpen ||
+                                  (_roster?.CapturesPointer ?? false) ||
                                   (_descPanel?.CapturesPointer ?? false) ||
-                                  pointerInBanner ||
-                                  pointerInLeaderboards;
+                                  pointerInBanner;
 
         for (int i = 0; i < _worldButtons.Count; i++)
         {
@@ -917,13 +900,9 @@ public class MainMenuScreen : IUIScreen
         if (_queueMode != LobbyQueueMode.None)
             DrawQueueBanner();
 
-        if (_showLeaderboards)
-        {
-            _leaderboardPanel?.Draw();
-            _closeLeaderboardButton?.Draw();
-        }
-
         DrawBottomLobbyBar(data);
+
+        _leaderboardOverlay?.Draw();
     }
 
     private void DrawQueueBanner()
@@ -1022,10 +1001,7 @@ public class MainMenuScreen : IUIScreen
         _cancelQueueButton?.Dispose();
         _cancelQueueButton = null;
 
-        _leaderboardPanel?.Dispose();
-        _leaderboardPanel = null;
-
-        _closeLeaderboardButton?.Dispose();
-        _closeLeaderboardButton = null;
+        _leaderboardOverlay?.Dispose();
+        _leaderboardOverlay = null;
     }
 }
