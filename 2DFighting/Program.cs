@@ -6,6 +6,7 @@ AppConfig config = AppConfig.Load("config.json");
 int sw = config.Display.ScreenWidth;
 int sh = config.Display.ScreenHeight;
 
+Raylib.SetConfigFlags(ConfigFlags.FLAG_MSAA_4X_HINT);
 Raylib.InitWindow(sw, sh, config.Display.Title);
 Raylib.SetExitKey(KeyboardKey.KEY_NULL);
 Raylib.SetTargetFPS(config.Display.TargetFps);

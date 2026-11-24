@@ -41,9 +41,15 @@ public class SceneLayer : IDisposable
             return false;
         }
 
-        Texture = Raylib.LoadTexture(resolved);
+        Texture2D loaded = Raylib.LoadTexture(resolved);
+        if (loaded.id == 0)
+            return false;
+
+        Raylib.SetTextureFilter(loaded, TextureFilter.TEXTURE_FILTER_BILINEAR);
+        Raylib.SetTextureWrap(loaded, TextureWrap.TEXTURE_WRAP_CLAMP);
+        Texture = loaded;
         OwnsTexture = true;
-        return Texture.id > 0;
+        return true;
     }
 
     public void SetTexture(Texture2D texture, bool takeOwnership = false)

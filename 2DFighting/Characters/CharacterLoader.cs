@@ -25,6 +25,11 @@ public static class CharacterLoader
             return cached;
 
         Texture2D loaded = Raylib.LoadTexture(fullPath);
+        if (loaded.id > 0)
+        {
+            Raylib.SetTextureFilter(loaded, TextureFilter.TEXTURE_FILTER_BILINEAR);
+            Raylib.SetTextureWrap(loaded, TextureWrap.TEXTURE_WRAP_CLAMP);
+        }
         _textureCache[fullPath] = loaded;
         return loaded;
     }

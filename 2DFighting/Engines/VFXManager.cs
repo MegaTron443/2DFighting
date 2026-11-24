@@ -329,6 +329,11 @@ public static class VFXManager
         if (resolved != null && File.Exists(resolved))
         {
             Texture2D tex = Raylib.LoadTexture(resolved);
+            if (tex.id > 0)
+            {
+                Raylib.SetTextureFilter(tex, TextureFilter.TEXTURE_FILTER_BILINEAR);
+                Raylib.SetTextureWrap(tex, TextureWrap.TEXTURE_WRAP_CLAMP);
+            }
             _vfxTextureCache[name] = tex;
             return tex;
         }

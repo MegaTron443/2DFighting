@@ -98,6 +98,8 @@ public class PaginatedRosterWidget : IDisposable
         if (loaded.id == 0)
             return false;
 
+        Raylib.SetTextureFilter(loaded, TextureFilter.TEXTURE_FILTER_BILINEAR);
+        Raylib.SetTextureWrap(loaded, TextureWrap.TEXTURE_WRAP_CLAMP);
         PanelTexture = loaded;
         OwnsPanelTexture = true;
         return true;
@@ -201,7 +203,11 @@ public class PaginatedRosterWidget : IDisposable
             {
                 Texture2D loaded = Raylib.LoadTexture(path);
                 if (loaded.id > 0)
+                {
+                    Raylib.SetTextureFilter(loaded, TextureFilter.TEXTURE_FILTER_BILINEAR);
+                    Raylib.SetTextureWrap(loaded, TextureWrap.TEXTURE_WRAP_CLAMP);
                     _thumbnails[fighter] = loaded;
+                }
             }
         }
     }

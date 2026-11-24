@@ -77,6 +77,11 @@ public static class PostFXManager
             }
             _finalSourceTarget = default;
             _sceneTarget = Raylib.LoadRenderTexture(sw, sh);
+            if (_sceneTarget.id > 0)
+            {
+                Raylib.SetTextureFilter(_sceneTarget.texture, TextureFilter.TEXTURE_FILTER_BILINEAR);
+                Raylib.SetTextureWrap(_sceneTarget.texture, TextureWrap.TEXTURE_WRAP_CLAMP);
+            }
             _targetWidth = sw;
             _targetHeight = sh;
         }
@@ -91,6 +96,11 @@ public static class PostFXManager
                 Raylib.UnloadRenderTexture(_pingPongTarget);
             }
             _pingPongTarget = Raylib.LoadRenderTexture(_targetWidth, _targetHeight);
+            if (_pingPongTarget.id > 0)
+            {
+                Raylib.SetTextureFilter(_pingPongTarget.texture, TextureFilter.TEXTURE_FILTER_BILINEAR);
+                Raylib.SetTextureWrap(_pingPongTarget.texture, TextureWrap.TEXTURE_WRAP_CLAMP);
+            }
         }
     }
 

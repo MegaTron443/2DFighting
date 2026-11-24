@@ -50,6 +50,8 @@ public class Platform : IDisposable
         if (loaded.id == 0)
             return false;
 
+        Raylib.SetTextureFilter(loaded, TextureFilter.TEXTURE_FILTER_BILINEAR);
+        Raylib.SetTextureWrap(loaded, TextureWrap.TEXTURE_WRAP_CLAMP);
         Texture = loaded;
         OwnsTexture = true;
         return true;

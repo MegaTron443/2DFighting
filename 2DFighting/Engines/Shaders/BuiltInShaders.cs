@@ -105,7 +105,8 @@ void main()
     vec4 tex = texture(texture0, fragTexCoord);
     if (tex.a < 0.01) discard;
 
-    float luma = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 rgb = clamp(tex.rgb / max(tex.a, 0.001), 0.0, 1.0);
+    float luma = dot(rgb, vec3(0.299, 0.587, 0.114));
 
     // Preserve crisp black ink outlines across all parts (including portal head)
     float outlineMask = 1.0 - smoothstep(0.03, 0.10, luma);

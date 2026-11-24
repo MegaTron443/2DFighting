@@ -155,6 +155,8 @@ public class Button : IDisposable
         if (loaded.id == 0)
             return false;
 
+        Raylib.SetTextureFilter(loaded, TextureFilter.TEXTURE_FILTER_BILINEAR);
+        Raylib.SetTextureWrap(loaded, TextureWrap.TEXTURE_WRAP_CLAMP);
         BackgroundTexture = loaded;
         OwnsBackgroundTexture = true;
         return true;
