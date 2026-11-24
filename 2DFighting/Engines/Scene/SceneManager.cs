@@ -23,6 +23,24 @@ public static class SceneManager
         bg.Parallax = Vector2.One;
         bg.Material.SetFloat("u_GroundYPct", PhysicsEngine.GROUND_Y_PCT);
 
+        var midground = defaultScene.AddLayer(
+            "midground_parallax",
+            texturePath: null,
+            shaderId: BuiltInShaders.SceneParallaxId,
+            isForeground: false
+        );
+        midground.Parallax = new Vector2(0.35f, 0.95f);
+        midground.Material.SetFloat("u_GroundYPct", PhysicsEngine.GROUND_Y_PCT);
+
+        var foreground = defaultScene.AddLayer(
+            "foreground_atmosphere",
+            texturePath: null,
+            shaderId: BuiltInShaders.SceneForegroundId,
+            isForeground: true
+        );
+        foreground.Parallax = new Vector2(1.22f, 1.02f);
+        foreground.Material.SetFloat("u_GroundYPct", PhysicsEngine.GROUND_Y_PCT);
+
         LoadScene(defaultScene);
     }
 

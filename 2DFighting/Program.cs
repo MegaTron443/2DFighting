@@ -117,7 +117,7 @@ void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, GameDat
     SceneManager.DrawBackground(CameraManager.Target);
 
     Rectangle b = SceneManager.CurrentScene?.Bounds ?? new Rectangle(0, 0, Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
-    Raylib.DrawLine((int)b.x, (int)PhysicsEngine.GroundY, (int)(b.x + b.width), (int)PhysicsEngine.GroundY, Color.BLACK);
+    Raylib.DrawLine((int)b.x, (int)PhysicsEngine.GroundY, (int)(b.x + b.width), (int)PhysicsEngine.GroundY, new Color(120, 130, 175, 90));
 
     GUIEngine.DrawWorld(data);
     SceneManager.DrawPlatforms();

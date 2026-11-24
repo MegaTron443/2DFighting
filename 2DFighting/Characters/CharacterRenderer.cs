@@ -188,6 +188,7 @@ public class CharacterRenderer
     public void Draw(Character character, Player p, AfterimageSystem afterimages, float alpha)
     {
         Rectangle hurtbox = p.GetRenderHurtbox(alpha);
+        DrawGroundShadow(character, hurtbox);
         afterimages.Draw(this, character);
 
         if (HasCompoundParts)
@@ -203,6 +204,34 @@ public class CharacterRenderer
         {
             DrawDebugOrFallback(character, p, hurtbox, alpha);
         }
+    }
+
+    private static void DrawGroundShadow(Character character, Rectangle hurtbox)
+    {
+        ShaderManager.EndShader();
+        float groundY = PhysicsEngine.GroundY;
+        float feetY = hurtbox.y + hurtbox.height;
+        float heightAboveGround = MathF.Max(0f, feetY < groundY ? groundY - feetY : 0f);
+        float maxJumpRef = MathF.Max(1f, Raylib.GetScreenHeight() * 0.45f);
+        float scale = 1f - Math.Clamp(heightAboveGround / maxJumpRef, 0f, 0.78f);
+
+        int cx = (int)hurtbox.CenterX();
+        int cy = (int)groundY;
+
+        Raylib.DrawEllipse(
+            cx,
+            cy,
+            character.Width * 0.72f * scale,
+            MathF.Max(3f, character.Height * 0.052f * scale),
+            new Color((byte)8, (byte)6, (byte)16, (byte)(68 * scale))
+        );
+        Raylib.DrawEllipse(
+            cx,
+            cy,
+            character.Width * 0.44f * scale,
+            MathF.Max(2f, character.Height * 0.030f * scale),
+            new Color((byte)5, (byte)4, (byte)12, (byte)(118 * scale))
+        );
     }
 
     private void DrawCompoundParts(Character character, Player p, Rectangle hurtbox)

@@ -90,6 +90,11 @@ public class Scene : IDisposable
     public SceneLayer? GetLayer(string name) =>
         _layers.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
+    private static bool IsHorizonSyncedShader(string shaderId) =>
+        shaderId == BuiltInShaders.SceneDefaultId ||
+        shaderId == BuiltInShaders.SceneParallaxId ||
+        shaderId == BuiltInShaders.SceneForegroundId;
+
     public void DrawBackground(Vector2 cameraTarget)
     {
         Rectangle b = Bounds;
@@ -99,7 +104,7 @@ public class Scene : IDisposable
         {
             if (!layer.IsForeground)
             {
-                if (layer.Material.ShaderId == BuiltInShaders.SceneDefaultId)
+                if (IsHorizonSyncedShader(layer.Material.ShaderId))
                     layer.Material.SetFloat("u_GroundYPct", groundUvY);
 
                 layer.Draw(b, cameraTarget);
@@ -109,8 +114,19 @@ public class Scene : IDisposable
 
     public void DrawForeground(Vector2 cameraTarget)
     {
+        Rectangle b = Bounds;
+        float groundUvY = (PhysicsEngine.GroundY - b.y) / b.height;
+
         foreach (var layer in _layers)
-            if (layer.IsForeground) layer.Draw(Bounds, cameraTarget);
+        {
+            if (layer.IsForeground)
+            {
+                if (IsHorizonSyncedShader(layer.Material.ShaderId))
+                    layer.Material.SetFloat("u_GroundYPct", groundUvY);
+
+                layer.Draw(b, cameraTarget);
+            }
+        }
     }
 
     public void Dispose()

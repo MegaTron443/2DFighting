@@ -27,7 +27,8 @@ public static class PostFXManager
 
     public static bool HasActiveEffects =>
         !PhysicsEngine.IsTrainingMode &&
-        (_impactFramesRemaining > 0 ||
+        (GameState.IsLiveArena ||
+         _impactFramesRemaining > 0 ||
          _shakeFramesRemaining > 0 ||
          _paletteMix > 0.001f ||
          MathF.Abs(_pinchAmount) > 0.001f ||
@@ -120,6 +121,7 @@ public static class PostFXManager
         _paletteMix = 0f;
         _pinchHoldFrames = 0;
         _pinchAmount = 0f;
+        GetOrCreateDefaultPass();
     }
 
     public static void UpdateTick(float dt)
@@ -179,15 +181,6 @@ public static class PostFXManager
         }
         mat.SetFloat("u_PinchAmount", _pinchAmount);
         mat.SetVec2("u_PinchCenter", _pinchCenter.X, _pinchCenter.Y);
-
-        if (_impactFramesRemaining <= 0 &&
-            _shakeFramesRemaining <= 0 &&
-            _paletteMix <= 0.001f &&
-            MathF.Abs(_pinchAmount) <= 0.001f &&
-            !_defaultPassExplicitlyEnabled)
-        {
-            _activePasses.Remove(BuiltInShaders.PostFxCosmicId);
-        }
     }
 
     private static ActivePostFXPass GetOrCreateDefaultPass()
@@ -195,6 +188,13 @@ public static class PostFXManager
         if (!_activePasses.TryGetValue("postfx_cosmic", out var pass))
         {
             pass = new ActivePostFXPass { ShaderId = "postfx_cosmic", Priority = 0 };
+            pass.Material.SetFloat("u_ImpactMode", 0f);
+            pass.Material.SetVec2("u_ShakeOffset", 0f, 0f);
+            pass.Material.SetFloat("u_ChromaticSplit", 0f);
+            pass.Material.SetFloat("u_PaletteMix", 0f);
+            pass.Material.SetFloat("u_PinchAmount", 0f);
+            pass.Material.SetVec2("u_PinchCenter", 0.5f, 0.5f);
+            pass.Material.SetColor("u_TintColor", _paletteTint.X, _paletteTint.Y, _paletteTint.Z);
             _activePasses["postfx_cosmic"] = pass;
         }
         return pass;

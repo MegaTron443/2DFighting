@@ -39,6 +39,7 @@ public class VFXInstance
     public int FrameHeight;
     public float RotationDeg;
     public bool FlipY;
+    public uint Seed;
 
     public bool IsActive => Elapsed < Lifetime;
     public float Progress => Lifetime > 0f ? Math.Clamp(Elapsed / Lifetime, 0f, 1f) : 1f;
@@ -48,6 +49,17 @@ public static class VFXManager
 {
     private static readonly List<VFXInstance> _activeVfx = new(64);
     private static readonly Dictionary<string, Texture2D?> _vfxTextureCache = new(StringComparer.OrdinalIgnoreCase);
+    private static uint _seedCounter = 1;
+
+    private static float Hash01(uint n)
+    {
+        n = (n ^ 61u) ^ (n >> 16);
+        n *= 9u;
+        n ^= n >> 4;
+        n *= 0x27d4eb2du;
+        n ^= n >> 15;
+        return (n & 0x00FFFFFFu) / 16777215f;
+    }
 
     public static void Clear() => _activeVfx.Clear();
 
@@ -119,7 +131,8 @@ public static class VFXManager
             SpriteSheet = sheet,
             FrameWidth = 128,
             FrameHeight = 128,
-            FrameCount = sheet.HasValue ? Math.Max(1, sheet.Value.width / 128) : 0
+            FrameCount = sheet.HasValue ? Math.Max(1, sheet.Value.width / 128) : 0,
+            Seed = unchecked(_seedCounter++)
         });
     }
 
@@ -194,6 +207,12 @@ public static class VFXManager
     {
         if (PhysicsEngine.IsTrainingMode || _activeVfx.Count == 0) return;
 
+        ShaderManager.EndShader();
+        float sh = Raylib.GetScreenHeight();
+        float groundY = PhysicsEngine.GroundY;
+
+        Raylib.BeginBlendMode(BlendMode.BLEND_ADDITIVE);
+
         for (int i = 0; i < _activeVfx.Count; i++)
         {
             var vfx = _activeVfx[i];
@@ -206,6 +225,7 @@ public static class VFXManager
 
             if (vfx.SpriteSheet is { id: > 0 } tex && vfx.FrameCount > 0)
             {
+                Raylib.EndBlendMode();
                 int frame = Math.Min(vfx.FrameCount - 1, (int)(t * vfx.FrameCount));
                 int cols = Math.Max(1, tex.width / vfx.FrameWidth);
                 int srcX = (frame % cols) * vfx.FrameWidth;
@@ -216,6 +236,7 @@ public static class VFXManager
                 Rectangle dst = new Rectangle(vfx.Position.X - size * 0.5f, vfx.Position.Y - size * 0.5f, size, size);
 
                 Raylib.DrawTexturePro(tex, src, dst, Vector2.Zero, 0f, c1);
+                Raylib.BeginBlendMode(BlendMode.BLEND_ADDITIVE);
                 continue;
             }
 
@@ -227,20 +248,84 @@ public static class VFXManager
                 case VFXPreset.HeavyHitSpark:
                 case VFXPreset.BlockBreak:
                 {
-                    Raylib.DrawCircleV(vfx.Position, radius * (1f - t * 0.5f), c2);
-                    Raylib.DrawCircleV(vfx.Position, radius * 0.45f * (1f - t), c1);
-                    Raylib.DrawCircleLines((int)vfx.Position.X, (int)vfx.Position.Y, radius, c1);
-
-                    int spikes = vfx.Preset == VFXPreset.HitSpark ? 6 : 10;
-                    float baseAngle = vfx.Preset == VFXPreset.BlockBreak ? t * 2.5f : 0.4f;
-                    for (int s = 0; s < spikes; s++)
+                    float flashScale = MathF.Max(0f, 1f - t * 2.2f);
+                    if (flashScale > 0f)
                     {
-                        float angle = baseAngle + (s * (MathF.Tau / spikes));
-                        Vector2 dir = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
-                        Vector2 pStart = vfx.Position + dir * (radius * 0.25f);
-                        Vector2 pEnd = vfx.Position + dir * (radius * 1.35f);
-                        Raylib.DrawLineEx(pStart, pEnd, 3f * (1f - t * 0.7f), c1);
+                        Raylib.DrawCircleV(vfx.Position, radius * 0.34f * flashScale, c2);
+                        Raylib.DrawCircleV(vfx.Position, radius * 0.16f * flashScale, new Color((byte)255, (byte)255, (byte)255, alpha));
                     }
+
+                    int sparkCount = vfx.Preset == VFXPreset.HitSpark ? 10 : 16;
+                    float baseSpeed = (vfx.Preset == VFXPreset.HitSpark ? 0.42f : 0.68f) * sh;
+                    float grav = sh * 1.20f;
+                    float tau = vfx.Elapsed;
+
+                    for (int s = 0; s < sparkCount; s++)
+                    {
+                        uint hSeed = vfx.Seed * 747796405u + (uint)s * 2891336453u;
+                        float rAngle = Hash01(hSeed);
+                        float rSpeed = Hash01(hSeed ^ 0x9E3779B9u);
+
+                        float spread = (rAngle - 0.5f) * 2.5f - 0.35f;
+                        float angle = vfx.FacingRight ? spread : (MathF.PI - spread);
+                        float speed = baseSpeed * (0.45f + 0.85f * rSpeed);
+
+                        Vector2 v0 = new Vector2(MathF.Cos(angle) * speed, MathF.Sin(angle) * speed);
+                        Vector2 pos = vfx.Position + (v0 * tau) + new Vector2(0f, 0.5f * grav * tau * tau);
+                        Vector2 vel = v0 + new Vector2(0f, grav * tau);
+
+                        if (pos.Y > groundY)
+                        {
+                            pos.Y = groundY - (pos.Y - groundY) * 0.45f;
+                            vel.Y = -MathF.Abs(vel.Y) * 0.45f;
+                        }
+
+                        float streakDt = 0.030f * (1f - t * 0.45f);
+                        Vector2 tailPos = pos - (vel * streakDt);
+
+                        Raylib.DrawLineEx(tailPos, pos, 4.0f * (1f - t * 0.75f), c2);
+                        Raylib.DrawLineEx(tailPos, pos, 1.8f * (1f - t * 0.65f), new Color((byte)255, (byte)255, (byte)230, alpha));
+                    }
+                    break;
+                }
+
+                case VFXPreset.Dust:
+                {
+                    Raylib.EndBlendMode();
+                    float tau = vfx.Elapsed;
+                    float dragT = (1f - MathF.Exp(-5.5f * tau)) / 5.5f;
+                    byte dustAlpha = (byte)(105 * Math.Clamp(1f - t, 0f, 1f));
+                    Color puffCol = new Color(vfx.PrimaryColor.r, vfx.PrimaryColor.g, vfx.PrimaryColor.b, dustAlpha);
+
+                    for (int d = 0; d < 7; d++)
+                    {
+                        uint dSeed = vfx.Seed * 2654435761u + (uint)d * 1013904223u;
+                        float rx = Hash01(dSeed) - 0.5f;
+                        float ry = Hash01(dSeed ^ 0xA5A5A5A5u);
+                        float rs = Hash01(dSeed ^ 0x5A5A5A5Au);
+
+                        Vector2 v0 = new Vector2(rx * sh * 0.34f, -sh * (0.04f + 0.12f * ry));
+                        Vector2 puffPos = vfx.Position + (v0 * dragT) + new Vector2(0f, -sh * 0.08f * tau * tau);
+                        float puffRad = vfx.StartRadiusPx * (0.65f + 0.9f * rs) + (vfx.EndRadiusPx * 0.45f * easeOut);
+
+                        Raylib.DrawCircleV(puffPos, puffRad, puffCol);
+                    }
+
+                    float grav = sh * 1.4f;
+                    for (int g = 0; g < 4; g++)
+                    {
+                        uint gSeed = vfx.Seed * 1597334677u + (uint)g * 3812015801u;
+                        float gx = (Hash01(gSeed) - 0.5f) * 2f;
+                        float gy = Hash01(gSeed ^ 0x12345678u);
+                        Vector2 gv0 = new Vector2(gx * sh * 0.25f, -sh * (0.14f + 0.18f * gy));
+                        Vector2 gPos = vfx.Position + (gv0 * tau) + new Vector2(0f, 0.5f * grav * tau * tau);
+                        if (gPos.Y <= groundY + 2f)
+                        {
+                            Raylib.DrawCircleV(gPos, MathF.Max(1.5f, sh * 0.0035f * (1f - t)), c2);
+                        }
+                    }
+
+                    Raylib.BeginBlendMode(BlendMode.BLEND_ADDITIVE);
                     break;
                 }
 
@@ -274,6 +359,7 @@ public static class VFXManager
                 }
                 case VFXPreset.SlashArc:
                 {
+                    Raylib.EndBlendMode();
                     if (ShaderManager.BeginShader(BuiltInShaders.CosmicSlashId, out Shader slashShader))
                     {
                         float size = vfx.EndRadiusPx * 2f;
@@ -304,6 +390,7 @@ public static class VFXManager
                         );
                         ShaderManager.EndShader();
                     }
+                    Raylib.BeginBlendMode(BlendMode.BLEND_ADDITIVE);
                     break;
                 }
                 case VFXPreset.Shockwave:
@@ -316,6 +403,8 @@ public static class VFXManager
                 }
             }
         }
+
+        Raylib.EndBlendMode();
     }
 
     private static Texture2D? TryGetVFXTexture(string name)
