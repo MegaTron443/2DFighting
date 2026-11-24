@@ -48,9 +48,13 @@ public static class SceneManager
     {
         var lobbyScene = new Scene("lobby")
         {
+            ExtraLeftScreens = 1.0f,
             ExtraRightScreens = 1.0f,
-            PlayableLeftPct = PhysicsEngine.LEFT_BOUNDARY_PCT,
-            PlayableRightPct = 1.97f
+            ExtraBottomScreens = 1.0f,
+            PlayableLeftPct = -0.97f,
+            PlayableRightPct = 1.97f,
+            PlayableTopPct = -0.25f,
+            PlayableBottomPct = 2.0f
         };
 
         var bg = lobbyScene.AddLayer(
@@ -77,10 +81,21 @@ public static class SceneManager
         }
 
         string? platformTex = ModManager.ResolveFile("Assets", "Scenes", "lobby_platform.png");
+        Vector3 offlineAccent = new Vector3(1.0f, 0.62f, 0.28f);
         Vector3 mainAccent = new Vector3(0.45f, 0.78f, 1.0f);
+        Vector3 hatchAccent = new Vector3(0.35f, 1.0f, 0.65f);
         Vector3 devAccent = new Vector3(0.0f, 0.95f, 0.88f);
 
-        // Main Lobby 3-tier jumpable platforms (max vertical step 0.090 * sh < Titan max jump height)
+        // Left Offline Room 3-tier jumpable platforms
+        lobbyScene.AddPlatform("offline_low_left",    -0.89f, 0.760f, 0.22f, texturePath: platformTex, accentColor: offlineAccent);
+        lobbyScene.AddPlatform("offline_low_right",   -0.33f, 0.760f, 0.22f, texturePath: platformTex, accentColor: offlineAccent);
+        lobbyScene.AddPlatform("offline_mid_left",    -0.78f, 0.670f, 0.22f, texturePath: platformTex, accentColor: offlineAccent);
+        lobbyScene.AddPlatform("offline_mid_right",   -0.44f, 0.670f, 0.22f, texturePath: platformTex, accentColor: offlineAccent);
+        lobbyScene.AddPlatform("offline_high_left",   -0.93f, 0.580f, 0.20f, texturePath: platformTex, accentColor: offlineAccent);
+        lobbyScene.AddPlatform("offline_high_center", -0.61f, 0.580f, 0.22f, texturePath: platformTex, accentColor: offlineAccent);
+        lobbyScene.AddPlatform("offline_high_right",  -0.27f, 0.580f, 0.20f, texturePath: platformTex, accentColor: offlineAccent);
+
+        // Center Online Hub 3-tier jumpable platforms + drop-through Training Lab floor hatch
         lobbyScene.AddPlatform("lobby_low_left",    0.11f, 0.760f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
         lobbyScene.AddPlatform("lobby_low_right",   0.67f, 0.760f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
         lobbyScene.AddPlatform("lobby_mid_left",    0.22f, 0.670f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
@@ -88,8 +103,9 @@ public static class SceneManager
         lobbyScene.AddPlatform("lobby_high_left",   0.07f, 0.580f, 0.20f, texturePath: platformTex, accentColor: mainAccent);
         lobbyScene.AddPlatform("lobby_high_center", 0.39f, 0.580f, 0.22f, texturePath: platformTex, accentColor: mainAccent);
         lobbyScene.AddPlatform("lobby_high_right",  0.73f, 0.580f, 0.20f, texturePath: platformTex, accentColor: mainAccent);
+        lobbyScene.AddPlatform("training_hatch",    0.415f, PhysicsEngine.GROUND_Y_PCT, 0.17f, thicknessPct: 0.018f, isOneWay: true, accentColor: hatchAccent, texturePath: platformTex);
 
-        // Developer Alcove 3-tier jumpable platforms
+        // Right Developer Alcove 3-tier jumpable platforms
         lobbyScene.AddPlatform("dev_low_left",      1.15f, 0.760f, 0.22f, texturePath: platformTex, accentColor: devAccent);
         lobbyScene.AddPlatform("dev_low_right",     1.63f, 0.760f, 0.22f, texturePath: platformTex, accentColor: devAccent);
         lobbyScene.AddPlatform("dev_mid_left",      1.24f, 0.670f, 0.23f, texturePath: platformTex, accentColor: devAccent);

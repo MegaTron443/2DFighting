@@ -121,8 +121,9 @@ public class EngineServices
             : fallbackPool[^1];
 
         int sw = Raylib.GetScreenWidth();
-        Vector2 spawnP1 = new Vector2(sw * 0.28f, PhysicsEngine.GroundY * 0.86f);
-        Vector2 spawnP2 = new Vector2(sw * 0.68f, PhysicsEngine.GroundY * 0.86f);
+        int sh = Raylib.GetScreenHeight();
+        Vector2 spawnP1 = new Vector2(sw * 0.30f, PhysicsEngine.GroundY * 0.86f);
+        Vector2 spawnP2 = new Vector2(sw * 0.65f, sh + (PhysicsEngine.GroundY * 0.86f));
 
         Player1?.Dispose();
         Player2?.Dispose();

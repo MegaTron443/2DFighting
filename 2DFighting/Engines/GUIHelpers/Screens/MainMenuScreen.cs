@@ -19,14 +19,21 @@ public class MainMenuScreen : IUIScreen
     private Button? _descPanel;
     private Button? _launchQueueButton;
     private Button? _cancelQueueButton;
+    private Button? _leaderboardPanel;
+    private Button? _closeLeaderboardButton;
 
     private WorldButton? _modFilterBtn;
     private WorldButton? _queue1v1Btn;
     private WorldButton? _queue2v2Btn;
+    private WorldButton? _leaderboardsBtn;
     private WorldButton? _debugHitboxBtn;
     private WorldButton? _dummyModeBtn;
+    private WorldButton? _labDummyBtn;
+    private WorldButton? _labBlockBtn;
+    private WorldButton? _labAutoHealBtn;
 
     private LobbyQueueMode _queueMode = LobbyQueueMode.None;
+    private bool _showLeaderboards = false;
     private int _knownCatalogVersion = -1;
     private string _knownDescCharName = "";
     private string _knownDescCharHash = "";
@@ -41,6 +48,7 @@ public class MainMenuScreen : IUIScreen
         Dispose();
         _worldButtons.Clear();
         _queueMode = LobbyQueueMode.None;
+        _showLeaderboards = false;
         _knownCatalogVersion = -1;
         _knownDescCharName = "";
         _knownDescCharHash = "";
@@ -50,53 +58,80 @@ public class MainMenuScreen : IUIScreen
         _lastP1Combo = -1;
         _cachedDummyInfo = "";
 
-        BuildMainArenaButtons();
+        BuildOfflineRoomButtons();
+        BuildOnlineCenterButtons();
         BuildDeveloperAlcoveButtons();
+        BuildTrainingLabButtons();
         BuildHudWidgets();
     }
 
-    private void BuildMainArenaButtons()
+    private void BuildOfflineRoomButtons()
     {
         WorldButton settingsBtn = CreateWorldButton(
             "settings", "SETTINGS", "OPTIONS & KEYS",
-            new Vector2(0.16f, 0.37f), new Vector2(0.17f, 0.09f),
+            new Vector2(-0.75f, 0.37f), new Vector2(0.20f, 0.09f),
             new Vector3(0.45f, 0.78f, 1.0f), isToggle: false,
             _ => GameState.SetState(State.Settings));
 
-        _modFilterBtn = CreateWorldButton(
-            "mod_filter", "MOD FILTER", GetFilterLabel(ModManager.ActiveModFilter),
-            new Vector2(0.50f, 0.37f), new Vector2(0.21f, 0.09f),
-            new Vector3(1.0f, 0.75f, 0.25f), isToggle: true,
-            OnCycleModFilter);
-
         WorldButton exitBtn = CreateWorldButton(
             "exit", "EXIT", "QUIT GAME",
-            new Vector2(0.84f, 0.37f), new Vector2(0.16f, 0.09f),
+            new Vector2(-0.25f, 0.37f), new Vector2(0.18f, 0.09f),
             new Vector3(0.95f, 0.32f, 0.36f), isToggle: false,
             _ => GameState.SetState(State.Exit));
 
-        _queue1v1Btn = CreateWorldButton(
-            "play_1v1", "PLAY 1v1", "QUEUE 1v1",
-            new Vector2(0.21f, 0.505f), new Vector2(0.19f, 0.095f),
-            new Vector3(0.28f, 0.78f, 1.0f), isToggle: true,
-            _ => ToggleQueueMode(LobbyQueueMode.Queue1v1));
+        WorldButton local1v1Btn = CreateWorldButton(
+            "local_1v1", "LOCAL 1v1", "VERSUS SELECT",
+            new Vector2(-0.79f, 0.505f), new Vector2(0.20f, 0.095f),
+            new Vector3(1.0f, 0.62f, 0.28f), isToggle: false,
+            ctx => OnLaunchLocalPvp(ctx, is2v2: false));
 
-        _queue2v2Btn = CreateWorldButton(
-            "play_2v2", "PLAY 2v2", "QUEUE 2v2",
-            new Vector2(0.50f, 0.505f), new Vector2(0.19f, 0.095f),
-            new Vector3(0.68f, 0.45f, 1.0f), isToggle: true,
-            _ => ToggleQueueMode(LobbyQueueMode.Queue2v2));
+        WorldButton local2v2Btn = CreateWorldButton(
+            "local_2v2", "LOCAL 2v2", "TAG VERSUS",
+            new Vector2(-0.50f, 0.505f), new Vector2(0.20f, 0.095f),
+            new Vector3(0.95f, 0.48f, 0.72f), isToggle: false,
+            ctx => OnLaunchLocalPvp(ctx, is2v2: true));
 
         WorldButton vsAiBtn = CreateWorldButton(
             "vs_ai", "VS AI", "QUICK START",
-            new Vector2(0.79f, 0.505f), new Vector2(0.19f, 0.095f),
+            new Vector2(-0.21f, 0.505f), new Vector2(0.20f, 0.095f),
             new Vector3(0.25f, 0.90f, 0.48f), isToggle: false,
             OnLaunchVsAi);
 
         _worldButtons.AddRange(new[]
         {
-            settingsBtn, _modFilterBtn, exitBtn,
-            _queue1v1Btn, _queue2v2Btn, vsAiBtn
+            settingsBtn, exitBtn,
+            local1v1Btn, local2v2Btn, vsAiBtn
+        });
+    }
+
+    private void BuildOnlineCenterButtons()
+    {
+        _leaderboardsBtn = CreateWorldButton(
+            "leaderboards", "LEADERBOARDS", "RANKINGS",
+            new Vector2(0.50f, 0.37f), new Vector2(0.23f, 0.095f),
+            new Vector3(1.0f, 0.80f, 0.25f), isToggle: true,
+            _ =>
+            {
+                _showLeaderboards = !_showLeaderboards;
+                if (_showLeaderboards)
+                    ShowToast("SEASON 1 LEADERBOARDS");
+            });
+
+        _queue1v1Btn = CreateWorldButton(
+            "play_1v1", "ONLINE 1v1", "QUEUE 1v1",
+            new Vector2(0.22f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector3(0.28f, 0.78f, 1.0f), isToggle: true,
+            _ => ToggleQueueMode(LobbyQueueMode.Queue1v1));
+
+        _queue2v2Btn = CreateWorldButton(
+            "play_2v2", "ONLINE 2v2", "QUEUE 2v2",
+            new Vector2(0.78f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector3(0.68f, 0.45f, 1.0f), isToggle: true,
+            _ => ToggleQueueMode(LobbyQueueMode.Queue2v2));
+
+        _worldButtons.AddRange(new[]
+        {
+            _leaderboardsBtn, _queue1v1Btn, _queue2v2Btn
         });
     }
 
@@ -122,25 +157,23 @@ public class MainMenuScreen : IUIScreen
             "dev_dummy_mode", "DUMMY MODE", "PASSIVE",
             new Vector2(1.77f, 0.37f), new Vector2(0.21f, 0.095f),
             new Vector3(0.38f, 1.0f, 0.30f), isToggle: true,
-            ctx =>
-            {
-                Player? dummy = ctx.Data.Player2;
-                if (dummy == null) return;
-                dummy.IsPassiveDummy = !dummy.IsPassiveDummy;
-                dummy.SetAIDifficulty(AIDifficulty.Hard);
-                string modeName = dummy.IsPassiveDummy ? "PASSIVE" : "FIGHT (HARD)";
-                ShowToast($"SPARRING DUMMY: {modeName}");
-            });
+            ToggleDummyMode);
 
         WorldButton reloadModsBtn = CreateWorldButton(
             "dev_reload_mods", "RELOAD MODS", "HOT REFRESH",
-            new Vector2(1.36f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.23f, 0.505f), new Vector2(0.21f, 0.095f),
             new Vector3(1.0f, 0.72f, 0.12f), isToggle: false,
             OnReloadMods);
 
+        _modFilterBtn = CreateWorldButton(
+            "mod_filter", "MOD FILTER", GetFilterLabel(ModManager.ActiveModFilter),
+            new Vector2(1.50f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector3(1.0f, 0.75f, 0.25f), isToggle: true,
+            OnCycleModFilter);
+
         WorldButton resetWeightsBtn = CreateWorldButton(
             "dev_reset_weights", "RESET AI WEIGHTS", "CLEAR RL MODEL",
-            new Vector2(1.64f, 0.505f), new Vector2(0.21f, 0.095f),
+            new Vector2(1.77f, 0.505f), new Vector2(0.21f, 0.095f),
             new Vector3(1.0f, 0.25f, 0.30f), isToggle: false,
             _ =>
             {
@@ -151,9 +184,141 @@ public class MainMenuScreen : IUIScreen
         _worldButtons.AddRange(new[]
         {
             _debugHitboxBtn, aiTrainBtn, _dummyModeBtn,
-            reloadModsBtn, resetWeightsBtn
+            reloadModsBtn, _modFilterBtn, resetWeightsBtn
         });
     }
+
+    private void BuildTrainingLabButtons()
+    {
+        _labDummyBtn = CreateWorldButton(
+            "lab_dummy", "DUMMY", "PASSIVE",
+            new Vector2(0.11f, 1.32f), new Vector2(0.175f, 0.082f),
+            new Vector3(0.38f, 1.0f, 0.30f), isToggle: true,
+            ToggleDummyMode,
+            allowCombatTrigger: false);
+
+        _labBlockBtn = CreateWorldButton(
+            "lab_block", "BLOCK", "OFF",
+            new Vector2(0.305f, 1.32f), new Vector2(0.175f, 0.082f),
+            new Vector3(0.35f, 0.75f, 1.0f), isToggle: true,
+            ctx =>
+            {
+                Player? dummy = ctx.Data.Player2;
+                if (dummy == null) return;
+                dummy.DummyBlock = dummy.DummyBlock switch
+                {
+                    DummyBlockMode.Off   => DummyBlockMode.Stand,
+                    DummyBlockMode.Stand => DummyBlockMode.Crouch,
+                    _                    => DummyBlockMode.Off
+                };
+                ShowToast($"DUMMY BLOCK: {GetDummyBlockLabel(dummy.DummyBlock)}");
+            },
+            allowCombatTrigger: false);
+
+        _labAutoHealBtn = CreateWorldButton(
+            "lab_autoheal", "AUTO-HEAL", "ON",
+            new Vector2(0.50f, 1.32f), new Vector2(0.175f, 0.082f),
+            new Vector3(0.25f, 0.92f, 0.55f), isToggle: true,
+            ctx =>
+            {
+                Player? dummy = ctx.Data.Player2;
+                if (dummy == null) return;
+                dummy.AutoHealEnabled = !dummy.AutoHealEnabled;
+                if (dummy.AutoHealEnabled && dummy.Health < Player.MAX_HEALTH)
+                {
+                    dummy.Health = Player.MAX_HEALTH;
+                }
+                ShowToast($"AUTO-HEAL: {(dummy.AutoHealEnabled ? "ON" : "OFF")}");
+            },
+            allowCombatTrigger: false);
+
+        WorldButton resetPosBtn = CreateWorldButton(
+            "lab_reset", "RESET POSITIONS", "HP & SPAWN",
+            new Vector2(0.695f, 1.32f), new Vector2(0.175f, 0.082f),
+            new Vector3(1.0f, 0.72f, 0.18f), isToggle: false,
+            OnResetTrainingLabPositions,
+            allowCombatTrigger: false);
+
+        WorldButton returnLobbyBtn = CreateWorldButton(
+            "lab_return", "RETURN TO LOBBY", "CENTER HUB",
+            new Vector2(0.89f, 1.32f), new Vector2(0.175f, 0.082f),
+            new Vector3(0.45f, 0.85f, 1.0f), isToggle: false,
+            OnReturnFromTrainingLab,
+            allowCombatTrigger: false);
+
+        _worldButtons.AddRange(new[]
+        {
+            _labDummyBtn, _labBlockBtn, _labAutoHealBtn,
+            resetPosBtn, returnLobbyBtn
+        });
+    }
+
+    private void ToggleDummyMode(ButtonContext ctx)
+    {
+        Player? dummy = ctx.Data.Player2;
+        if (dummy == null) return;
+        dummy.IsPassiveDummy = !dummy.IsPassiveDummy;
+        dummy.SetAIDifficulty(AIDifficulty.Hard);
+        string modeName = dummy.IsPassiveDummy ? "PASSIVE" : "AI (HARD)";
+        ShowToast($"SPARRING DUMMY: {modeName}");
+    }
+
+    private void OnResetTrainingLabPositions(ButtonContext ctx)
+    {
+        int sw = Raylib.GetScreenWidth();
+        int sh = Raylib.GetScreenHeight();
+        float labGroundY = (1.0f + PhysicsEngine.GROUND_Y_PCT) * sh;
+
+        Player? p1 = ctx.Data.Player1;
+        Player? p2 = ctx.Data.Player2;
+
+        if (p1 != null)
+        {
+            float halfH = (p1.CurrentCharacter?.Height ?? sh * 0.20f) * 0.5f;
+            p1.ResetState(faceRight: true);
+            p1.Position = new Vector2(sw * 0.32f, labGroundY - halfH);
+            p1.PreviousPosition = p1.Position;
+        }
+
+        if (p2 != null)
+        {
+            float halfH = (p2.CurrentCharacter?.Height ?? sh * 0.20f) * 0.5f;
+            p2.ResetState(faceRight: false);
+            p2.Position = new Vector2(sw * 0.68f, labGroundY - halfH);
+            p2.PreviousPosition = p2.Position;
+        }
+
+        ctx.Data.Services?.Projectiles.Clear();
+        VFXManager.Clear();
+        ShowToast("TRAINING POSITIONS RESET");
+    }
+
+    private void OnReturnFromTrainingLab(ButtonContext ctx)
+    {
+        Player? p1 = ctx.Data.Player1;
+        if (p1 == null) return;
+
+        int sw = Raylib.GetScreenWidth();
+        int sh = Raylib.GetScreenHeight();
+        float halfH = (p1.CurrentCharacter?.Height ?? sh * 0.20f) * 0.5f;
+
+        p1.Velocity = Vector2.Zero;
+        p1.PlatformDropTimer = 0f;
+        p1.IsOnPlatform = false;
+        p1.IsGrounded = true;
+        p1.Position = new Vector2(sw * 0.50f, PhysicsEngine.GroundY - halfH);
+        p1.PreviousPosition = p1.Position;
+
+        VFXManager.SpawnPreset(VFXPreset.Shockwave, p1.Position, p1.FacingRight);
+        ShowToast("RETURNED TO CENTER HUB");
+    }
+
+    private static string GetDummyBlockLabel(DummyBlockMode mode) => mode switch
+    {
+        DummyBlockMode.Stand  => "STAND",
+        DummyBlockMode.Crouch => "CROUCH",
+        _                     => "OFF"
+    };
 
     private void BuildHudWidgets()
     {
@@ -190,6 +355,29 @@ public class MainMenuScreen : IUIScreen
             FontSizePct = 0.018f,
             AccentColor = new Vector3(0.95f, 0.35f, 0.35f)
         };
+
+        _leaderboardPanel = new Button(
+            xPct: 0.24f,
+            yPct: 0.28f,
+            widthPct: 0.52f,
+            heightPct: 0.44f,
+            text: "#1  APEX_VOID      — 2,480 ELO  (68W - 11L)\n" +
+                  "#2  AERO_LANCER    — 2,395 ELO  (54W - 14L)\n" +
+                  "#3  CHRONO_MAGE    — 2,310 ELO  (49W - 16L)\n" +
+                  "#4  TIDAL_PRIEST   — 2,240 ELO  (41W - 19L)\n" +
+                  "#5  TITAN_CRUSHER  — 2,185 ELO  (37W - 21L)\n\n" +
+                  "Online matchmaking & seasonal rankings preview."
+        )
+        .WithTitle("SEASON 1 LEADERBOARDS")
+        .WithFontSize(0.018f)
+        .WithAccent(1.0f, 0.80f, 0.25f)
+        .WithScrolling();
+
+        _closeLeaderboardButton = new Button(0.43f, 0.735f, 0.14f, 0.048f, "CLOSE", _ => _showLeaderboards = false)
+        {
+            FontSizePct = 0.018f,
+            AccentColor = new Vector3(1.0f, 0.80f, 0.25f)
+        };
     }
 
     private static WorldButton CreateWorldButton(
@@ -200,7 +388,8 @@ public class MainMenuScreen : IUIScreen
         Vector2 sizePct,
         Vector3 accentColor,
         bool isToggle,
-        Action<ButtonContext> onTrigger)
+        Action<ButtonContext> onTrigger,
+        bool allowCombatTrigger = true)
     {
         var btn = new WorldButton
         {
@@ -211,6 +400,7 @@ public class MainMenuScreen : IUIScreen
             SizePct = sizePct,
             AccentColor = accentColor,
             IsToggle = isToggle,
+            AllowCombatTrigger = allowCombatTrigger,
             OnTrigger = onTrigger
         };
         TryLoadOptionalUiTexture($"world_btn_{id}.png", p => btn.LoadTexture(p));
@@ -272,6 +462,33 @@ public class MainMenuScreen : IUIScreen
             p1CharId: p1Id,
             p2CharId: p2Id,
             startImmediately: true,
+            isTrainingMode: false
+        );
+        ctx.SetP1(services.Player1);
+        ctx.SetP2(services.Player2);
+    }
+
+    private void OnLaunchLocalPvp(ButtonContext ctx, bool is2v2)
+    {
+        EngineServices? services = ctx.Data.Services ?? EngineServices.Current;
+        if (services == null) return;
+
+        string[] pool = GetPlayablePool(services);
+        string p1Id = _roster?.SelectedFighterId ?? services.SelectedLobbyFighterId;
+        if (!Array.Exists(pool, f => string.Equals(f, p1Id, StringComparison.OrdinalIgnoreCase)))
+            p1Id = pool[0];
+
+        if (is2v2)
+        {
+            ShowToast("LOCAL 2v2 — SELECT FIGHTERS");
+        }
+
+        services.StartMatchFromLobby(
+            p1AI: false,
+            p2AI: false,
+            p1CharId: p1Id,
+            p2CharId: null,
+            startImmediately: false,
             isTrainingMode: false
         );
         ctx.SetP1(services.Player1);
@@ -423,6 +640,12 @@ public class MainMenuScreen : IUIScreen
             _queue2v2Btn.SubLabel = _queue2v2Btn.IsSelected ? "IN QUEUE" : "QUEUE 2v2";
         }
 
+        if (_leaderboardsBtn != null)
+        {
+            _leaderboardsBtn.IsSelected = _showLeaderboards;
+            _leaderboardsBtn.SubLabel = _showLeaderboards ? "VIEWING" : "RANKINGS";
+        }
+
         if (_debugHitboxBtn != null)
         {
             _debugHitboxBtn.IsSelected = Character.ShowDebugBoxes;
@@ -433,7 +656,26 @@ public class MainMenuScreen : IUIScreen
         {
             bool fighting = !data.Player2.IsPassiveDummy;
             _dummyModeBtn.IsSelected = fighting;
-            _dummyModeBtn.SubLabel = fighting ? "FIGHT (HARD)" : "PASSIVE";
+            _dummyModeBtn.SubLabel = fighting ? "AI (HARD)" : "PASSIVE";
+        }
+
+        if (_labDummyBtn != null && data.Player2 != null)
+        {
+            bool fighting = !data.Player2.IsPassiveDummy;
+            _labDummyBtn.IsSelected = fighting;
+            _labDummyBtn.SubLabel = fighting ? "AI (HARD)" : "PASSIVE";
+        }
+
+        if (_labBlockBtn != null && data.Player2 != null)
+        {
+            _labBlockBtn.IsSelected = data.Player2.DummyBlock != DummyBlockMode.Off;
+            _labBlockBtn.SubLabel = GetDummyBlockLabel(data.Player2.DummyBlock);
+        }
+
+        if (_labAutoHealBtn != null && data.Player2 != null)
+        {
+            _labAutoHealBtn.IsSelected = data.Player2.AutoHealEnabled;
+            _labAutoHealBtn.SubLabel = data.Player2.AutoHealEnabled ? "ON" : "OFF";
         }
 
         Character? activeChar = data.Player1?.CurrentCharacter;
@@ -479,9 +721,19 @@ public class MainMenuScreen : IUIScreen
             _cancelQueueButton?.Update(context);
         }
 
+        bool pointerInLeaderboards = false;
+        if (_showLeaderboards)
+        {
+            Rectangle lbBounds = UIRenderer.GetPctRect(0.24f, 0.28f, 0.52f, 0.51f);
+            pointerInLeaderboards = Raylib.CheckCollisionPointRec(Raylib.GetMousePosition(), lbBounds);
+            _leaderboardPanel?.Update(context);
+            _closeLeaderboardButton?.Update(context);
+        }
+
         bool hudCapturedPointer = (_roster?.CapturesPointer ?? false) ||
                                   (_descPanel?.CapturesPointer ?? false) ||
-                                  pointerInBanner;
+                                  pointerInBanner ||
+                                  pointerInLeaderboards;
 
         for (int i = 0; i < _worldButtons.Count; i++)
         {
@@ -495,7 +747,10 @@ public class MainMenuScreen : IUIScreen
         int sh = Raylib.GetScreenHeight();
         float groundY = PhysicsEngine.GroundY;
 
+        DrawOfflineRoomDecor(sw, sh, groundY);
+        DrawCenterRoomDecor(sw, sh, groundY);
         DrawDeveloperAlcoveDecor(sw, sh, groundY);
+        DrawTrainingLabDecor(sw, sh);
 
         for (int i = 0; i < _worldButtons.Count; i++)
         {
@@ -511,17 +766,70 @@ public class MainMenuScreen : IUIScreen
         DrawWorldFighterTags(data, sh);
     }
 
+    private static void DrawOfflineRoomDecor(int sw, int sh, float groundY)
+    {
+        Rectangle offlineRect = new Rectangle(-sw, 0f, sw * 0.995f, groundY);
+        Raylib.DrawRectangleRec(offlineRect, new Color(24, 14, 18, 125));
+
+        int titleFont = Math.Max(18, (int)(sh * 0.034f));
+        string header = "// OFFLINE MODES & SYSTEM //";
+        int hw = UIRenderer.MeasureText(header, titleFont);
+        UIRenderer.DrawTextShadowed(header, -sw * 0.50f - hw * 0.5f, sh * 0.255f, titleFont, new Color(255, 175, 95, 255));
+
+        float leftPortalX = 0f;
+        float dividerTop = sh * 0.28f;
+        Raylib.DrawRectangle((int)(leftPortalX - 3f), (int)dividerTop, 6, (int)(groundY - dividerTop), new Color(255, 165, 80, 85));
+
+        int signFont = Math.Max(12, (int)(sh * 0.018f));
+        UIRenderer.DrawTextShadowed("< OFFLINE", leftPortalX + 10f, dividerTop - signFont - 4f, signFont, new Color(255, 185, 110, 220), shadowOffset: 1f);
+
+        string backSign = "ONLINE HUB >";
+        int bsw = UIRenderer.MeasureText(backSign, signFont);
+        UIRenderer.DrawTextShadowed(backSign, leftPortalX - bsw - 10f, dividerTop - signFont - 4f, signFont, new Color(130, 210, 255, 220), shadowOffset: 1f);
+    }
+
+    private static void DrawCenterRoomDecor(int sw, int sh, float groundY)
+    {
+        int titleFont = Math.Max(16, (int)(sh * 0.028f));
+        string header = "// ONLINE HUB & LEADERBOARDS //";
+        int hw = UIRenderer.MeasureText(header, titleFont);
+        UIRenderer.DrawTextShadowed(header, sw * 0.50f - hw * 0.5f, sh * 0.265f, titleFont, new Color(135, 210, 255, 245));
+
+        float hatchLeft = sw * PhysicsEngine.LOBBY_HATCH_LEFT_PCT;
+        float hatchRight = sw * PhysicsEngine.LOBBY_HATCH_RIGHT_PCT;
+        float hatchW = hatchRight - hatchLeft;
+        float hatchTop = groundY;
+        float shaftBottom = sh * 1.02f;
+
+        // Open drop-shaft beneath the one-way hatch platform
+        Raylib.DrawRectangle((int)hatchLeft, (int)hatchTop, (int)hatchW, (int)(shaftBottom - hatchTop), new Color(8, 12, 20, 220));
+        Raylib.DrawRectangleLinesEx(new Rectangle(hatchLeft, hatchTop, hatchW, shaftBottom - hatchTop), 2f, new Color(80, 255, 165, 160));
+
+        int signFont = Math.Max(12, (int)(sh * 0.018f));
+        string hatchLabel = "v TRAINING LAB";
+        int hlw = UIRenderer.MeasureText(hatchLabel, signFont);
+        UIRenderer.DrawTextShadowed(hatchLabel, (hatchLeft + hatchRight - hlw) * 0.5f, groundY - signFont - 12f, signFont, new Color(95, 255, 175, 240), shadowOffset: 1f);
+
+        int subFont = Math.Max(10, (int)(sh * 0.014f));
+        string hatchSub = "CROUCH TO DROP";
+        int hsw = UIRenderer.MeasureText(hatchSub, subFont);
+        UIRenderer.DrawTextShadowed(hatchSub, (hatchLeft + hatchRight - hsw) * 0.5f, groundY + 18f, subFont, new Color(170, 235, 200, 210), shadowOffset: 1f);
+    }
+
     private static void DrawDeveloperAlcoveDecor(int sw, int sh, float groundY)
     {
         float portalX = sw * 1.00f;
         float dividerTop = sh * 0.28f;
 
-        // Passable boundary marker between Main Lobby and Hidden Developer Alcove
+        // Passable boundary marker between Center Hub and Right Developer Alcove
         Raylib.DrawRectangle((int)(portalX - 3f), (int)dividerTop, 6, (int)(groundY - dividerTop), new Color(0, 235, 220, 75));
         int signFont = Math.Max(12, (int)(sh * 0.018f));
-        UIRenderer.DrawText("> DEV", portalX - 44f, dividerTop - signFont - 4f, signFont, new Color(110, 220, 255, 175));
+        string devSign = "DEV >";
+        int dsw = UIRenderer.MeasureText(devSign, signFont);
+        UIRenderer.DrawTextShadowed(devSign, portalX - dsw - 10f, dividerTop - signFont - 4f, signFont, new Color(110, 220, 255, 210), shadowOffset: 1f);
+        UIRenderer.DrawTextShadowed("< ONLINE", portalX + 10f, dividerTop - signFont - 4f, signFont, new Color(135, 210, 255, 210), shadowOffset: 1f);
 
-        // Alcove floor & cyber grid (only visible when player crosses portal into alcove!)
+        // Alcove floor & cyber grid
         Rectangle alcoveRect = new Rectangle(sw * 1.01f, 0f, sw * 0.99f, groundY);
         Raylib.DrawRectangleRec(alcoveRect, new Color(10, 12, 22, 160));
 
@@ -534,12 +842,48 @@ public class MainMenuScreen : IUIScreen
         int devTitleSize = Math.Max(18, (int)(sh * 0.036f));
         string devHeader = "// DEVELOPER SANDBOX ALCOVE //";
         int hw = UIRenderer.MeasureText(devHeader, devTitleSize);
-        UIRenderer.DrawText(devHeader, sw * 1.50f - hw * 0.5f, sh * 0.16f, devTitleSize, new Color(90, 250, 235, 255));
+        UIRenderer.DrawText(devHeader, sw * 1.50f - hw * 0.5f, sh * 0.24f, devTitleSize, new Color(90, 250, 235, 255));
 
-        int hintSize = Math.Max(13, (int)(sh * 0.020f));
-        string devHint = "PUNCH OR CLICK TOOLS   |   <- WALK LEFT TO RETURN TO LOBBY";
+        int hintSize = Math.Max(13, (int)(sh * 0.019f));
+        string devHint = "PUNCH OR CLICK TOOLS   |   <- WALK LEFT TO CENTER HUB";
         int dhw = UIRenderer.MeasureText(devHint, hintSize);
-        UIRenderer.DrawText(devHint, sw * 1.50f - dhw * 0.5f, sh * 0.22f, hintSize, Color.LIGHTGRAY);
+        UIRenderer.DrawText(devHint, sw * 1.50f - dhw * 0.5f, sh * 0.29f, hintSize, Color.LIGHTGRAY);
+    }
+
+    private static void DrawTrainingLabDecor(int sw, int sh)
+    {
+        float labTop = sh * 1.0f;
+        float labGroundY = (1.0f + PhysicsEngine.GROUND_Y_PCT) * sh;
+
+        // Training Lab chamber backdrop and lower floor
+        Raylib.DrawRectangle(0, (int)labTop, sw, sh, new Color(10, 13, 22, 245));
+        Raylib.DrawRectangle(0, (int)labGroundY, sw, (int)(sh * 2.0f - labGroundY), new Color(18, 22, 34, 255));
+
+        // Training measurement grid
+        int stepX = Math.Max(48, (int)(sw * 0.0625f));
+        for (int gx = stepX; gx < sw; gx += stepX)
+        {
+            Raylib.DrawLine(gx, (int)(labTop + sh * 0.06f), gx, (int)labGroundY, new Color(65, 110, 155, 32));
+        }
+        int stepY = Math.Max(42, (int)(sh * 0.09f));
+        for (int gy = (int)(labTop + sh * 0.12f); gy < (int)labGroundY; gy += stepY)
+        {
+            Raylib.DrawLine(0, gy, sw, gy, new Color(65, 110, 155, 24));
+        }
+
+        // Crisp glowing Training Lab floor edge
+        Raylib.DrawLineEx(new Vector2(0f, labGroundY), new Vector2(sw, labGroundY), 3f, new Color(95, 255, 175, 210));
+
+        // Hatch ceiling opening indicator
+        float hatchLeft = sw * PhysicsEngine.LOBBY_HATCH_LEFT_PCT;
+        float hatchRight = sw * PhysicsEngine.LOBBY_HATCH_RIGHT_PCT;
+        Raylib.DrawRectangle((int)hatchLeft, (int)labTop, (int)(hatchRight - hatchLeft), (int)(sh * 0.03f), new Color(22, 48, 42, 180));
+        Raylib.DrawRectangleLinesEx(new Rectangle(hatchLeft, labTop, hatchRight - hatchLeft, sh * 0.03f), 2f, new Color(95, 255, 175, 180));
+
+        int titleFont = Math.Max(16, (int)(sh * 0.025f));
+        string header = "// TRAINING LAB — MOUSE-CLICK DUMMY CONTROLS //";
+        int hw = UIRenderer.MeasureText(header, titleFont);
+        UIRenderer.DrawTextShadowed(header, sw * 0.50f - hw * 0.5f, labTop + sh * 0.24f, titleFont, new Color(110, 255, 190, 245));
     }
 
     private static void DrawWorldFighterTags(GameData data, int sh)
@@ -573,6 +917,12 @@ public class MainMenuScreen : IUIScreen
         if (_queueMode != LobbyQueueMode.None)
             DrawQueueBanner();
 
+        if (_showLeaderboards)
+        {
+            _leaderboardPanel?.Draw();
+            _closeLeaderboardButton?.Draw();
+        }
+
         DrawBottomLobbyBar(data);
     }
 
@@ -601,7 +951,7 @@ public class MainMenuScreen : IUIScreen
         int sh = Raylib.GetScreenHeight();
         float groundY = PhysicsEngine.GroundY;
 
-        if (data.Player2 != null)
+        if (data.Player2 != null && CameraManager.CurrentLobbyRoom == LobbyRoom.BottomTraining)
         {
             Rectangle hpRect = UIRenderer.GetPctRect(0.02f, 0.885f, 0.24f, 0.032f);
             float hpPct = data.Player2.Health / (float)Player.MAX_HEALTH;
@@ -628,9 +978,13 @@ public class MainMenuScreen : IUIScreen
         }
 
         int hintFont = Math.Max(12, (int)(sh * 0.018f));
-        string hint = CameraManager.IsInLobbyAlcove
-            ? "DEV ALCOVE: JUMP PLATFORMS TO HIT TOOLS   |   TAP CROUCH TO DROP   |   WALK LEFT TO EXIT"
-            : "JUMP PLATFORMS TO REACH HIGH BUTTONS   |   TAP CROUCH TO DROP   |   WALK RIGHT FOR DEV ROOM";
+        string hint = CameraManager.CurrentLobbyRoom switch
+        {
+            LobbyRoom.LeftOffline    => "OFFLINE MODES: ATTACK OR CLICK   |   WALK RIGHT FOR ONLINE HUB",
+            LobbyRoom.RightDev       => "DEV ALCOVE: JUMP PLATFORMS TO HIT TOOLS   |   WALK LEFT FOR ONLINE HUB",
+            LobbyRoom.BottomTraining => "TRAINING LAB: CLICK TOP WALL TO CONFIGURE DUMMY   |   ATTACK TO TEST",
+            _                        => "WALK LEFT: OFFLINE   |   WALK RIGHT: DEV   |   CENTER HATCH + CROUCH: TRAINING LAB"
+        };
         int hw = UIRenderer.MeasureText(hint, hintFont);
         UIRenderer.DrawTextShadowed(hint, sw * 0.985f - hw, groundY + (sh - groundY - hintFont) * 0.5f, hintFont, Color.LIGHTGRAY, shadowOffset: 1f);
 
@@ -661,5 +1015,17 @@ public class MainMenuScreen : IUIScreen
 
         _descPanel?.Dispose();
         _descPanel = null;
+
+        _launchQueueButton?.Dispose();
+        _launchQueueButton = null;
+
+        _cancelQueueButton?.Dispose();
+        _cancelQueueButton = null;
+
+        _leaderboardPanel?.Dispose();
+        _leaderboardPanel = null;
+
+        _closeLeaderboardButton?.Dispose();
+        _closeLeaderboardButton = null;
     }
 }
