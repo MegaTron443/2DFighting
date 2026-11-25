@@ -96,6 +96,18 @@ public sealed class LeaderboardEntry
 
 public sealed class MatchTelemetryTracker
 {
+    public sealed class TrackerSnapshot
+    {
+        public FighterMatchStats Fighter0 = new();
+        public FighterMatchStats Fighter1 = new();
+        public bool MultiHit0;
+        public bool MultiHit1;
+        public int LastCombo0;
+        public int LastCombo1;
+        public bool IsMatchActive;
+        public bool HasRecordedCurrentMatch;
+    }
+
     private readonly FighterMatchStats[] _fighters = { new(), new() };
     private readonly bool[] _multiHitRecordedForCombo = new bool[2];
     private readonly int[] _lastComboCount = new int[2];
@@ -104,6 +116,41 @@ public sealed class MatchTelemetryTracker
     public bool HasRecordedCurrentMatch { get; private set; }
     public string Mode { get; private set; } = "1v1_Local";
     public ModFilterMode ModFilter { get; private set; } = ModFilterMode.VanillaAndMods;
+
+    public TrackerSnapshot CaptureSnapshot()
+    {
+        return new TrackerSnapshot
+        {
+            Fighter0 = _fighters[0].Clone(),
+            Fighter1 = _fighters[1].Clone(),
+            MultiHit0 = _multiHitRecordedForCombo[0],
+            MultiHit1 = _multiHitRecordedForCombo[1],
+            LastCombo0 = _lastComboCount[0],
+            LastCombo1 = _lastComboCount[1],
+            IsMatchActive = IsMatchActive,
+            HasRecordedCurrentMatch = HasRecordedCurrentMatch
+        };
+    }
+
+    public void RestoreSnapshot(TrackerSnapshot snapshot)
+    {
+        _fighters[0] = snapshot.Fighter0.Clone();
+        _fighters[1] = snapshot.Fighter1.Clone();
+        _multiHitRecordedForCombo[0] = snapshot.MultiHit0;
+        _multiHitRecordedForCombo[1] = snapshot.MultiHit1;
+        _lastComboCount[0] = snapshot.LastCombo0;
+        _lastComboCount[1] = snapshot.LastCombo1;
+        IsMatchActive = snapshot.IsMatchActive;
+        HasRecordedCurrentMatch = snapshot.HasRecordedCurrentMatch;
+    }
+
+    public void SetSlotIdentity(int slotIndex, ulong steamId, string displayName)
+    {
+        if (slotIndex is not (0 or 1)) return;
+        _fighters[slotIndex].SteamId = steamId;
+        if (!string.IsNullOrWhiteSpace(displayName))
+            _fighters[slotIndex].DisplayName = displayName;
+    }
 
     public void BeginMatch(Player p1, Player p2, string mode, ModFilterMode modFilter, IPlayerIdentityProvider? identity)
     {

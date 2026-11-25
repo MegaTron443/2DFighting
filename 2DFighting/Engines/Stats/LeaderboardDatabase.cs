@@ -172,6 +172,13 @@ public static class LeaderboardDatabase
                 _unsavedEvalMatches = 0;
                 SaveLocked();
             }
+
+            if (!isGaEval)
+            {
+                SteamLeaderboardSync.EnqueueIfLocalPlayer(entry1);
+                if (!ReferenceEquals(entry1, entry2))
+                    SteamLeaderboardSync.EnqueueIfLocalPlayer(entry2);
+            }
         }
     }
 

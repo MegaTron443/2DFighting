@@ -63,5 +63,21 @@ public class LuaFloatStore
     }
 
     [MoonSharpHidden]
+    public void CopyCustomValuesTo(Dictionary<string, float> dest)
+    {
+        dest.Clear();
+        foreach (var kvp in _values)
+            dest[kvp.Key] = kvp.Value;
+    }
+
+    [MoonSharpHidden]
+    public void RestoreCustomValues(Dictionary<string, float> source)
+    {
+        _values.Clear();
+        foreach (var kvp in source)
+            _values[kvp.Key] = kvp.Value;
+    }
+
+    [MoonSharpHidden]
     public int Count => _skillBacking != null ? _skillBacking.Count + _values.Count : _values.Count;
 }

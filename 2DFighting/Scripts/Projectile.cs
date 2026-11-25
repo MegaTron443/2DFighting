@@ -46,6 +46,32 @@ public class Projectile
     public float Width => WidthPct * PhysicsEngine.ViewportWidth;
     public float Height => HeightPct * PhysicsEngine.ViewportHeight;
 
+    public Projectile CloneForSnapshot()
+    {
+        return new Projectile(Owner, Target, Position, Velocity)
+        {
+            PreviousPosition = PreviousPosition,
+            WidthPct = WidthPct,
+            HeightPct = HeightPct,
+            Damage = Damage,
+            HitStun = HitStun,
+            KnockbackPct = KnockbackPct,
+            attackHeight = attackHeight,
+            ElapsedTime = ElapsedTime,
+            Lifetime = Lifetime,
+            DestroyOnHit = DestroyOnHit,
+            IsActive = IsActive,
+            HasHit = HasHit,
+            FacingRight = FacingRight,
+            IsBlockBreak = IsBlockBreak,
+            FillColor = FillColor,
+            BorderColor = BorderColor,
+            RotateToVelocity = RotateToVelocity,
+            Trajectory = Trajectory,
+            OnHit = OnHit
+        };
+    }
+
     public Projectile(Player owner, Player target, Vector2 spawnPos, Vector2 initialVelocity)
     {
         Owner = owner;

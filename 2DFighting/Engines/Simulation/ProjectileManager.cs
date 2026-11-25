@@ -14,6 +14,21 @@ public class ProjectileManager
 
     public void Clear() => ActiveProjectiles.Clear();
 
+    public List<Projectile> CaptureSnapshot()
+    {
+        var copy = new List<Projectile>(ActiveProjectiles.Count);
+        for (int i = 0; i < ActiveProjectiles.Count; i++)
+            copy.Add(ActiveProjectiles[i].CloneForSnapshot());
+        return copy;
+    }
+
+    public void RestoreSnapshot(List<Projectile> snapshot)
+    {
+        ActiveProjectiles.Clear();
+        for (int i = 0; i < snapshot.Count; i++)
+            ActiveProjectiles.Add(snapshot[i].CloneForSnapshot());
+    }
+
     public void Update(float dt, MatchManager matchManager)
     {
         foreach (var proj in ActiveProjectiles)

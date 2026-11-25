@@ -15,6 +15,119 @@ public class KeyHandler
     private bool _latchedCrouch = false;
     private bool _latchedCrouchPressed = false;
     private float _simTime = 0f;
+    private ushort _pendingNetPresses = 0;
+
+    public readonly struct Snapshot
+    {
+        public readonly float LatchedDir;
+        public readonly bool LatchedJumpPressed;
+        public readonly bool LatchedCrouch;
+        public readonly bool LatchedCrouchPressed;
+        public readonly float SimTime;
+        public readonly (float time, int mask)[] BufferedEntries;
+
+        public Snapshot(
+            float latchedDir,
+            bool latchedJumpPressed,
+            bool latchedCrouch,
+            bool latchedCrouchPressed,
+            float simTime,
+            (float time, int mask)[] bufferedEntries)
+        {
+            LatchedDir = latchedDir;
+            LatchedJumpPressed = latchedJumpPressed;
+            LatchedCrouch = latchedCrouch;
+            LatchedCrouchPressed = latchedCrouchPressed;
+            SimTime = simTime;
+            BufferedEntries = bufferedEntries;
+        }
+    }
+
+    public Snapshot CaptureSnapshot(int playerIndex)
+    {
+        (float time, int mask)[] entries = _inputBuffers.TryGetValue(playerIndex, out var buf)
+            ? buf.ToArray()
+            : Array.Empty<(float, int)>();
+        return new Snapshot(_latchedDir, _latchedJumpPressed, _latchedCrouch, _latchedCrouchPressed, _simTime, entries);
+    }
+
+    public void RestoreSnapshot(int playerIndex, in Snapshot snapshot)
+    {
+        _latchedDir = snapshot.LatchedDir;
+        _latchedJumpPressed = snapshot.LatchedJumpPressed;
+        _latchedCrouch = snapshot.LatchedCrouch;
+        _latchedCrouchPressed = snapshot.LatchedCrouchPressed;
+        _simTime = snapshot.SimTime;
+
+        if (!_inputBuffers.TryGetValue(playerIndex, out var buf))
+        {
+            buf = new Queue<(float time, int mask)>();
+            _inputBuffers[playerIndex] = buf;
+        }
+        buf.Clear();
+        for (int i = 0; i < snapshot.BufferedEntries.Length; i++)
+            buf.Enqueue(snapshot.BufferedEntries[i]);
+    }
+
+    public void LatchOnlineHardwareEdges(int bindingsIndex = 0)
+    {
+        PlayerControls controls = bindingsIndex == 0 ? _appConfig.Controls.P1 : _appConfig.Controls.P2;
+        if (Raylib.IsKeyPressed(controls.Jump))      _pendingNetPresses |= (ushort)NetInputBits.Jump;
+        if (Raylib.IsKeyPressed(controls.Crouch))    _pendingNetPresses |= (ushort)NetInputBits.Crouch;
+        if (Raylib.IsKeyPressed(controls.KeyTop))    _pendingNetPresses |= (ushort)NetInputBits.KeyTop;
+        if (Raylib.IsKeyPressed(controls.KeyBottom)) _pendingNetPresses |= (ushort)NetInputBits.KeyBottom;
+        if (Raylib.IsKeyPressed(controls.KeyLeft))   _pendingNetPresses |= (ushort)NetInputBits.KeyLeft;
+        if (Raylib.IsKeyPressed(controls.KeyRight))  _pendingNetPresses |= (ushort)NetInputBits.KeyRight;
+    }
+
+    public ushort SampleHardwareInputBitmask(int bindingsIndex = 0)
+    {
+        PlayerControls controls = bindingsIndex == 0 ? _appConfig.Controls.P1 : _appConfig.Controls.P2;
+        ushort mask = _pendingNetPresses;
+        _pendingNetPresses = 0;
+
+        if (Raylib.IsKeyDown(controls.Left))      mask |= (ushort)NetInputBits.Left;
+        if (Raylib.IsKeyDown(controls.Right))     mask |= (ushort)NetInputBits.Right;
+        if (Raylib.IsKeyDown(controls.Jump))      mask |= (ushort)NetInputBits.Jump;
+        if (Raylib.IsKeyDown(controls.Crouch))    mask |= (ushort)NetInputBits.Crouch;
+        if (Raylib.IsKeyDown(controls.KeyTop))    mask |= (ushort)NetInputBits.KeyTop;
+        if (Raylib.IsKeyDown(controls.KeyBottom)) mask |= (ushort)NetInputBits.KeyBottom;
+        if (Raylib.IsKeyDown(controls.KeyLeft))   mask |= (ushort)NetInputBits.KeyLeft;
+        if (Raylib.IsKeyDown(controls.KeyRight))  mask |= (ushort)NetInputBits.KeyRight;
+
+        return mask;
+    }
+
+    public void ApplyNetworkInputBitmask(ushort bitmask, ushort prevBitmask, int playerIndex)
+    {
+        NetInputBits curr = (NetInputBits)bitmask;
+        NetInputBits prev = (NetInputBits)prevBitmask;
+        NetInputBits rising = curr & ~prev;
+
+        float dir = 0f;
+        if ((curr & NetInputBits.Left) != 0) dir -= 1f;
+        if ((curr & NetInputBits.Right) != 0) dir += 1f;
+        _latchedDir = dir;
+
+        if ((rising & NetInputBits.Jump) != 0)
+            _latchedJumpPressed = true;
+
+        _latchedCrouch = (curr & NetInputBits.Crouch) != 0;
+        if ((rising & NetInputBits.Crouch) != 0)
+            _latchedCrouchPressed = true;
+
+        int pressedMask = 0;
+        if ((rising & NetInputBits.KeyTop) != 0)    pressedMask |= 1 << 0;
+        if ((rising & NetInputBits.KeyBottom) != 0) pressedMask |= 1 << 1;
+        if ((rising & NetInputBits.KeyLeft) != 0)   pressedMask |= 1 << 2;
+        if ((rising & NetInputBits.KeyRight) != 0)  pressedMask |= 1 << 3;
+
+        if (!_inputBuffers.ContainsKey(playerIndex))
+            _inputBuffers[playerIndex] = new Queue<(float time, int mask)>();
+
+        if (pressedMask != 0)
+            _inputBuffers[playerIndex].Enqueue((_simTime, pressedMask));
+    }
 
     public KeyHandler(AppConfig appConfig)
     {

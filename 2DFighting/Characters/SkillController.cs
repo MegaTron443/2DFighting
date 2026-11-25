@@ -13,6 +13,43 @@ public class SkillController
     public int CurrentActionFrame { get; private set; } = 0;
     public bool HasHit { get; set; } = false;
 
+    public readonly struct ControllerSnapshot
+    {
+        public readonly string? ActiveSkillName;
+        public readonly int CurrentActionFrame;
+        public readonly bool HasHit;
+        public readonly float[] SkillCooldowns;
+
+        public ControllerSnapshot(string? activeSkillName, int actionFrame, bool hasHit, float[] cooldowns)
+        {
+            ActiveSkillName = activeSkillName;
+            CurrentActionFrame = actionFrame;
+            HasHit = hasHit;
+            SkillCooldowns = cooldowns;
+        }
+    }
+
+    public ControllerSnapshot CaptureSnapshot()
+    {
+        float[] cooldowns = new float[_skillList.Count];
+        for (int i = 0; i < _skillList.Count; i++)
+            cooldowns[i] = _skillList[i].CurrentCooldown;
+        return new ControllerSnapshot(ActiveSkill?.Name, CurrentActionFrame, HasHit, cooldowns);
+    }
+
+    public void RestoreSnapshot(in ControllerSnapshot snapshot)
+    {
+        ActiveSkill = (!string.IsNullOrEmpty(snapshot.ActiveSkillName) && Skills.TryGetValue(snapshot.ActiveSkillName, out var skill))
+            ? skill
+            : null;
+        CurrentActionFrame = snapshot.CurrentActionFrame;
+        HasHit = snapshot.HasHit;
+
+        int count = Math.Min(_skillList.Count, snapshot.SkillCooldowns.Length);
+        for (int i = 0; i < count; i++)
+            _skillList[i].CurrentCooldown = snapshot.SkillCooldowns[i];
+    }
+
     public SkillController()
     {
         SkillCooldowns.BindSkillBacking(Skills);
