@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
@@ -11,25 +13,45 @@ public static class SteamNetTransport
     private const int ChannelControl = 1;
     private const int MaxMessagesPerPoll = 64;
     private const int ModChunkSizeBytes = 40 * 1024;
+    private const int SendBufferSizeBytes = 1024 * 1024;
 
     private static readonly IntPtr[] _msgPtrs = new IntPtr[MaxMessagesPerPoll];
+    private static readonly HashSet<ulong> _acceptedPeers = new();
     private static byte[] _rxScratch = new byte[64 * 1024];
     private static readonly byte[] _inputSendBuf = new byte[64];
 
     private static Callback<SteamNetworkingMessagesSessionRequest_t>? _sessionRequestCallback;
     private static Callback<SteamNetworkingMessagesSessionFailed_t>? _sessionFailedCallback;
     private static int _nextTransferId = 1;
+    private static long _lastInputSendErrorLogTimestamp = 0;
+
+    public static bool IsPeerSessionActive(ulong peerSteamId) =>
+        peerSteamId != 0UL && _acceptedPeers.Contains(peerSteamId);
 
     public static void Initialize()
     {
         if (!SteamManager.IsInitialized) return;
 
+        _acceptedPeers.Clear();
+        _lastInputSendErrorLogTimestamp = 0;
+        SetGlobalConfigInt32(ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_SendBufferSize, SendBufferSizeBytes);
         _sessionRequestCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnSessionRequest);
         _sessionFailedCallback = Callback<SteamNetworkingMessagesSessionFailed_t>.Create(OnSessionFailed);
     }
 
     public static void Shutdown()
     {
+        if (SteamManager.IsInitialized && _acceptedPeers.Count > 0)
+        {
+            ulong[] peers = new ulong[_acceptedPeers.Count];
+            _acceptedPeers.CopyTo(peers);
+            for (int i = 0; i < peers.Length; i++)
+            {
+                CloseSessionWithPeer(peers[i]);
+            }
+        }
+
+        _acceptedPeers.Clear();
         _sessionRequestCallback?.Dispose();
         _sessionRequestCallback = null;
         _sessionFailedCallback?.Dispose();
@@ -38,10 +60,24 @@ public static class SteamNetTransport
 
     public static void CloseSessionWithPeer(ulong peerSteamId)
     {
-        if (!SteamManager.IsInitialized || peerSteamId == 0UL) return;
+        if (peerSteamId == 0UL) return;
+
+        _acceptedPeers.Remove(peerSteamId);
+        if (!SteamManager.IsInitialized) return;
 
         var identity = CreateIdentity(peerSteamId);
         SteamNetworkingMessages.CloseSessionWithUser(ref identity);
+    }
+
+    private static unsafe void SetGlobalConfigInt32(ESteamNetworkingConfigValue configValue, int value)
+    {
+        int val = value;
+        SteamNetworkingUtils.SetConfigValue(
+            configValue,
+            ESteamNetworkingConfigScope.k_ESteamNetworkingConfig_Global,
+            IntPtr.Zero,
+            ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32,
+            (IntPtr)(&val));
     }
 
     private static void OnSessionRequest(SteamNetworkingMessagesSessionRequest_t callback)
@@ -49,14 +85,29 @@ public static class SteamNetTransport
         ulong senderId = callback.m_identityRemote.GetSteamID().m_SteamID;
         if (SteamLobbyManager.IsPeerAuthorized(senderId))
         {
-            SteamNetworkingMessages.AcceptSessionWithUser(ref callback.m_identityRemote);
+            bool accepted = SteamNetworkingMessages.AcceptSessionWithUser(ref callback.m_identityRemote);
+            if (accepted)
+            {
+                _acceptedPeers.Add(senderId);
+                Console.WriteLine($"[SteamNetTransport] Accepted P2P session with peer {senderId}.");
+                SteamLobbyManager.OnPeerSessionEstablished(senderId);
+            }
+            else
+            {
+                Console.WriteLine($"[SteamNetTransport] AcceptSessionWithUser returned false for peer {senderId}.");
+            }
         }
     }
 
     private static void OnSessionFailed(SteamNetworkingMessagesSessionFailed_t callback)
     {
         ulong peerId = callback.m_info.m_identityRemote.GetSteamID().m_SteamID;
-        Console.WriteLine($"[SteamNetTransport] Session failed for peer {peerId}: {callback.m_info.m_eEndReason}");
+        string debugInfo = callback.m_info.m_szEndDebug ?? string.Empty;
+        Console.WriteLine($"[SteamNetTransport] Session failed for peer {peerId}: reason={callback.m_info.m_eEndReason} ({debugInfo})");
+
+        SteamNetworkingMessages.CloseSessionWithUser(ref callback.m_info.m_identityRemote);
+        _acceptedPeers.Remove(peerId);
+        SteamLobbyManager.OnPeerSessionFailed(peerId);
     }
 
     public static unsafe void SendInputBundle(
@@ -86,14 +137,26 @@ public static class SteamNetTransport
         }
 
         var identity = CreateIdentity(peerSteamId);
+        EResult result;
         fixed (byte* pData = _inputSendBuf)
         {
-            SteamNetworkingMessages.SendMessageToUser(
+            result = SteamNetworkingMessages.SendMessageToUser(
                 ref identity,
                 (IntPtr)pData,
                 (uint)offset,
-                Constants.k_nSteamNetworkingSend_UnreliableNoNagle,
+                Constants.k_nSteamNetworkingSend_UnreliableNoNagle | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession,
                 ChannelInputs);
+        }
+
+        if (result == EResult.k_EResultNoConnection || result == EResult.k_EResultInvalidState)
+        {
+            long now = Stopwatch.GetTimestamp();
+            if (now - _lastInputSendErrorLogTimestamp >= Stopwatch.Frequency)
+            {
+                _lastInputSendErrorLogTimestamp = now;
+                Console.WriteLine($"[SteamNetTransport] SendInputBundle to {peerSteamId} returned {result}; closing stale session.");
+            }
+            CloseSessionWithPeer(peerSteamId);
         }
     }
 
@@ -236,14 +299,25 @@ public static class SteamNetTransport
         if (!SteamManager.IsInitialized || peerSteamId == 0UL || payload.IsEmpty) return;
 
         var identity = CreateIdentity(peerSteamId);
+        EResult result;
         fixed (byte* pData = payload)
         {
-            SteamNetworkingMessages.SendMessageToUser(
+            result = SteamNetworkingMessages.SendMessageToUser(
                 ref identity,
                 (IntPtr)pData,
                 (uint)payload.Length,
-                Constants.k_nSteamNetworkingSend_Reliable,
+                Constants.k_nSteamNetworkingSend_ReliableNoNagle | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession,
                 ChannelControl);
+        }
+
+        if (result == EResult.k_EResultNoConnection || result == EResult.k_EResultInvalidState)
+        {
+            Console.WriteLine($"[SteamNetTransport] SendReliable to {peerSteamId} returned {result}; closing stale session.");
+            CloseSessionWithPeer(peerSteamId);
+        }
+        else if (result != EResult.k_EResultOK)
+        {
+            Console.WriteLine($"[SteamNetTransport] SendReliable to {peerSteamId} failed: {result}");
         }
     }
 
@@ -270,6 +344,14 @@ public static class SteamNetTransport
                 int size = msg.m_cbSize;
                 if (size > 0 && msg.m_pData != IntPtr.Zero)
                 {
+                    if (senderId != 0UL && SteamLobbyManager.IsPeerAuthorized(senderId))
+                    {
+                        if (_acceptedPeers.Add(senderId))
+                        {
+                            SteamLobbyManager.OnPeerSessionEstablished(senderId);
+                        }
+                    }
+
                     if (size > _rxScratch.Length)
                         _rxScratch = new byte[Math.Max(size, _rxScratch.Length * 2)];
 

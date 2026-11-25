@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -65,6 +66,7 @@ public static class SteamLobbyManager
     private static IncomingModTransfer? _activeModTransfer;
     private static float _modRequestCooldown = 0f;
     private static int _modRequestAttempts = 0;
+    private static float _hostSessionPingCooldown = 0f;
 
     public static LobbySearchState State { get; private set; } = LobbySearchState.Idle;
     public static ModHandshakeState HandshakeState { get; private set; } = ModHandshakeState.Pending;
@@ -175,12 +177,13 @@ public static class SteamLobbyManager
 
     public static void LeaveLobby()
     {
+        if (PeerSteamId != 0UL)
+        {
+            SteamNetTransport.CloseSessionWithPeer(PeerSteamId);
+        }
+
         if (SteamManager.IsInitialized && _currentLobby.IsValid())
         {
-            if (PeerSteamId != 0UL)
-            {
-                SteamNetTransport.CloseSessionWithPeer(PeerSteamId);
-            }
             SteamMatchmaking.LeaveLobby(_currentLobby);
         }
 
@@ -194,10 +197,18 @@ public static class SteamLobbyManager
         LocalBaseScriptHash = "";
         LocalReady = false;
         ResetPeerHandshakeState();
+        _hostSessionPingCooldown = 0f;
         PendingStart = null;
         ShouldEnterCharacterSelect = false;
         State = LobbySearchState.Idle;
         StatusText = "";
+    }
+
+    private static bool CanSendP2PToPeer()
+    {
+        return IsInMatchLobby &&
+               PeerSteamId != 0UL &&
+               (IsHost || SteamNetTransport.IsPeerSessionActive(PeerSteamId));
     }
 
     private static void ResetPeerHandshakeState()
@@ -211,6 +222,7 @@ public static class SteamLobbyManager
         _activeModTransfer = null;
         _modRequestCooldown = 0f;
         _modRequestAttempts = 0;
+        _hostSessionPingCooldown = 0f;
         HandshakeState = PeerSteamId != 0UL ? ModHandshakeState.WaitingForPeer : ModHandshakeState.Pending;
     }
 
@@ -229,7 +241,7 @@ public static class SteamLobbyManager
         SteamMatchmaking.SetLobbyMemberData(current, MemberKeyBaseHash, LocalBaseScriptHash);
         SteamMatchmaking.SetLobbyMemberData(current, MemberKeyReady, ready ? "1" : "0");
 
-        if (PeerSteamId != 0UL)
+        if (!string.IsNullOrEmpty(LocalCharId) && CanSendP2PToPeer())
         {
             SteamNetTransport.SendFighterSelection(
                 PeerSteamId,
@@ -243,23 +255,77 @@ public static class SteamLobbyManager
         EvaluateHandshake();
     }
 
+    public static void OnPeerSessionEstablished(ulong peerId)
+    {
+        if (!IsInMatchLobby || peerId != PeerSteamId) return;
+
+        if (!IsHost && !string.IsNullOrEmpty(LocalCharId))
+        {
+            SteamNetTransport.SendFighterSelection(
+                PeerSteamId,
+                LocalCharId,
+                LocalScriptHash,
+                LocalBaseScriptHash,
+                LocalReady,
+                BalanceOverrideStore.IsEnabled);
+        }
+
+        if (HandshakeState == ModHandshakeState.SyncingMod &&
+            !string.IsNullOrEmpty(PeerCharId) &&
+            _modRequestAttempts == 0)
+        {
+            _modRequestAttempts = 1;
+            _modRequestCooldown = 2.0f;
+            SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
+        }
+    }
+
+    public static void OnPeerSessionFailed(ulong peerId)
+    {
+        if (!IsInMatchLobby || peerId != PeerSteamId) return;
+
+        if (IsHost)
+        {
+            _hostSessionPingCooldown = 0.5f;
+        }
+    }
+
     public static void Tick()
     {
-        if (!IsInMatchLobby) return;
+        if (!IsInMatchLobby || PeerSteamId == 0UL) return;
 
-        if (HandshakeState == ModHandshakeState.SyncingMod && _modRequestCooldown > 0f)
+        if (IsHost && State == LobbySearchState.MatchedInLobby)
         {
-            _modRequestCooldown = MathF.Max(0f, _modRequestCooldown - 0.016f);
-            if (_modRequestCooldown <= 0f && _modRequestAttempts < 3 && PeerSteamId != 0UL)
+            _hostSessionPingCooldown = MathF.Max(0f, _hostSessionPingCooldown - 0.016f);
+            if (_hostSessionPingCooldown <= 0f)
             {
-                _modRequestAttempts++;
+                SteamNetTransport.SendPing(PeerSteamId, Stopwatch.GetTimestamp());
+                _hostSessionPingCooldown = SteamNetTransport.IsPeerSessionActive(PeerSteamId) ? 2.5f : 1.5f;
+            }
+        }
+
+        if (HandshakeState == ModHandshakeState.SyncingMod && CanSendP2PToPeer())
+        {
+            if (_modRequestAttempts == 0)
+            {
+                _modRequestAttempts = 1;
                 _modRequestCooldown = 2.0f;
                 SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
             }
-            else if (_modRequestCooldown <= 0f && _modRequestAttempts >= 3)
+            else if (_modRequestCooldown > 0f)
             {
-                HandshakeState = ModHandshakeState.MismatchBlocked;
-                StatusText = $"MOD TRANSFER FAILED ({PeerCharId.ToUpperInvariant()})";
+                _modRequestCooldown = MathF.Max(0f, _modRequestCooldown - 0.016f);
+                if (_modRequestCooldown <= 0f && _modRequestAttempts < 3)
+                {
+                    _modRequestAttempts++;
+                    _modRequestCooldown = 2.0f;
+                    SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
+                }
+                else if (_modRequestCooldown <= 0f && _modRequestAttempts >= 3)
+                {
+                    HandshakeState = ModHandshakeState.MismatchBlocked;
+                    StatusText = $"MOD TRANSFER FAILED ({PeerCharId.ToUpperInvariant()})";
+                }
             }
         }
     }
@@ -377,7 +443,15 @@ public static class SteamLobbyManager
             StatusText = $"MATCHED WITH {PeerPersonaName.ToUpperInvariant()}";
             ShouldEnterCharacterSelect = true;
             PullPeerMemberData();
-            SetLocalSelection(LocalCharId, LocalScriptHash, LocalBaseScriptHash, LocalReady);
+            if (!string.IsNullOrEmpty(LocalCharId))
+            {
+                SetLocalSelection(LocalCharId, LocalScriptHash, LocalBaseScriptHash, LocalReady);
+            }
+            else if (IsHost)
+            {
+                SteamNetTransport.SendPing(PeerSteamId, Stopwatch.GetTimestamp());
+                _hostSessionPingCooldown = 1.5f;
+            }
         }
         else
         {
@@ -412,8 +486,18 @@ public static class SteamLobbyManager
                 StatusText = $"OPPONENT JOINED: {PeerPersonaName.ToUpperInvariant()}";
                 ShouldEnterCharacterSelect = true;
                 if (IsHost)
+                {
                     SteamMatchmaking.SetLobbyData(_currentLobby, LobbyKeyState, "selecting");
-                SetLocalSelection(LocalCharId, LocalScriptHash, LocalBaseScriptHash, LocalReady);
+                    if (!string.IsNullOrEmpty(LocalCharId))
+                    {
+                        SetLocalSelection(LocalCharId, LocalScriptHash, LocalBaseScriptHash, LocalReady);
+                    }
+                    else
+                    {
+                        SteamNetTransport.SendPing(PeerSteamId, Stopwatch.GetTimestamp());
+                    }
+                    _hostSessionPingCooldown = 1.5f;
+                }
             }
         }
         else if ((change & (EChatMemberStateChange.k_EChatMemberStateChangeLeft |
@@ -494,7 +578,7 @@ public static class SteamLobbyManager
         bool ready,
         bool gaEnabled)
     {
-        if (senderId != PeerSteamId) return;
+        if (senderId != PeerSteamId || string.IsNullOrEmpty(charId)) return;
 
         bool changedFighter = !string.Equals(PeerCharId, charId, StringComparison.OrdinalIgnoreCase) ||
                               !string.Equals(PeerScriptHash, scriptHash, StringComparison.OrdinalIgnoreCase);
@@ -565,9 +649,17 @@ public static class SteamLobbyManager
 
         HandshakeState = ModHandshakeState.SyncingMod;
         StatusText = $"SYNCING MOD: {PeerCharId.ToUpperInvariant()}...";
-        _modRequestAttempts = 1;
-        _modRequestCooldown = 2.0f;
-        SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
+        if (CanSendP2PToPeer())
+        {
+            _modRequestAttempts = 1;
+            _modRequestCooldown = 2.0f;
+            SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
+        }
+        else
+        {
+            _modRequestAttempts = 0;
+            _modRequestCooldown = 0f;
+        }
     }
 
     public static void OnModScriptRequestReceived(ulong senderId, string charId, string expectedHash)

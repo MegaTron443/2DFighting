@@ -56,6 +56,11 @@ public sealed class OnlineMatchSession
 
     public void Begin(ulong peerSteamId, int localSlot, int inputDelayFrames = DefaultInputDelayFrames, bool rollbackEnabled = DefaultRollbackEnabled)
     {
+        if (PeerSteamId != 0UL && PeerSteamId != peerSteamId)
+        {
+            SteamNetTransport.CloseSessionWithPeer(PeerSteamId);
+        }
+
         PeerSteamId = peerSteamId;
         LocalSlot = localSlot;
         InputDelayFrames = Math.Clamp(inputDelayFrames, 0, 6);
@@ -90,9 +95,14 @@ public sealed class OnlineMatchSession
 
     public void Disconnect()
     {
+        ulong prevPeer = PeerSteamId;
         IsActive = false;
         IsStalledWaitingForPeer = false;
         PeerSteamId = 0UL;
+        if (prevPeer != 0UL)
+        {
+            SteamNetTransport.CloseSessionWithPeer(prevPeer);
+        }
     }
 
     public void PollNonMatchTraffic(EngineServices services)

@@ -122,6 +122,8 @@ public class EngineServices
         if (GameState.CurrentState == State.MainMenu)
         {
             OnlineSession.Disconnect();
+            if (SteamLobbyManager.State == LobbySearchState.Playing)
+                SteamLobbyManager.LeaveLobby();
             if (!IsLobbySession && (Player1 != null || Player2 != null || Sound != null))
             {
                 DisposeMatchSession();
