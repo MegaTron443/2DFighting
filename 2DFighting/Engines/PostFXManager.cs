@@ -343,7 +343,7 @@ public static class PostFXManager
 
     public static void TriggerScreenShakeFromLua(float xPixels, float yPixels, int durationFrames = 10)
     {
-        if (PhysicsEngine.IsTrainingMode) return;
+        if (PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation) return;
         GetOrCreateDefaultPass();
         float sw = Math.Max(1f, Raylib.GetScreenWidth());
         float sh = Math.Max(1f, Raylib.GetScreenHeight());
@@ -355,7 +355,7 @@ public static class PostFXManager
 
     public static void TriggerImpactFrameFromLua(int frameCount = 5, int mode = 1)
     {
-        if (PhysicsEngine.IsTrainingMode) return;
+        if (PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation) return;
         GetOrCreateDefaultPass();
         _impactFramesRemaining = Math.Max(_impactFramesRemaining, frameCount);
         _impactMode = mode; // 1 = Monochrome Black/White, 2 = Inverted Void
@@ -363,7 +363,7 @@ public static class PostFXManager
 
     public static void TriggerPaletteShiftFromLua(float r, float g, float b, float intensity = 0.85f, int holdFrames = 10, float fadeOutSeconds = 0.45f)
     {
-        if (PhysicsEngine.IsTrainingMode) return;
+        if (PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation) return;
         GetOrCreateDefaultPass();
         if (r > 1f || g > 1f || b > 1f)
             _paletteTint = new Vector3(r / 255f, g / 255f, b / 255f);
@@ -377,7 +377,7 @@ public static class PostFXManager
 
     public static void TriggerGravityPinchFromLua(float pinchAmount = 0.45f, int holdFrames = 8, float fadeOutSeconds = 0.35f, float centerX = 0.5f, float centerY = 0.5f)
     {
-        if (PhysicsEngine.IsTrainingMode) return;
+        if (PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation) return;
         GetOrCreateDefaultPass();
         _pinchAmount = Math.Clamp(pinchAmount, -0.8f, 0.85f);
         _pinchHoldFrames = Math.Max(_pinchHoldFrames, holdFrames);

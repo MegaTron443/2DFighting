@@ -49,13 +49,13 @@ public class SoundHandler : IDisposable
 
     public static void TriggerDuckFromLua(float targetGain = 0.05f, int holdFrames = 10, float recoverySeconds = 0.6f)
     {
-        if (Current == null || PhysicsEngine.IsTrainingMode) return;
+        if (Current == null || PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation) return;
         Current.Mixer.TriggerDuck(targetGain, holdFrames, recoverySeconds);
     }
 
     public static void PlayFromLua(Player? player, DynValue soundOrConfig)
     {
-        if (Current == null || PhysicsEngine.IsTrainingMode || soundOrConfig.IsNil())
+        if (Current == null || PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation || soundOrConfig.IsNil())
             return;
 
         string soundName = "";
@@ -181,7 +181,7 @@ public class SoundHandler : IDisposable
 
     private void PlaySoundInternal(Player? player, SoundType soundType, float volume, float pitch)
     {
-        if (PhysicsEngine.IsTrainingMode || volume <= 0f) return;
+        if (PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation || volume <= 0f) return;
 
         if (player?.CurrentCharacter != null)
         {
@@ -228,7 +228,7 @@ public class SoundHandler : IDisposable
 
     private void PlaySkillSoundInternal(Player? player, string skillName, float volume, float pitch)
     {
-        if (PhysicsEngine.IsTrainingMode || volume <= 0f) return;
+        if (PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation || volume <= 0f) return;
 
         string targetName = player?.CurrentCharacter?.Name ?? "Global";
 

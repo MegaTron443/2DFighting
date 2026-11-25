@@ -133,6 +133,28 @@ public class LuaEngine
         {
             skill.SetHitbox(xOffsetPct, yOffsetPct, widthPct, heightPct);
         });
+
+        ScriptRuntime.Globals["__det_random"] = (Func<DynValue, DynValue, double>)((arg1, arg2) =>
+        {
+            if (arg1.IsNil())
+                return PhysicsEngine.NextRandomDouble();
+
+            int first = (int)Math.Floor(arg1.CastToNumber() ?? 1.0);
+            if (arg2.IsNil())
+            {
+                if (first < 1) return 1.0;
+                return PhysicsEngine.NextRandomRange(1, first);
+            }
+
+            int second = (int)Math.Floor(arg2.CastToNumber() ?? first);
+            if (second < first) return first;
+            return PhysicsEngine.NextRandomRange(first, second);
+        });
+
+        ScriptRuntime.Globals["__det_randomseed"] = (Action<double>)(seedVal =>
+        {
+            PhysicsEngine.SeedRng(unchecked((uint)Math.Floor(seedVal)));
+        });
     }
 
     public void Initialize()
@@ -148,6 +170,14 @@ public class LuaEngine
     private void RegisterKeysAndTrajectoriesEnvironment()
     {
         string helperScript = @"
+            if math ~= nil then
+                math.random = function(m, n)
+                    return __det_random(m, n)
+                end
+                math.randomseed = function(seed)
+                    __det_randomseed(seed or 1)
+                end
+            end
             local meta = {}
             meta.__add = function(a, b)
                 local v1 = type(a) == 'table' and a.value or a
@@ -255,6 +285,25 @@ public class LuaEngine
             throw new FileNotFoundException($"Character script '{characterId}.lua' not found.");
 
         return Character.CreateHeadless(resolvedPath, ScriptRuntime);
+    }
+
+    public Character CreateCharacterFromPath(string resolvedPath, int slot = 1, bool applyStoredBalance = false)
+    {
+        if (!File.Exists(resolvedPath))
+            throw new FileNotFoundException($"Character script '{resolvedPath}' not found.");
+
+        string charId = Path.GetFileNameWithoutExtension(resolvedPath).ToLowerInvariant();
+        string cacheKey = $"net_{charId}_{slot}_{resolvedPath}";
+        if (_characterCache.TryGetValue(cacheKey, out Character? cached))
+        {
+            cached.EnsureTexturesLoaded();
+            cached.ResetCombatState();
+            return cached;
+        }
+
+        var character = Character.CreateFromPath(resolvedPath, ScriptRuntime, applyStoredBalance);
+        _characterCache[cacheKey] = character;
+        return character;
     }
 
     public void ClearCharacterCache() => _characterCache.Clear();

@@ -59,8 +59,8 @@ public class Platform : IDisposable
 
     public Rectangle GetPixelBounds()
     {
-        float sw = Raylib.GetScreenWidth();
-        float sh = Raylib.GetScreenHeight();
+        float sw = PhysicsEngine.LogicalWidth;
+        float sh = PhysicsEngine.LogicalHeight;
         return new Rectangle(
             XPct * sw,
             YPct * sh,

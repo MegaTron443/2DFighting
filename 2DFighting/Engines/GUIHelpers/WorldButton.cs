@@ -96,8 +96,8 @@ public class WorldButton : IDisposable
 
     public Rectangle GetWorldBounds()
     {
-        float sw = Raylib.GetScreenWidth();
-        float sh = Raylib.GetScreenHeight();
+        float sw = PhysicsEngine.LogicalWidth;
+        float sh = PhysicsEngine.LogicalHeight;
         float w = SizePct.X * sw;
         float h = SizePct.Y * sh;
         float x = (WorldPositionPct.X * sw) - (w * 0.5f);
@@ -246,8 +246,8 @@ public class WorldButton : IDisposable
             (byte)255
         );
 
-        int sw = Raylib.GetScreenWidth();
-        int sh = Raylib.GetScreenHeight();
+        int sw = PhysicsEngine.LogicalWidth;
+        int sh = PhysicsEngine.LogicalHeight;
         bool hasSub = !string.IsNullOrWhiteSpace(_subLabel);
         if (_textLayoutDirty || sw != _cachedScreenW || sh != _cachedScreenH || SizePct != _cachedSizePct)
         {

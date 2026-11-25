@@ -254,6 +254,12 @@ public class Player : IDisposable
         if (!_isAI) _keyHandler.PollHardwareInput(_playerIndex);
     }
 
+    public void LatchOnlineHardwareEdges(int bindingsIndex = 0) => _keyHandler.LatchOnlineHardwareEdges(bindingsIndex);
+    public ushort SampleHardwareInputBitmask(int bindingsIndex = 0) => _keyHandler.SampleHardwareInputBitmask(bindingsIndex);
+    public void ApplyNetworkInputBitmask(ushort bitmask, ushort prevBitmask) => _keyHandler.ApplyNetworkInputBitmask(bitmask, prevBitmask, _playerIndex);
+    public KeyHandler.Snapshot CaptureKeyHandlerSnapshot() => _keyHandler.CaptureSnapshot(_playerIndex);
+    public void RestoreKeyHandlerSnapshot(in KeyHandler.Snapshot snapshot) => _keyHandler.RestoreSnapshot(_playerIndex, snapshot);
+
     private void ExecuteAirTech(float techDir)
     {
         if (CurrentCharacter == null) return;
@@ -393,7 +399,7 @@ public class Player : IDisposable
         if (TechPopupTimer > 0f)
         {
             Vector2 renderPos = GetInterpolatedPosition(alpha);
-            int fontSize = Math.Max(14, (int)(Raylib.GetScreenHeight() * 0.025f));
+            int fontSize = Math.Max(14, (int)(PhysicsEngine.LogicalHeight * 0.025f));
             string techText = "TECH!";
             int tw = Raylib.MeasureText(techText, fontSize);
             int tx = (int)renderPos.X - (tw / 2);
@@ -406,7 +412,7 @@ public class Player : IDisposable
         {
             Vector2 renderPos = GetInterpolatedPosition(alpha);
             string aiText = $"AI: {_aiController.CurrentMacroTactic}";
-            int fontSize = Math.Max(12, (int)(Raylib.GetScreenHeight() * 0.018f));
+            int fontSize = Math.Max(12, (int)(PhysicsEngine.LogicalHeight * 0.018f));
             int tw = Raylib.MeasureText(aiText, fontSize);
             Raylib.DrawText(aiText, (int)renderPos.X - (tw / 2), (int)(renderPos.Y - (CurrentCharacter.Height * 0.85f)), fontSize, Color.DARKGREEN);
         }

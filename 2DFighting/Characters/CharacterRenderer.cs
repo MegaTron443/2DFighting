@@ -215,7 +215,7 @@ public class CharacterRenderer
         float groundY = PhysicsEngine.GetEffectiveGroundY(new Vector2(hurtbox.CenterX(), hurtbox.CenterY()));
         float feetY = hurtbox.y + hurtbox.height;
         float heightAboveGround = MathF.Max(0f, feetY < groundY ? groundY - feetY : 0f);
-        float maxJumpRef = MathF.Max(1f, Raylib.GetScreenHeight() * 0.45f);
+        float maxJumpRef = MathF.Max(1f, PhysicsEngine.LogicalHeight * 0.45f);
         float scale = 1f - Math.Clamp(heightAboveGround / maxJumpRef, 0f, 0.78f);
 
         int cx = (int)hurtbox.CenterX();

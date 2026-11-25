@@ -92,9 +92,9 @@ public static class VFXManager
         Color? customColor = null,
         float scaleMultiplier = 1.0f)
     {
-        if (PhysicsEngine.IsHeadlessThread || PhysicsEngine.IsTrainingMode) return;
+        if (PhysicsEngine.IsHeadlessThread || PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation) return;
 
-        float sh = Raylib.GetScreenHeight();
+        float sh = PhysicsEngine.LogicalHeight;
         string spriteKey = preset.ToString();
         Texture2D? sheet = TryGetVFXTexture(spriteKey);
 
@@ -141,10 +141,10 @@ public static class VFXManager
     /// </summary>
     public static void SpawnFromLua(Player owner, Table config)
     {
-        if (PhysicsEngine.IsHeadlessThread || PhysicsEngine.IsTrainingMode || owner == null) return;
+        if (PhysicsEngine.IsHeadlessThread || PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation || owner == null) return;
 
-        int sw = Raylib.GetScreenWidth();
-        int sh = Raylib.GetScreenHeight();
+        int sw = PhysicsEngine.LogicalWidth;
+        int sh = PhysicsEngine.LogicalHeight;
         float dir = owner.FacingRight ? 1f : -1f;
 
         bool spawnAtTarget = config.Get("spawn_at_target").CastToBool();
@@ -208,7 +208,7 @@ public static class VFXManager
         if (PhysicsEngine.IsTrainingMode || _activeVfx.Count == 0) return;
 
         ShaderManager.EndShader();
-        float sh = Raylib.GetScreenHeight();
+        float sh = PhysicsEngine.LogicalHeight;
 
         Raylib.BeginBlendMode(BlendMode.BLEND_ADDITIVE);
 

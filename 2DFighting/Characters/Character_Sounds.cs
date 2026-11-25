@@ -195,7 +195,7 @@ public class Character_Sounds : IDisposable
 
         if (Sounds.TryGetValue(type, out var list) && list.Count > 0)
         {
-            sound = list.Count == 1 ? list[0] : list[Random.Shared.Next(list.Count)];
+            sound = list.Count == 1 ? list[0] : list[PhysicsEngine.NextRandomInt(list.Count)];
             return true;
         }
 
@@ -211,7 +211,7 @@ public class Character_Sounds : IDisposable
                 SkillSounds.TryGetValue(skillName, out var skillList) &&
                 skillList.Count > 0)
             {
-                sound = skillList.Count == 1 ? skillList[0] : skillList[Random.Shared.Next(skillList.Count)];
+                sound = skillList.Count == 1 ? skillList[0] : skillList[PhysicsEngine.NextRandomInt(skillList.Count)];
                 return true;
             }
 
@@ -227,7 +227,7 @@ public class Character_Sounds : IDisposable
                         LogSeverity.Info
                     );
                 }
-                sound = defaultList.Count == 1 ? defaultList[0] : defaultList[Random.Shared.Next(defaultList.Count)];
+                sound = defaultList.Count == 1 ? defaultList[0] : defaultList[PhysicsEngine.NextRandomInt(defaultList.Count)];
                 return true;
             }
 

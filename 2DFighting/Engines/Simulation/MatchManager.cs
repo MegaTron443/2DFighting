@@ -10,6 +10,8 @@ public class MatchManager
     public bool IsTrainingMode { get; set; } = false;
     public string CurrentMatchMode { get; set; } = "1v1_Local";
     public MatchTelemetryTracker Telemetry { get; } = new();
+    public DeterministicRng Rng = new(DeterministicRng.DefaultSeed);
+    public uint MatchSeed { get; private set; } = DeterministicRng.DefaultSeed;
     public int CurrentRound { get; private set; } = 1;
     public float RoundTimer { get; set; } = DefaultRoundDuration;
     public float RoundTransitionTimer { get; private set; } = 0f;
@@ -18,6 +20,24 @@ public class MatchManager
     public float HitstopTimer { get; set; } = 0f;
 
     public void AddHitstop(float seconds) => HitstopTimer = MathF.Max(HitstopTimer, seconds);
+
+    public void RestoreStateSnapshot(
+        int currentRound,
+        float roundTimer,
+        float roundTransitionTimer,
+        float hitstopTimer,
+        string roundAnnouncement,
+        string matchWinnerText,
+        uint rngState)
+    {
+        CurrentRound = currentRound;
+        RoundTimer = roundTimer;
+        RoundTransitionTimer = roundTransitionTimer;
+        HitstopTimer = hitstopTimer;
+        RoundAnnouncement = roundAnnouncement;
+        MatchWinnerText = matchWinnerText;
+        Rng.RestoreState(rngState);
+    }
 
     public bool TickRoundTransition(GameData data, ProjectileManager projectiles, float dt)
     {
@@ -34,7 +54,7 @@ public class MatchManager
         {
             if (p1.RoundsWon >= RoundsToWin || p2.RoundsWon >= RoundsToWin)
             {
-                if (!Telemetry.HasRecordedCurrentMatch)
+                if (!Telemetry.HasRecordedCurrentMatch && !PhysicsEngine.SuppressPresentation)
                 {
                     LeaderboardDatabase.RecordMatch(Telemetry.FinalizeMatch(p1, p2));
                 }
@@ -42,12 +62,11 @@ public class MatchManager
                 if (IsTrainingMode)
                 {
                     string[] roster = data.Services?.AvailableFighters ?? GUIEngine.RosterIds;
-                    var rng = Random.Shared;
-                    p1.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)], slot: 0));
-                    p2.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[rng.Next(roster.Length)], slot: 1));
+                    p1.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[Rng.NextInt(roster.Length)], slot: 0));
+                    p2.ChangeCharacter(data.LuaEngine.CreateCharacter(roster[Rng.NextInt(roster.Length)], slot: 1));
                     ResetMatch(p1, p2, projectiles);
                 }
-                else
+                else if (!PhysicsEngine.SuppressPresentation)
                 {
                     MatchWinnerText = p1.RoundsWon > p2.RoundsWon
                         ? $"{p1.Name} ({p1.CurrentCharacter!.Name}) WINS!"
@@ -83,8 +102,11 @@ public class MatchManager
         bool p2Dead = !p2.IsAlive;
         bool timeOut = RoundTimer <= 0f;
 
-        if (p1Dead) data.SoundHandler?.PlaySound(p1, SoundType.Death);
-        else if (p2Dead) data.SoundHandler?.PlaySound(p2, SoundType.Death);
+        if (!PhysicsEngine.SuppressPresentation)
+        {
+            if (p1Dead) data.SoundHandler?.PlaySound(p1, SoundType.Death);
+            else if (p2Dead) data.SoundHandler?.PlaySound(p2, SoundType.Death);
+        }
 
         if (!p1Dead && !p2Dead && !timeOut)
             return;
@@ -133,8 +155,13 @@ public class MatchManager
         RoundTransitionTimer = IsTrainingMode ? TrainingTransitionDuration : RoundTransitionDuration;
     }
 
-    public void ResetMatch(Player p1, Player p2, ProjectileManager projectiles, IPlayerIdentityProvider? identity = null)
+    public void ResetMatch(Player p1, Player p2, ProjectileManager projectiles, IPlayerIdentityProvider? identity = null, uint? matchSeed = null)
     {
+        uint seed = matchSeed ?? unchecked((uint)DateTime.UtcNow.Ticks);
+        if (seed == 0u) seed = DeterministicRng.DefaultSeed;
+        MatchSeed = seed;
+        Rng.Seed(seed);
+
         CurrentRound = 1;
         p1.RoundsWon = 0;
         p2.RoundsWon = 0;
@@ -152,7 +179,7 @@ public class MatchManager
         RoundAnnouncement = "";
         p1.ResetState(faceRight: true);
         p2.ResetState(faceRight: false);
-        if (!PhysicsEngine.IsHeadlessThread)
+        if (!PhysicsEngine.IsHeadlessThread && !PhysicsEngine.SuppressPresentation)
         {
             PostFXManager.ResetAll();
             VFXManager.Clear();

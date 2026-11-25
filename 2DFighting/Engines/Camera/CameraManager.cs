@@ -30,27 +30,21 @@ public static class CameraManager
 
     public static void Reset()
     {
-        float sw = Raylib.GetScreenWidth();
-        float sh = Raylib.GetScreenHeight();
+        float sw = PhysicsEngine.LogicalWidth;
+        float sh = PhysicsEngine.LogicalHeight;
 
         _currentTarget = new Vector2(sw * 0.5f, sh * 0.5f);
         _currentZoom = 1f;
         CurrentLobbyRoom = LobbyRoom.Center;
         ClearOverride();
 
-        RawCamera = new Camera2D
-        {
-            offset = new Vector2(sw * 0.5f, sh * 0.5f),
-            target = _currentTarget,
-            rotation = 0f,
-            zoom = 1f
-        };
+        ApplyToRaylibCamera(arenaBounds: null);
     }
 
     public static void UpdateLobby(float dt, Vector2 playerPos, Scene? scene)
     {
-        float sw = Raylib.GetScreenWidth();
-        float sh = Raylib.GetScreenHeight();
+        float sw = PhysicsEngine.LogicalWidth;
+        float sh = PhysicsEngine.LogicalHeight;
 
         if (scene?.HasTrainingLab == true && playerPos.Y > sh)
         {
@@ -128,8 +122,8 @@ public static class CameraManager
 
     private static (Vector2 target, float zoom) ComputeTrackingState(Vector2 p1, Vector2 p2)
     {
-        float sw = Raylib.GetScreenWidth();
-        float sh = Raylib.GetScreenHeight();
+        float sw = PhysicsEngine.LogicalWidth;
+        float sh = PhysicsEngine.LogicalHeight;
 
         float usableW = sw * Math.Clamp(1f - Config.PaddingXPercent, 0.1f, 1f);
         float usableH = sh * Math.Clamp(1f - Config.PaddingYPercent, 0.1f, 1f);
@@ -157,16 +151,20 @@ public static class CameraManager
 
     private static void ApplyToRaylibCamera(Rectangle? arenaBounds)
     {
-        float sw = Raylib.GetScreenWidth();
-        float sh = Raylib.GetScreenHeight();
+        float actualSw = Math.Max(1, Raylib.GetScreenWidth());
+        float actualSh = Math.Max(1, Raylib.GetScreenHeight());
+        float displayScale = MathF.Min(
+            actualSw / (float)PhysicsEngine.LogicalWidth,
+            actualSh / (float)PhysicsEngine.LogicalHeight);
+        float effectiveZoom = _currentZoom * displayScale;
 
         Vector2 clamped = _currentTarget;
 
         if (arenaBounds.HasValue)
         {
             Rectangle b = arenaBounds.Value;
-            float halfW = (sw * 0.5f) / _currentZoom;
-            float halfH = (sh * 0.5f) / _currentZoom;
+            float halfW = (actualSw * 0.5f) / effectiveZoom;
+            float halfH = (actualSh * 0.5f) / effectiveZoom;
 
             clamped.X = b.width <= halfW * 2f
                 ? b.x + b.width * 0.5f
@@ -179,10 +177,10 @@ public static class CameraManager
 
         RawCamera = new Camera2D
         {
-            offset = new Vector2(sw * 0.5f, sh * 0.5f),
+            offset = new Vector2(actualSw * 0.5f, actualSh * 0.5f),
             target = clamped,
             rotation = 0f,
-            zoom = _currentZoom
+            zoom = effectiveZoom
         };
     }
 
@@ -199,12 +197,17 @@ public static class CameraManager
 
     public static void TriggerFocusFromLua(float x, float y, float zoom, float durationSec)
     {
+        if (PhysicsEngine.SuppressPresentation) return;
         _overrideTarget = new Vector2(x, y);
         _overrideZoom = Math.Clamp(zoom, Config.MinZoom, Config.MaxZoom);
         _overrideTimer = durationSec;
     }
 
-    public static void ClearFocusFromLua() => ClearOverride();
+    public static void ClearFocusFromLua()
+    {
+        if (PhysicsEngine.SuppressPresentation) return;
+        ClearOverride();
+    }
 
     public static void SetZoomLimitsFromLua(float minZoom, float maxZoom)
     {

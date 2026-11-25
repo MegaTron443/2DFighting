@@ -113,6 +113,13 @@ public class Character
         return character;
     }
 
+    public static Character CreateFromPath(string luaFilePath, Script script, bool applyStoredBalance)
+    {
+        var character = new Character();
+        CharacterLoader.LoadFromLua(character, luaFilePath, script, skipGpuAssets: false, applyStoredBalance: applyStoredBalance);
+        return character;
+    }
+
     public void SetPartVisible(string partName, bool visible) => Renderer.SetPartVisible(partName, visible);
     public bool IsPartVisible(string partName) => Renderer.IsPartVisible(partName);
     public void SetPartOffset(string partName, float offsetXPct, float offsetYPct, float rotationDeg = 0f) =>

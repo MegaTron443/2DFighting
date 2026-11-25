@@ -21,13 +21,16 @@ public class PhysicsEngine
     private static PhysicsEngine _mainInstance = new(setAsMainInstance: false);
     [ThreadStatic] private static PhysicsEngine? _threadLocalInstance;
     [ThreadStatic] public static bool IsHeadlessThread;
+    [ThreadStatic] public static bool SuppressPresentation;
 
     private static PhysicsEngine ActiveInstance => _threadLocalInstance ?? _mainInstance;
 
-    public const int HeadlessViewportWidth = 1280;
-    public const int HeadlessViewportHeight = 720;
-    public static int ViewportWidth => IsHeadlessThread ? HeadlessViewportWidth : Math.Max(1, Raylib.GetScreenWidth());
-    public static int ViewportHeight => IsHeadlessThread ? HeadlessViewportHeight : Math.Max(1, Raylib.GetScreenHeight());
+    public const int LogicalWidth = 1920;
+    public const int LogicalHeight = 1080;
+    public const int HeadlessViewportWidth = LogicalWidth;
+    public const int HeadlessViewportHeight = LogicalHeight;
+    public static int ViewportWidth => LogicalWidth;
+    public static int ViewportHeight => LogicalHeight;
 
     public MatchManager Match { get; }
     public ProjectileManager Projectiles { get; }
@@ -111,6 +114,12 @@ public class PhysicsEngine
 
     public static void DrawProjectiles(float alpha) => ActiveInstance.Projectiles.Draw(alpha);
 
+    public static uint NextRandomUInt() => ActiveInstance.Match.Rng.NextUInt();
+    public static int NextRandomInt(int maxExclusive) => ActiveInstance.Match.Rng.NextInt(maxExclusive);
+    public static int NextRandomRange(int minInclusive, int maxInclusive) => ActiveInstance.Match.Rng.NextRange(minInclusive, maxInclusive);
+    public static double NextRandomDouble() => ActiveInstance.Match.Rng.NextDouble();
+    public static void SeedRng(uint seed) => ActiveInstance.Match.Rng.Seed(seed);
+
     public void Initialize() { }
 
     public void StepHeadlessTick(Player p1, Player p2, GameData data)
@@ -142,6 +151,69 @@ public class PhysicsEngine
         if (!p2.IsInHitstun) p1.ComboCount = 0;
 
         Match.TickRoundTimer(dt);
+    }
+
+    public void StepDeterministicTick(Player p1, Player p2, GameData data, bool suppressPresentation)
+    {
+        bool prevSuppress = SuppressPresentation;
+        SuppressPresentation = suppressPresentation;
+        try
+        {
+            float dt = Timer.FixedDeltaTime;
+
+            if (Match.TickRoundTransition(data, Projectiles, dt))
+                return;
+
+            if (!suppressPresentation && !Match.IsTrainingMode)
+            {
+                data.SoundHandler?.UpdateTick(dt);
+                PostFXManager.UpdateTick(dt);
+            }
+
+            if (Match.TickHitstop(p1, p2, dt))
+                return;
+
+            p1.ConsumeInput();
+            p2.ConsumeInput();
+
+            p1.SavePreviousState();
+            p2.SavePreviousState();
+
+            p1.Update(dt);
+            p2.Update(dt);
+
+            if (!suppressPresentation)
+            {
+                TryPlaySkillStartSound(data, p1);
+                TryPlaySkillStartSound(data, p2);
+            }
+
+            ClampPlayer(p1, allowExtendedBounds: false);
+            ClampPlayer(p2, allowExtendedBounds: false);
+
+            ResolvePushback(p1, p2);
+
+            UpdateAutoFacing(p1, p2);
+            UpdateAutoFacing(p2, p1);
+
+            Combat.ResolveSimultaneousHits(data, p1, p2);
+
+            Projectiles.Update(dt, Match);
+            if (!suppressPresentation)
+            {
+                VFXManager.Update(dt);
+            }
+
+            if (!p1.IsInHitstun) p2.ComboCount = 0;
+            if (!p2.IsInHitstun) p1.ComboCount = 0;
+
+            Match.TickRoundTimer(dt);
+            Match.CheckRoundEndCondition(data, p1, p2);
+        }
+        finally
+        {
+            SuppressPresentation = prevSuppress;
+        }
     }
 
     public void Update(GameData data)

@@ -22,8 +22,8 @@ public class Scene : IDisposable
     {
         get
         {
-            float sw = Raylib.GetScreenWidth();
-            float sh = Raylib.GetScreenHeight();
+            float sw = PhysicsEngine.LogicalWidth;
+            float sh = PhysicsEngine.LogicalHeight;
             float minZoom = MathF.Max(0.1f, CameraManager.Config.MinZoom);
 
             float extraW = MathF.Max(0f, (sw / minZoom) - sw);
