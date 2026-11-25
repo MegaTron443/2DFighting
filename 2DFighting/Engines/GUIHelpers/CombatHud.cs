@@ -54,6 +54,7 @@ public static class CombatHUD
         DrawComboCounter(data.Player1, xPct: 0.10f, rightAlign: false);
         DrawComboCounter(data.Player2, xPct: 0.90f, rightAlign: true);
         DrawRoundAnnouncement(match);
+        DrawOnlineNetHud(data);
     }
 
     private static float _p1TrailPct = 1.0f;
@@ -237,5 +238,33 @@ public static class CombatHUD
         float drawY = sh * 0.16f;
 
         UIRenderer.DrawTextShadowed(text, drawX, drawY, fontSize, Color.GOLD, shadowOffset: 2f);
+    }
+
+    private static void DrawOnlineNetHud(GameData data)
+    {
+        OnlineMatchSession? net = data.Services?.OnlineSession;
+        if (net == null || !net.IsActive) return;
+
+        int sw = Raylib.GetScreenWidth();
+        int sh = Raylib.GetScreenHeight();
+        int font = Math.Max(11, (int)(sh * 0.017f));
+
+        string statsText = $"PING: {net.PingMs}ms  |  DELAY: {net.InputDelayFrames}f  |  ROLLBACKS: {net.RollbackCount}";
+        Color statsCol = net.DesyncDetected ? Color.RED : (net.IsStalledWaitingForPeer ? Color.YELLOW : new Color(135, 225, 255, 255));
+        int stW = UIRenderer.MeasureText(statsText, font);
+        UIRenderer.DrawTextShadowed(statsText, (sw - stW) * 0.5f, sh * 0.012f, font, statsCol, shadowOffset: 1f);
+
+        if (net.DesyncDetected)
+        {
+            string warn = "NET DESYNC DETECTED!";
+            int ww = UIRenderer.MeasureText(warn, font);
+            UIRenderer.DrawTextShadowed(warn, (sw - ww) * 0.5f, sh * 0.14f, font, Color.RED, shadowOffset: 1.5f);
+        }
+        else if (net.IsStalledWaitingForPeer)
+        {
+            string stall = "WAITING FOR PEER INPUT...";
+            int sw2 = UIRenderer.MeasureText(stall, font);
+            UIRenderer.DrawTextShadowed(stall, (sw - sw2) * 0.5f, sh * 0.14f, font, Color.YELLOW, shadowOffset: 1.5f);
+        }
     }
 }

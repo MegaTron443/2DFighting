@@ -51,6 +51,27 @@ public class CharacterSelectScreen : IUIScreen
                 .WithAccent(0.25f, 0.90f, 0.48f)
                 .Action(ctx =>
                 {
+                    if (SteamLobbyManager.IsInMatchLobby)
+                    {
+                        Player? localPlayer = SteamLobbyManager.LocalSlot == 0 ? ctx.Data.Player1 : ctx.Data.Player2;
+                        Character? localChar = localPlayer?.CurrentCharacter;
+                        if (localChar == null) return;
+
+                        SteamLobbyManager.SetLocalSelection(
+                            localChar.CharacterId,
+                            localChar.ScriptHash,
+                            localChar.BaseScriptHash,
+                            ready: true);
+
+                        if (SteamLobbyManager.HandshakeState == ModHandshakeState.Verified &&
+                            SteamLobbyManager.PeerReady &&
+                            SteamLobbyManager.IsHost)
+                        {
+                            SteamLobbyManager.TryRequestMatchStart();
+                        }
+                        return;
+                    }
+
                     if (ctx.Data.Player1?.CurrentCharacter != null && ctx.Data.Player2?.CurrentCharacter != null)
                     {
                         SceneManager.LoadMatchScene();
@@ -69,7 +90,12 @@ public class CharacterSelectScreen : IUIScreen
                 .WithSize(0.18f, 0.06f)
                 .At(0.14f, 0.84f)
                 .WithAccent(0.60f, 0.65f, 0.80f)
-                .Action(_ => GameState.SetState(State.MainMenu))
+                .Action(_ =>
+                {
+                    if (SteamLobbyManager.IsInMatchLobby)
+                        SteamLobbyManager.LeaveLobby();
+                    GameState.SetState(State.MainMenu);
+                })
         );
     }
 
@@ -79,18 +105,39 @@ public class CharacterSelectScreen : IUIScreen
                          ?? EngineServices.Current?.AvailableFighters
                          ?? GUIEngine.RosterIds;
 
-        _p1Roster?.SetFighters(fighters, (id, ctx) => AssignFighter(ctx, slot: 0, id));
-        _p2Roster?.SetFighters(fighters, (id, ctx) => AssignFighter(ctx, slot: 1, id));
+        bool isOnline = SteamLobbyManager.IsInMatchLobby;
+        if (!isOnline || SteamLobbyManager.LocalSlot == 0)
+            _p1Roster?.SetFighters(fighters, (id, ctx) => AssignFighter(ctx, slot: 0, id));
+        else
+            _p1Roster?.SetFighters(fighters, (_, _) => { });
+
+        if (!isOnline || SteamLobbyManager.LocalSlot == 1)
+            _p2Roster?.SetFighters(fighters, (id, ctx) => AssignFighter(ctx, slot: 1, id));
+        else
+            _p2Roster?.SetFighters(fighters, (_, _) => { });
+
         _knownCatalogVersion = ModManager.CatalogVersion;
     }
 
     private static void AssignFighter(ButtonContext ctx, int slot, string fighterId)
     {
+        if (SteamLobbyManager.IsInMatchLobby && slot != SteamLobbyManager.LocalSlot)
+            return;
+
         Player? target = slot == 0 ? ctx.Data.Player1 : ctx.Data.Player2;
         if (target == null) return;
 
         Character character = ctx.Data.LuaEngine.CreateCharacter(fighterId, slot: slot);
         target.ChangeCharacter(character);
+
+        if (SteamLobbyManager.IsInMatchLobby)
+        {
+            SteamLobbyManager.SetLocalSelection(
+                character.CharacterId,
+                character.ScriptHash,
+                character.BaseScriptHash,
+                ready: false);
+        }
     }
 
     private void SyncDescriptionPanels(GameData data)
@@ -137,11 +184,40 @@ public class CharacterSelectScreen : IUIScreen
         if (_knownCatalogVersion != ModManager.CatalogVersion)
             RefreshRosters();
 
-        _p1Roster?.Update(context);
-        _p2Roster?.Update(context);
+        if (SteamLobbyManager.IsInMatchLobby)
+        {
+            if (SteamLobbyManager.LocalSlot == 0)
+                _p1Roster?.Update(context);
+            else
+                _p2Roster?.Update(context);
+
+            // Auto-launch once host & guest are both ready and mod hash is verified
+            if (SteamLobbyManager.IsHost &&
+                SteamLobbyManager.LocalReady &&
+                SteamLobbyManager.PeerReady &&
+                SteamLobbyManager.HandshakeState == ModHandshakeState.Verified)
+            {
+                SteamLobbyManager.TryRequestMatchStart();
+            }
+        }
+        else
+        {
+            _p1Roster?.Update(context);
+            _p2Roster?.Update(context);
+        }
+
         _p1DescPanel?.Update(context);
         _p2DescPanel?.Update(context);
         SyncDescriptionPanels(context.Data);
+
+        if (_buttons.Count > 0 && SteamLobbyManager.IsInMatchLobby)
+        {
+            _buttons[0].Text = SteamLobbyManager.LocalReady ? "READY (WAITING...)" : "LOCK IN / READY";
+        }
+        else if (_buttons.Count > 0)
+        {
+            _buttons[0].Text = "START MATCH";
+        }
 
         for (int i = 0; i < _buttons.Count; i++)
         {
@@ -156,18 +232,40 @@ public class CharacterSelectScreen : IUIScreen
         int headerSize = Math.Max(16, (int)(sh * 0.04f));
         int infoSize = Math.Max(14, (int)(sh * 0.03f));
 
-        string p1Name = data.Player1?.CurrentCharacter?.Name ?? "None";
-        string p2Name = data.Player2?.CurrentCharacter?.Name ?? "None";
+        string p1Name = SteamLobbyManager.IsInMatchLobby
+            ? (SteamLobbyManager.LocalSlot == 0
+                ? $"{SteamManager.LocalPersonaName}: {data.Player1?.CurrentCharacter?.Name ?? "Selecting"}"
+                : $"{SteamLobbyManager.PeerPersonaName}: {(!string.IsNullOrEmpty(SteamLobbyManager.PeerCharId) ? SteamLobbyManager.PeerCharId.ToUpperInvariant() : "Selecting")}")
+            : (data.Player1?.CurrentCharacter?.Name ?? "None");
 
-        Raylib.DrawText($"P1: {p1Name}", (int)(sw * 0.03f), (int)(sh * 0.07f), infoSize, Color.DARKBLUE);
-        Raylib.DrawText($"P2: {p2Name}", (int)(sw * 0.53f), (int)(sh * 0.07f), infoSize, Color.MAROON);
+        string p2Name = SteamLobbyManager.IsInMatchLobby
+            ? (SteamLobbyManager.LocalSlot == 1
+                ? $"{SteamManager.LocalPersonaName}: {data.Player2?.CurrentCharacter?.Name ?? "Selecting"}"
+                : $"{SteamLobbyManager.PeerPersonaName}: {(!string.IsNullOrEmpty(SteamLobbyManager.PeerCharId) ? SteamLobbyManager.PeerCharId.ToUpperInvariant() : "Selecting")}")
+            : (data.Player2?.CurrentCharacter?.Name ?? "None");
+
+        Raylib.DrawText(SteamLobbyManager.IsInMatchLobby ? $"P1 - {p1Name}" : $"P1: {p1Name}", (int)(sw * 0.03f), (int)(sh * 0.07f), infoSize, Color.DARKBLUE);
+        Raylib.DrawText(SteamLobbyManager.IsInMatchLobby ? $"P2 - {p2Name}" : $"P2: {p2Name}", (int)(sw * 0.53f), (int)(sh * 0.07f), infoSize, Color.MAROON);
 
         _p1Roster?.Draw();
         _p2Roster?.Draw();
         _p1DescPanel?.Draw();
         _p2DescPanel?.Draw();
 
-        if (data.Player1?.CurrentCharacter != null && data.Player2?.CurrentCharacter != null)
+        if (SteamLobbyManager.IsInMatchLobby)
+        {
+            Color badgeCol = SteamLobbyManager.HandshakeState switch
+            {
+                ModHandshakeState.Verified        => Color.DARKGREEN,
+                ModHandshakeState.MismatchBlocked => Color.RED,
+                ModHandshakeState.SyncingMod      => Color.ORANGE,
+                _                                 => Color.DARKBLUE
+            };
+            string statusMsg = $"STEAM HANDSHAKE: {SteamLobbyManager.HandshakeState.ToString().ToUpperInvariant()}  |  {SteamLobbyManager.StatusText}";
+            int swText = Raylib.MeasureText(statusMsg, Math.Max(13, (int)(sh * 0.022f)));
+            Raylib.DrawText(statusMsg, (sw - swText) / 2, (int)(sh * 0.758f), Math.Max(13, (int)(sh * 0.022f)), badgeCol);
+        }
+        else if (data.Player1?.CurrentCharacter != null && data.Player2?.CurrentCharacter != null)
         {
             string readyMsg = "FIGHTERS READY!";
             int w = Raylib.MeasureText(readyMsg, headerSize);

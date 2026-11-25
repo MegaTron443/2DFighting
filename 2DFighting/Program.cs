@@ -20,6 +20,8 @@ GameState.SetState(State.MainMenu);
 while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
+    SteamManager.RunCallbacks();
+    services.OnlineSession.PollNonMatchTraffic(services);
     services.SyncSessionForCurrentState();
 
     GameData data = services.CreateGameData();
@@ -36,27 +38,41 @@ while (GameState.CurrentState != State.Exit && !Raylib.WindowShouldClose())
     HandlePauseInput();
 
     bool isLiveArena = GameState.IsLiveArena && p1 != null && p2 != null;
-    bool isTraining = GameState.CurrentState == State.Playing && services.Match.IsTrainingMode;
+    bool isOnlinePlaying = services.OnlineSession.IsActive && GameState.CurrentState == State.Playing;
+    bool isTraining = !isOnlinePlaying && GameState.CurrentState == State.Playing && services.Match.IsTrainingMode;
 
     if (isLiveArena)
     {
         services.Timer.Update(dt);
-        p1!.PollInput();
-        p2!.PollInput();
 
-        int subSteps = isTraining ? TrainingModeSubSteps : 1;
-        while (services.Timer.CheckFixedTick())
+        if (isOnlinePlaying)
         {
-            for (int step = 0; step < subSteps; step++)
+            services.OnlineSession.SampleHardwareEdgesForRenderFrame(services);
+            while (services.Timer.CheckFixedTick())
             {
-                if (!GameState.IsLiveArena) break;
+                if (!GameState.IsLiveArena || !services.OnlineSession.IsActive) break;
+                services.OnlineSession.StepFixedTick(data);
+            }
+        }
+        else
+        {
+            p1!.PollInput();
+            p2!.PollInput();
 
-                if (services.Match.HitstopTimer <= 0f)
+            int subSteps = isTraining ? TrainingModeSubSteps : 1;
+            while (services.Timer.CheckFixedTick())
+            {
+                for (int step = 0; step < subSteps; step++)
                 {
-                    p1.ConsumeInput();
-                    p2.ConsumeInput();
+                    if (!GameState.IsLiveArena) break;
+
+                    if (services.Match.HitstopTimer <= 0f)
+                    {
+                        p1.ConsumeInput();
+                        p2.ConsumeInput();
+                    }
+                    services.Physics.Update(data);
                 }
-                services.Physics.Update(data);
             }
         }
     }
@@ -116,7 +132,7 @@ void DrawArenaScene(Player p1, Player p2, ProjectileManager projectiles, GameDat
 
     SceneManager.DrawBackground(CameraManager.Target);
 
-    Rectangle b = SceneManager.CurrentScene?.Bounds ?? new Rectangle(0, 0, Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
+    Rectangle b = SceneManager.CurrentScene?.Bounds ?? new Rectangle(0, 0, PhysicsEngine.LogicalWidth, PhysicsEngine.LogicalHeight);
     Raylib.DrawLine((int)b.x, (int)PhysicsEngine.GroundY, (int)(b.x + b.width), (int)PhysicsEngine.GroundY, new Color(120, 130, 175, 90));
 
     GUIEngine.DrawWorld(data);
@@ -140,7 +156,7 @@ void HandlePauseInput()
         Character.ShowDebugBoxes = !Character.ShowDebugBoxes;
     }
 
-    if (Raylib.IsKeyPressed(config.Controls.Pause))
+    if (Raylib.IsKeyPressed(config.Controls.Pause) && !services.OnlineSession.IsActive)
     {
         if (GameState.CurrentState == State.Playing)
             GameState.SetState(State.Paused);

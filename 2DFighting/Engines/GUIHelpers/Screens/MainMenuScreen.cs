@@ -289,8 +289,8 @@ public class MainMenuScreen : IUIScreen
 
     private void OnResetTrainingLabPositions(ButtonContext ctx)
     {
-        int sw = Raylib.GetScreenWidth();
-        int sh = Raylib.GetScreenHeight();
+        int sw = PhysicsEngine.LogicalWidth;
+        int sh = PhysicsEngine.LogicalHeight;
         float labGroundY = (1.0f + PhysicsEngine.GROUND_Y_PCT) * sh;
 
         Player? p1 = ctx.Data.Player1;
@@ -322,8 +322,8 @@ public class MainMenuScreen : IUIScreen
         Player? p1 = ctx.Data.Player1;
         if (p1 == null) return;
 
-        int sw = Raylib.GetScreenWidth();
-        int sh = Raylib.GetScreenHeight();
+        int sw = PhysicsEngine.LogicalWidth;
+        int sh = PhysicsEngine.LogicalHeight;
         float halfH = (p1.CurrentCharacter?.Height ?? sh * 0.20f) * 0.5f;
 
         p1.Velocity = Vector2.Zero;
@@ -442,11 +442,28 @@ public class MainMenuScreen : IUIScreen
 
     private void ToggleQueueMode(LobbyQueueMode requested)
     {
-        _queueMode = (_queueMode == requested) ? LobbyQueueMode.None : requested;
-        if (_queueMode != LobbyQueueMode.None)
+        if (requested == LobbyQueueMode.None || _queueMode == requested)
         {
-            string label = _queueMode == LobbyQueueMode.Queue1v1 ? "1v1" : "2v2";
-            ShowToast($"QUEUED FOR {label} — KEEP SPARRING!");
+            _queueMode = LobbyQueueMode.None;
+            if (SteamManager.IsInitialized && SteamLobbyManager.IsInMatchLobby)
+            {
+                SteamLobbyManager.LeaveLobby();
+            }
+            ShowToast("LEFT MATCHMAKING QUEUE");
+            return;
+        }
+
+        _queueMode = requested;
+        string modeStr = _queueMode == LobbyQueueMode.Queue2v2 ? "2v2" : "1v1";
+
+        if (SteamManager.IsInitialized)
+        {
+            SteamLobbyManager.StartMatchmaking(modeStr, ModManager.ActiveModFilter, BalanceOverrideStore.IsEnabled);
+            ShowToast($"STEAM QUEUE {modeStr.ToUpperInvariant()} — SEARCHING...");
+        }
+        else
+        {
+            ShowToast($"QUEUED FOR {modeStr} (OFFLINE FALLBACK)");
         }
     }
 
@@ -868,8 +885,8 @@ public class MainMenuScreen : IUIScreen
 
     public void DrawWorld(GameData data)
     {
-        int sw = Raylib.GetScreenWidth();
-        int sh = Raylib.GetScreenHeight();
+        int sw = PhysicsEngine.LogicalWidth;
+        int sh = PhysicsEngine.LogicalHeight;
         float groundY = PhysicsEngine.GroundY;
 
         DrawOfflineRoomDecor(sw, sh, groundY);
@@ -1068,11 +1085,12 @@ public class MainMenuScreen : IUIScreen
             !string.IsNullOrEmpty(GeneticBalanceTrainer.StatusMessage))
         {
             int sh = Raylib.GetScreenHeight();
+            float screenGroundY = PhysicsEngine.GROUND_Y_PCT * sh;
             int font = Math.Max(11, (int)(sh * 0.016f));
             string status = GeneticBalanceTrainer.StatusMessage;
             int w = UIRenderer.MeasureText(status, font);
             int bx = (int)(Raylib.GetScreenWidth() * 0.015f);
-            int by = (int)(PhysicsEngine.GroundY - font - 18f);
+            int by = (int)(screenGroundY - font - 18f);
             Raylib.DrawRectangle(bx, by, w + 20, font + 10, new Color(12, 18, 30, 225));
             Raylib.DrawRectangleLines(bx, by, w + 20, font + 10, new Color(55, 255, 165, 225));
             UIRenderer.DrawTextShadowed(status, bx + 10f, by + 5f, font, new Color(55, 255, 165, 255), shadowOffset: 1f);
@@ -1088,9 +1106,17 @@ public class MainMenuScreen : IUIScreen
         Raylib.DrawRectangleRec(banner, new Color(18, 24, 38, 232));
         Raylib.DrawRectangleLinesEx(banner, 2f, bannerBorder);
 
-        string modeText = _queueMode == LobbyQueueMode.Queue1v1
-            ? "QUEUE ACTIVE: 1v1 PvP — KEEP SPARRING!"
-            : "QUEUE ACTIVE: 2v2 MODE — KEEP SPARRING!";
+        string modeText;
+        if (SteamManager.IsInitialized && !string.IsNullOrEmpty(SteamLobbyManager.StatusText))
+        {
+            modeText = SteamLobbyManager.StatusText;
+        }
+        else
+        {
+            modeText = _queueMode == LobbyQueueMode.Queue1v1
+                ? "QUEUE ACTIVE: 1v1 PvP — KEEP SPARRING!"
+                : "QUEUE ACTIVE: 2v2 MODE — KEEP SPARRING!";
+        }
 
         int sh = Raylib.GetScreenHeight();
         int fontSize = UIRenderer.FitFontSize(modeText, Math.Max(13, (int)(sh * 0.020f)), 11, banner.width * 0.54f);
@@ -1104,7 +1130,7 @@ public class MainMenuScreen : IUIScreen
     {
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
-        float groundY = PhysicsEngine.GroundY;
+        float groundY = PhysicsEngine.GROUND_Y_PCT * sh;
 
         if (data.Player2 != null && CameraManager.CurrentLobbyRoom == LobbyRoom.BottomTraining)
         {
