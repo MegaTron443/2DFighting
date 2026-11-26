@@ -84,13 +84,14 @@ public static class CharacterLoader
         character.RawLuaCode = code;
         character.ScriptHash = ModManager.ComputeStringHash(code);
         character.BaseScriptHash = character.ScriptHash;
-        DynValue result = script.DoString(code, env, path);
+        DynValue result = LuaEngine.DoStringSandboxed(script, code, env, path, LuaEngine.MaxLoadInstructions);
 
         Table? t = result.Type == DataType.Table ? result.Table : env.Get("Character").Table;
         if (t == null)
             throw new Exception($"Table 'Character' missing in: {path}");
 
         character.CharacterId = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+        character.WorkshopId = ModManager.GetWorkshopIdForScriptPath(path);
         character.Name = t.Get("name").String ?? "Fighter";
         string? desc = t.Get("description").String;
         character.Description = string.IsNullOrWhiteSpace(desc) ? "No description provided." : desc.Trim();

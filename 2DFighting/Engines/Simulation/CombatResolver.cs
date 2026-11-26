@@ -1,4 +1,5 @@
 using System;
+using MoonSharp.Interpreter;
 using Raylib_cs;
 
 public class CombatResolver
@@ -206,7 +207,14 @@ public class CombatResolver
         {
             if (attackSkill.OnBlockBreak?.Function != null)
             {
-                attackSkill.OnBlockBreak.Function.Call(attacker, defender);
+                try
+                {
+                    LuaEngine.CallSandboxed(attackSkill.OnBlockBreak, LuaEngine.MaxTickInstructions, attacker, defender);
+                }
+                catch (ScriptRuntimeException ex)
+                {
+                    DiagnosticsLogger.LogSilentIssueOnce($"lua_blockbreak_{attacker.CurrentCharacter?.CharacterId}_{attackSkill.Name}", $"OnBlockBreak error: {ex.DecoratedMessage}", LogSeverity.Error);
+                }
             }
             else
             {
@@ -235,7 +243,14 @@ public class CombatResolver
 
         if (counterSkill.OnCounter?.Function != null)
         {
-            counterSkill.OnCounter.Function.Call(defender, attacker);
+            try
+            {
+                LuaEngine.CallSandboxed(counterSkill.OnCounter, LuaEngine.MaxTickInstructions, defender, attacker);
+            }
+            catch (ScriptRuntimeException ex)
+            {
+                DiagnosticsLogger.LogSilentIssueOnce($"lua_counter_{defChar.CharacterId}_{counterSkill.Name}", $"OnCounter error: {ex.DecoratedMessage}", LogSeverity.Error);
+            }
         }
         else
         {
@@ -262,7 +277,14 @@ public class CombatResolver
     {
         if (skill.OnHit?.Function != null)
         {
-            skill.OnHit.Function.Call(attacker, defender, skill);
+            try
+            {
+                LuaEngine.CallSandboxed(skill.OnHit, LuaEngine.MaxTickInstructions, attacker, defender, skill);
+            }
+            catch (ScriptRuntimeException ex)
+            {
+                DiagnosticsLogger.LogSilentIssueOnce($"lua_onhit_{attacker.CurrentCharacter?.CharacterId}_{skill.Name}", $"OnHit error: {ex.DecoratedMessage}", LogSeverity.Error);
+            }
             gamedata.SoundHandler?.PlaySound(defender, SoundType.CustomOnHit);
             return;
         }

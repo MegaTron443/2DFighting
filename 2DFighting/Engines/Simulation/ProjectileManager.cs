@@ -119,11 +119,11 @@ public class ProjectileManager
                     {
                         try
                         {
-                            proj.OnHit.Function.Call(proj.Owner, defender, proj);
+                            LuaEngine.CallSandboxed(proj.OnHit, LuaEngine.MaxTickInstructions, proj.Owner, defender, proj);
                         }
                         catch (ScriptRuntimeException ex)
                         {
-                            Console.WriteLine($"Error executing projectile OnHit function: {ex.DecoratedMessage}");
+                            DiagnosticsLogger.LogSilentIssueOnce($"lua_proj_hit_{proj.Owner.CurrentCharacter?.CharacterId}", $"Projectile OnHit error: {ex.DecoratedMessage}", LogSeverity.Error);
                         }
                     }
                     else

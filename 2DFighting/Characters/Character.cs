@@ -18,6 +18,7 @@ public class Character
     public static bool ShowDebugBoxes { get; set; } = false;
 
     public string CharacterId { get; internal set; } = "";
+    public ulong WorkshopId { get; internal set; } = 0UL;
     public string BaseScriptHash { get; internal set; } = "";
     internal CharacterBalanceGenome? BaseStatsSnapshot { get; set; }
     internal CharacterSemanticsCacheFile? TransientSemanticsCache { get; set; }
@@ -195,7 +196,14 @@ public class Character
 
         if (OnPassive != null && OnPassive.Type == DataType.Function)
         {
-            OnPassive.Function.Call(p, this, dt);
+            try
+            {
+                LuaEngine.CallSandboxed(OnPassive, LuaEngine.MaxTickInstructions, p, this, dt);
+            }
+            catch (ScriptRuntimeException ex)
+            {
+                DiagnosticsLogger.LogSilentIssueOnce($"lua_passive_err_{CharacterId}", $"OnPassive error in '{CharacterId}': {ex.DecoratedMessage}", LogSeverity.Error);
+            }
         }
 
         SkillController.UpdateCooldowns(dt);

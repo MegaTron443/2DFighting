@@ -272,7 +272,8 @@ public class EngineServices
             localChar.CharacterId,
             localChar.ScriptHash,
             localChar.BaseScriptHash,
-            ready: false);
+            ready: false,
+            workshopId: localChar.WorkshopId);
 
         GameState.SetState(State.ChoiceMenu);
     }
@@ -294,7 +295,8 @@ public class EngineServices
         if (!string.IsNullOrEmpty(SteamLobbyManager.PeerCustomScriptPath) &&
             File.Exists(SteamLobbyManager.PeerCustomScriptPath))
         {
-            Character peerChar = Lua.CreateCharacterFromPath(SteamLobbyManager.PeerCustomScriptPath, peerSlot, applyStoredBalance: false);
+            bool applyStored = SteamLobbyManager.PeerCustomBalanceGenome == null && BalanceOverrideStore.IsEnabled;
+            Character peerChar = Lua.CreateCharacterFromPath(SteamLobbyManager.PeerCustomScriptPath, peerSlot, applyStoredBalance: applyStored);
             if (SteamLobbyManager.PeerCustomBalanceGenome != null)
                 CharacterLoader.ApplyGenome(peerChar, SteamLobbyManager.PeerCustomBalanceGenome);
             peerPlayer.ChangeCharacter(peerChar);

@@ -1,5 +1,7 @@
 using System.Numerics;
 using MoonSharp.Interpreter;
+using MoonSharp.Interpreter.Interop;
+using MoonSharp.Interpreter.Loaders;
 
 [Flags]
 public enum ActionButtonMask
@@ -13,6 +15,19 @@ public enum ActionButtonMask
 
 public class LuaEngine
 {
+    public const CoreModules SandboxedCoreModules =
+        CoreModules.Basic |
+        CoreModules.Table |
+        CoreModules.TableIterators |
+        CoreModules.String |
+        CoreModules.Math |
+        CoreModules.Bit32 |
+        CoreModules.Metatables |
+        CoreModules.ErrorHandling;
+
+    public const long MaxLoadInstructions = 500_000;
+    public const long MaxTickInstructions = 50_000;
+
     private static readonly string RootPath = AppDomain.CurrentDomain.BaseDirectory;
     private static readonly object _userDataLock = new();
     private static bool _typesRegistered = false;
@@ -26,6 +41,12 @@ public class LuaEngine
         lock (_userDataLock)
         {
             if (_typesRegistered) return;
+            if (UserData.RegistrationPolicy == null ||
+                ReferenceEquals(UserData.RegistrationPolicy, InteropRegistrationPolicy.Automatic) ||
+                UserData.RegistrationPolicy.GetType().Name.Contains("Automatic", StringComparison.OrdinalIgnoreCase))
+            {
+                UserData.RegistrationPolicy = InteropRegistrationPolicy.Default;
+            }
             UserData.RegisterType<Character>();
             UserData.RegisterType<Player>();
             UserData.RegisterType<SkillData>();
@@ -45,7 +66,10 @@ public class LuaEngine
     {
         EnsureTypesRegistered();
 
-        ScriptRuntime = new Script();
+        ScriptRuntime = new Script(SandboxedCoreModules);
+        ScriptRuntime.Options.ScriptLoader = new DisabledScriptLoader();
+        ScriptRuntime.Options.DebugPrint = _ => { };
+        ScriptRuntime.DebuggerEnabled = false;
 
         ScriptRuntime.Globals["PhysicsEngine"] = UserData.CreateStatic<PhysicsEngine>();
         ScriptRuntime.Globals["NewVec2"] = (Func<float, float, Vector2>)((x, y) => new Vector2(x, y));
@@ -252,7 +276,72 @@ public class LuaEngine
                 end
             }
         ";
-        ScriptRuntime.DoString(helperScript);
+        DoStringSandboxed(ScriptRuntime, helperScript, null, "engine_helpers", MaxLoadInstructions);
+    }
+
+    /// <summary>
+    /// Compiles and executes a Lua chunk under an instruction cap so runaway loops throw ScriptRuntimeException.
+    /// </summary>
+    public static DynValue DoStringSandboxed(
+        Script script,
+        string code,
+        Table? globalContext = null,
+        string? codeFriendlyName = null,
+        long maxInstructions = MaxLoadInstructions)
+    {
+        DynValue chunk = script.LoadString(code, globalContext, codeFriendlyName);
+        return ExecuteWithInstructionLimit(script, chunk, maxInstructions);
+    }
+
+    /// <summary>
+    /// Invokes a Lua function DynValue under a per-call instruction cap.
+    /// </summary>
+    public static DynValue CallSandboxed(
+        DynValue? function,
+        long maxInstructions,
+        params object[] args)
+    {
+        if (function == null || function.Type != DataType.Function || function.Function == null)
+            return DynValue.Nil;
+
+        Script? ownerScript = function.Function.OwnerScript;
+        if (ownerScript == null)
+            return DynValue.Nil;
+
+        return ExecuteWithInstructionLimit(ownerScript, function, maxInstructions, args);
+    }
+
+    public static DynValue ExecuteWithInstructionLimit(
+        Script script,
+        DynValue function,
+        long maxInstructions,
+        params object[] args)
+    {
+        if (function == null || function.Type != DataType.Function)
+            return DynValue.Nil;
+
+        DynValue coVal = script.CreateCoroutine(function);
+        Coroutine co = coVal.Coroutine;
+        co.AutoYieldCounter = maxInstructions;
+
+        DynValue result = args.Length > 0 ? co.Resume(args) : co.Resume();
+        if (co.State == CoroutineState.ForceSuspended || result.Type == DataType.YieldRequest)
+        {
+            throw new ScriptRuntimeException($"Lua instruction limit ({maxInstructions}) exceeded.");
+        }
+        return result;
+    }
+
+    private sealed class DisabledScriptLoader : IScriptLoader
+    {
+        public object LoadFile(string file, Table globalContext) =>
+            throw new ScriptRuntimeException("File loading is disabled in the Lua sandbox.");
+
+        public string ResolveFileName(string filename, Table globalContext) =>
+            throw new ScriptRuntimeException("File path resolution is disabled in the Lua sandbox.");
+
+        public string ResolveModuleName(string modname, Table globalContext) =>
+            throw new ScriptRuntimeException("Module loading is disabled in the Lua sandbox.");
     }
 
     public Character CreateCharacter(string characterId, int slot = 0)

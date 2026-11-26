@@ -166,9 +166,10 @@ public static class SteamNetTransport
         string scriptHash,
         string baseScriptHash,
         bool ready,
-        bool gaEnabled)
+        bool gaEnabled,
+        ulong workshopId = 0UL)
     {
-        using var ms = new MemoryStream(128);
+        using var ms = new MemoryStream(160);
         using var bw = new BinaryWriter(ms, Encoding.UTF8);
         bw.Write((byte)NetMessageType.FighterSelection);
         bw.Write(charId ?? string.Empty);
@@ -176,6 +177,7 @@ public static class SteamNetTransport
         bw.Write(baseScriptHash ?? string.Empty);
         bw.Write(ready);
         bw.Write(gaEnabled);
+        bw.Write(workshopId);
         bw.Flush();
         SendReliable(peerSteamId, ms.GetBuffer().AsSpan(0, (int)ms.Length));
     }
@@ -412,7 +414,8 @@ public static class SteamNetTransport
                 string baseHash = br.ReadString();
                 bool ready = br.ReadBoolean();
                 bool gaEnabled = br.ReadBoolean();
-                SteamLobbyManager.OnRemoteFighterSelection(senderId, charId, scriptHash, baseHash, ready, gaEnabled);
+                ulong workshopId = (ms.Position + 8 <= ms.Length) ? br.ReadUInt64() : 0UL;
+                SteamLobbyManager.OnRemoteFighterSelection(senderId, charId, scriptHash, baseHash, ready, gaEnabled, workshopId);
                 break;
             }
 

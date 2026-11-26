@@ -124,7 +124,16 @@ public class Projectile
         // Custom Lua trajectory callback: function(proj, dt)
         if (Trajectory != null && Trajectory.Type == DataType.Function)
         {
-            Trajectory.Function.Call(this, dt);
+            try
+            {
+                LuaEngine.CallSandboxed(Trajectory, LuaEngine.MaxTickInstructions, this, dt);
+            }
+            catch (ScriptRuntimeException ex)
+            {
+                DiagnosticsLogger.LogSilentIssueOnce($"lua_proj_traj_{Owner?.CurrentCharacter?.CharacterId}", $"Projectile trajectory error: {ex.DecoratedMessage}", LogSeverity.Error);
+                IsActive = false;
+                return;
+            }
         }
 
         Position += Velocity * dt;

@@ -71,6 +71,7 @@ public static class SteamManager
             SteamNetworkingUtils.InitRelayNetworkAccess();
             SteamNetTransport.Initialize();
             SteamLobbyManager.Initialize();
+            SteamWorkshopManager.Initialize();
             SteamLeaderboardSync.Initialize();
             SteamRichPresence.Initialize();
 
@@ -107,6 +108,7 @@ public static class SteamManager
         {
             SteamRichPresence.Clear();
             SteamLobbyManager.Shutdown();
+            SteamWorkshopManager.Shutdown();
             SteamNetTransport.Shutdown();
             SteamLeaderboardSync.Shutdown();
             SteamAPI.Shutdown();

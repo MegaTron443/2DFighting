@@ -61,7 +61,8 @@ public class CharacterSelectScreen : IUIScreen
                             localChar.CharacterId,
                             localChar.ScriptHash,
                             localChar.BaseScriptHash,
-                            ready: true);
+                            ready: true,
+                            workshopId: localChar.WorkshopId);
 
                         if (SteamLobbyManager.HandshakeState == ModHandshakeState.Verified &&
                             SteamLobbyManager.PeerReady &&
@@ -136,7 +137,8 @@ public class CharacterSelectScreen : IUIScreen
                 character.CharacterId,
                 character.ScriptHash,
                 character.BaseScriptHash,
-                ready: false);
+                ready: false,
+                workshopId: character.WorkshopId);
         }
     }
 
@@ -261,9 +263,18 @@ public class CharacterSelectScreen : IUIScreen
                 ModHandshakeState.SyncingMod      => Color.ORANGE,
                 _                                 => Color.DARKBLUE
             };
-            string statusMsg = $"STEAM HANDSHAKE: {SteamLobbyManager.HandshakeState.ToString().ToUpperInvariant()}  |  {SteamLobbyManager.StatusText}";
-            int swText = Raylib.MeasureText(statusMsg, Math.Max(13, (int)(sh * 0.022f)));
-            Raylib.DrawText(statusMsg, (sw - swText) / 2, (int)(sh * 0.758f), Math.Max(13, (int)(sh * 0.022f)), badgeCol);
+
+            string handshakeLabel = SteamLobbyManager.HandshakeState.ToString().ToUpperInvariant();
+            if (SteamLobbyManager.HandshakeState == ModHandshakeState.SyncingMod && SteamLobbyManager.PeerWorkshopId != 0UL)
+            {
+                int pct = (int)Math.Round(SteamWorkshopManager.GetDownloadProgress(SteamLobbyManager.PeerWorkshopId) * 100f);
+                handshakeLabel = $"SYNCING WORKSHOP MOD ({pct}%)";
+            }
+
+            string statusMsg = $"STEAM HANDSHAKE: {handshakeLabel}  |  {SteamLobbyManager.StatusText}";
+            int fontPx = Math.Max(13, (int)(sh * 0.022f));
+            int swText = Raylib.MeasureText(statusMsg, fontPx);
+            Raylib.DrawText(statusMsg, (sw - swText) / 2, (int)(sh * 0.758f), fontPx, badgeCol);
         }
         else if (data.Player1?.CurrentCharacter != null && data.Player2?.CurrentCharacter != null)
         {

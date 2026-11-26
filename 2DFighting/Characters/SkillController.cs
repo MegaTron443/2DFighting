@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MoonSharp.Interpreter;
 
 public class SkillController
 {
@@ -142,7 +143,14 @@ public class SkillController
 
         if (ActiveSkill.CustomLogic && ActiveSkill.OnCustomLogic?.Function != null)
         {
-            ActiveSkill.OnCustomLogic.Function.Call(p, owner, dt);
+            try
+            {
+                LuaEngine.CallSandboxed(ActiveSkill.OnCustomLogic, LuaEngine.MaxTickInstructions, p, owner, dt);
+            }
+            catch (ScriptRuntimeException ex)
+            {
+                DiagnosticsLogger.LogSilentIssueOnce($"lua_custom_err_{owner.CharacterId}_{ActiveSkill.Name}", $"CustomLogic error in '{owner.CharacterId}/{ActiveSkill.Name}': {ex.DecoratedMessage}", LogSeverity.Error);
+            }
         }
 
         CurrentActionFrame++;

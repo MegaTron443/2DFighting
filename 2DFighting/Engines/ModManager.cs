@@ -17,10 +17,14 @@ public static class ModManager
     public static string ExtractedModsCacheDir => Path.Combine(CacheDir, "Mods");
 
     private static readonly List<string> _contentRoots = new();
+    private static readonly Dictionary<string, ulong> _rootWorkshopIds = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<ulong, string> _workshopRoots = new();
 
     private static readonly Dictionary<string, string> _characterScripts = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, string> _vanillaCharacterScripts = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, string> _modCharacterScripts = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ulong> _characterWorkshopIds = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<ulong, List<string>> _workshopCharacters = new();
 
     private static readonly Dictionary<ModFilterMode, string[]> _filteredFightersCache = new();
     private static int _filteredCacheVersion = -1;
@@ -52,9 +56,13 @@ public static class ModManager
         Directory.CreateDirectory(ExtractedModsCacheDir);
 
         _contentRoots.Clear();
+        _rootWorkshopIds.Clear();
+        _workshopRoots.Clear();
         _characterScripts.Clear();
         _vanillaCharacterScripts.Clear();
         _modCharacterScripts.Clear();
+        _characterWorkshopIds.Clear();
+        _workshopCharacters.Clear();
 
         foreach (string zipPath in Directory.GetFiles(ModsDir, "*.zip", SearchOption.TopDirectoryOnly))
         {
@@ -80,6 +88,11 @@ public static class ModManager
         _contentRoots.Add(BaseDir);
 
         DiscoverCharacters();
+
+        if (SteamManager.IsInitialized)
+        {
+            SteamWorkshopManager.RefreshSubscribedItems();
+        }
     }
 
     private static void SyncZipMod(string zipPath)
@@ -152,10 +165,18 @@ public static class ModManager
 
     private static void DiscoverCharacters()
     {
+        _characterScripts.Clear();
+        _vanillaCharacterScripts.Clear();
+        _modCharacterScripts.Clear();
+        _characterWorkshopIds.Clear();
+        _workshopCharacters.Clear();
+
         for (int i = _contentRoots.Count - 1; i >= 0; i--)
         {
             string root = _contentRoots[i];
             bool isVanillaRoot = root.Equals(BaseDir, StringComparison.OrdinalIgnoreCase);
+            ulong workshopId = (!isVanillaRoot && _rootWorkshopIds.TryGetValue(root, out ulong wid)) ? wid : 0UL;
+
             string[] scriptFolders =
             {
                 Path.Combine(root, "Scripts", "characters"),
@@ -173,9 +194,26 @@ public static class ModManager
                     string id = Path.GetFileNameWithoutExtension(luaFile).ToLowerInvariant();
                     _characterScripts[id] = luaFile;
                     if (isVanillaRoot)
+                    {
                         _vanillaCharacterScripts[id] = luaFile;
+                        _characterWorkshopIds[id] = 0UL;
+                    }
                     else
+                    {
                         _modCharacterScripts[id] = luaFile;
+                        _characterWorkshopIds[id] = workshopId;
+                    }
+
+                    if (workshopId != 0UL)
+                    {
+                        if (!_workshopCharacters.TryGetValue(workshopId, out List<string>? charList))
+                        {
+                            charList = new List<string>();
+                            _workshopCharacters[workshopId] = charList;
+                        }
+                        if (!charList.Contains(id, StringComparer.OrdinalIgnoreCase))
+                            charList.Add(id);
+                    }
                 }
             }
         }
@@ -184,6 +222,92 @@ public static class ModManager
             .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         CatalogVersion++;
+    }
+
+    public static bool RegisterWorkshopDirectory(ulong workshopId, string installFolder)
+    {
+        if (workshopId == 0UL || string.IsNullOrWhiteSpace(installFolder) || !Directory.Exists(installFolder))
+            return false;
+
+        string effectiveRoot = ResolveEffectiveModRoot(installFolder);
+        if (_workshopRoots.TryGetValue(workshopId, out string? oldRoot) &&
+            !string.Equals(oldRoot, effectiveRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            _contentRoots.RemoveAll(r => string.Equals(r, oldRoot, StringComparison.OrdinalIgnoreCase));
+            _rootWorkshopIds.Remove(oldRoot);
+        }
+
+        if (!_contentRoots.Contains(effectiveRoot, StringComparer.OrdinalIgnoreCase))
+        {
+            _contentRoots.Insert(0, effectiveRoot);
+        }
+
+        _rootWorkshopIds[effectiveRoot] = workshopId;
+        _workshopRoots[workshopId] = effectiveRoot;
+        DiscoverCharacters();
+        return true;
+    }
+
+    public static ulong GetCharacterWorkshopId(string characterId) =>
+        GetCharacterWorkshopId(characterId, _activeModFilter);
+
+    public static ulong GetCharacterWorkshopId(string characterId, ModFilterMode filter)
+    {
+        if (string.IsNullOrWhiteSpace(characterId) || filter == ModFilterMode.VanillaOnly)
+            return 0UL;
+
+        return _characterWorkshopIds.TryGetValue(characterId, out ulong wid) ? wid : 0UL;
+    }
+
+    public static ulong GetWorkshopIdForScriptPath(string scriptPath)
+    {
+        if (string.IsNullOrWhiteSpace(scriptPath)) return 0UL;
+
+        string fullScript = Path.GetFullPath(scriptPath);
+        foreach (var kvp in _rootWorkshopIds)
+        {
+            string fullRoot = Path.GetFullPath(kvp.Key).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                              + Path.DirectorySeparatorChar;
+            if (fullScript.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+                return kvp.Value;
+        }
+        return 0UL;
+    }
+
+    public static bool TryGetWorkshopRoot(ulong workshopId, out string? rootPath)
+    {
+        return _workshopRoots.TryGetValue(workshopId, out rootPath);
+    }
+
+    public static string? ResolveCharacterScriptForWorkshop(ulong workshopId, string? characterId = null)
+    {
+        if (workshopId == 0UL || !_workshopRoots.TryGetValue(workshopId, out string? root) || string.IsNullOrWhiteSpace(root))
+            return null;
+
+        string[] scriptFolders =
+        {
+            Path.Combine(root, "Scripts", "characters"),
+            Path.Combine(root, "Scripts", "Characters"),
+            Path.Combine(root, "Scripts", "Chars"),
+            Path.Combine(root, "Scripts", "lua")
+        };
+
+        foreach (string folder in scriptFolders)
+        {
+            if (!Directory.Exists(folder)) continue;
+
+            foreach (string luaFile in Directory.GetFiles(folder, "*.lua"))
+            {
+                string id = Path.GetFileNameWithoutExtension(luaFile);
+                if (string.IsNullOrWhiteSpace(characterId) ||
+                    string.Equals(id, characterId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return luaFile;
+                }
+            }
+        }
+
+        return null;
     }
 
     public static string[] GetFilteredFighters(ModFilterMode filter)
@@ -234,35 +358,86 @@ public static class ModManager
         return null;
     }
 
+    private static bool TryNormalizeSafeRelativePath(string[]? relativeSegments, out string normalizedRelPath)
+    {
+        normalizedRelPath = string.Empty;
+        if (relativeSegments == null || relativeSegments.Length == 0)
+            return false;
+
+        for (int i = 0; i < relativeSegments.Length; i++)
+        {
+            string seg = relativeSegments[i];
+            if (string.IsNullOrWhiteSpace(seg))
+                return false;
+
+            if (Path.IsPathRooted(seg) ||
+                Path.IsPathFullyQualified(seg) ||
+                seg.Contains(':') ||
+                seg.StartsWith("\\\\", StringComparison.Ordinal) ||
+                seg.StartsWith("//", StringComparison.Ordinal) ||
+                seg.Contains("..", StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        normalizedRelPath = Path.Combine(relativeSegments);
+        if (string.IsNullOrWhiteSpace(normalizedRelPath) ||
+            Path.IsPathRooted(normalizedRelPath) ||
+            Path.IsPathFullyQualified(normalizedRelPath) ||
+            normalizedRelPath.Contains("..", StringComparison.Ordinal))
+        {
+            normalizedRelPath = string.Empty;
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Searches all active Mod roots and BaseDir for a relative file path (case-insensitive directory matching).
+    /// Rejects directory traversal ('..') and rooted/drive paths.
     /// </summary>
     public static string? ResolveFile(params string[] relativeSegments)
     {
-        string relPath = Path.Combine(relativeSegments);
+        if (!TryNormalizeSafeRelativePath(relativeSegments, out string relPath))
+            return null;
+
         foreach (string root in _contentRoots)
         {
-            string candidate = Path.Combine(root, relPath);
-            if (File.Exists(candidate))
-                return candidate;
+            string fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                              + Path.DirectorySeparatorChar;
+            string fullCandidate = Path.GetFullPath(Path.Combine(root, relPath));
+            if (!fullCandidate.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (File.Exists(fullCandidate))
+                return fullCandidate;
         }
         return null;
     }
 
     /// <summary>
     /// Returns all matching directories across BaseDir and Mods for a relative path (e.g. Assets/Sounds/Brawler).
+    /// Rejects directory traversal ('..') and rooted/drive paths.
     /// </summary>
     public static List<string> ResolveDirectories(params string[] relativeSegments)
     {
         var dirs = new List<string>();
-        string relPath = Path.Combine(relativeSegments);
+        if (!TryNormalizeSafeRelativePath(relativeSegments, out string relPath))
+            return dirs;
 
         foreach (string root in _contentRoots)
         {
-            string candidate = Path.Combine(root, relPath);
-            if (Directory.Exists(candidate) && !dirs.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+            string fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                              + Path.DirectorySeparatorChar;
+            string fullCandidate = Path.GetFullPath(Path.Combine(root, relPath));
+            if (!fullCandidate.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (Directory.Exists(fullCandidate) && !dirs.Contains(fullCandidate, StringComparer.OrdinalIgnoreCase))
             {
-                dirs.Add(candidate);
+                dirs.Add(fullCandidate);
             }
         }
         return dirs;
