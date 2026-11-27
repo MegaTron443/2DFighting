@@ -10,18 +10,51 @@ public class CharacterSelectScreen : IUIScreen
     private PaginatedRosterWidget? _p2Roster;
     private Button? _p1DescPanel;
     private Button? _p2DescPanel;
+    private Button? _p1PointTab;
+    private Button? _p1PartnerTab;
+    private Button? _p2PointTab;
+    private Button? _p2PartnerTab;
 
+    private int _p1PickSlot = 0;
+    private int _p2PickSlot = 0;
     private int _knownCatalogVersion = -1;
     private string _knownP1Key = "";
     private string _knownP2Key = "";
+
+    private static bool Is2v2Mode =>
+        string.Equals(EngineServices.Current?.Match.CurrentMatchMode, "2v2", StringComparison.OrdinalIgnoreCase) ||
+        (SteamLobbyManager.IsInMatchLobby && SteamLobbyManager.Is2v2Lobby);
 
     public void Initialize()
     {
         Dispose();
         _buttons.Clear();
+        _p1PickSlot = 0;
+        _p2PickSlot = 0;
         _knownCatalogVersion = -1;
         _knownP1Key = "";
         _knownP2Key = "";
+
+        _p1PointTab = new Button(0.03f, 0.104f, 0.215f, 0.032f, "SLOT 1: POINT", _ => _p1PickSlot = 0)
+        {
+            FontSizePct = 0.014f,
+            AccentColor = new Vector3(0.30f, 0.72f, 1.0f)
+        };
+        _p1PartnerTab = new Button(0.255f, 0.104f, 0.215f, 0.032f, "SLOT 2: PARTNER", _ => _p1PickSlot = 1)
+        {
+            FontSizePct = 0.014f,
+            AccentColor = new Vector3(0.25f, 0.88f, 0.78f)
+        };
+        _p2PointTab = new Button(0.53f, 0.104f, 0.215f, 0.032f, "SLOT 1: POINT", _ => _p2PickSlot = 0)
+        {
+            FontSizePct = 0.014f,
+            AccentColor = new Vector3(1.0f, 0.35f, 0.35f)
+        };
+        _p2PartnerTab = new Button(0.755f, 0.104f, 0.215f, 0.032f, "SLOT 2: PARTNER", _ => _p2PickSlot = 1)
+        {
+            FontSizePct = 0.014f,
+            AccentColor = new Vector3(0.75f, 0.45f, 1.0f)
+        };
 
         _p1Roster = new PaginatedRosterWidget(0.03f, 0.14f, 0.44f, 0.34f, columns: 4, rows: 2)
         {
@@ -51,18 +84,24 @@ public class CharacterSelectScreen : IUIScreen
                 .WithAccent(0.25f, 0.90f, 0.48f)
                 .Action(ctx =>
                 {
+                    bool is2v2 = Is2v2Mode;
                     if (SteamLobbyManager.IsInMatchLobby)
                     {
                         Player? localPlayer = SteamLobbyManager.LocalSlot == 0 ? ctx.Data.Player1 : ctx.Data.Player2;
-                        Character? localChar = localPlayer?.CurrentCharacter;
-                        if (localChar == null) return;
+                        Character? localChar = localPlayer?.PrimaryCharacter;
+                        Character? localPartner = localPlayer?.PartnerCharacter;
+                        if (localChar == null || (is2v2 && localPartner == null)) return;
 
                         SteamLobbyManager.SetLocalSelection(
                             localChar.CharacterId,
                             localChar.ScriptHash,
                             localChar.BaseScriptHash,
                             ready: true,
-                            workshopId: localChar.WorkshopId);
+                            workshopId: localChar.WorkshopId,
+                            partnerCharId: is2v2 ? localPartner!.CharacterId : "",
+                            partnerScriptHash: is2v2 ? localPartner!.ScriptHash : "",
+                            partnerBaseScriptHash: is2v2 ? localPartner!.BaseScriptHash : "",
+                            partnerWorkshopId: is2v2 ? localPartner!.WorkshopId : 0UL);
 
                         if (SteamLobbyManager.HandshakeState == ModHandshakeState.Verified &&
                             SteamLobbyManager.PeerReady &&
@@ -73,13 +112,15 @@ public class CharacterSelectScreen : IUIScreen
                         return;
                     }
 
-                    if (ctx.Data.Player1?.CurrentCharacter != null && ctx.Data.Player2?.CurrentCharacter != null)
+                    bool p1Ready = ctx.Data.Player1?.PrimaryCharacter != null && (!is2v2 || ctx.Data.Player1?.PartnerCharacter != null);
+                    bool p2Ready = ctx.Data.Player2?.PrimaryCharacter != null && (!is2v2 || ctx.Data.Player2?.PartnerCharacter != null);
+                    if (p1Ready && p2Ready)
                     {
                         SceneManager.LoadMatchScene();
                         if (ctx.Data.Services != null)
-                            ctx.Data.Services.Match.ResetMatch(ctx.Data.Player1, ctx.Data.Player2, ctx.Data.Services.Projectiles);
+                            ctx.Data.Services.Match.ResetMatch(ctx.Data.Player1!, ctx.Data.Player2!, ctx.Data.Services.Projectiles);
                         else
-                            PhysicsEngine.ResetMatch(ctx.Data.Player1, ctx.Data.Player2);
+                            PhysicsEngine.ResetMatch(ctx.Data.Player1!, ctx.Data.Player2!);
                         ctx.Data.Services?.PruneUnusedCharacterSpriteSheets();
                         GameState.SetState(State.Playing);
                     }
@@ -120,13 +161,52 @@ public class CharacterSelectScreen : IUIScreen
         _knownCatalogVersion = ModManager.CatalogVersion;
     }
 
-    private static void AssignFighter(ButtonContext ctx, int slot, string fighterId)
+    private void AssignFighter(ButtonContext ctx, int slot, string fighterId)
     {
         if (SteamLobbyManager.IsInMatchLobby && slot != SteamLobbyManager.LocalSlot)
             return;
 
         Player? target = slot == 0 ? ctx.Data.Player1 : ctx.Data.Player2;
         if (target == null) return;
+
+        bool is2v2 = Is2v2Mode;
+        if (is2v2)
+        {
+            int pickSlot = slot == 0 ? _p1PickSlot : _p2PickSlot;
+            if (pickSlot == 0)
+            {
+                Character primary = ctx.Data.LuaEngine.CreateCharacter(fighterId, slot: slot);
+                Character? existingPartner = target.PartnerCharacter;
+                target.SetTeam(primary, existingPartner);
+                if (existingPartner == null)
+                {
+                    if (slot == 0) _p1PickSlot = 1;
+                    else _p2PickSlot = 1;
+                }
+            }
+            else
+            {
+                Character partner = ctx.Data.LuaEngine.CreateCharacter(fighterId, slot: slot + 2);
+                target.SetPartnerCharacter(partner);
+            }
+
+            if (SteamLobbyManager.IsInMatchLobby && target.PrimaryCharacter != null)
+            {
+                Character pChar = target.PrimaryCharacter;
+                Character? partChar = target.PartnerCharacter;
+                SteamLobbyManager.SetLocalSelection(
+                    pChar.CharacterId,
+                    pChar.ScriptHash,
+                    pChar.BaseScriptHash,
+                    ready: false,
+                    workshopId: pChar.WorkshopId,
+                    partnerCharId: partChar?.CharacterId ?? "",
+                    partnerScriptHash: partChar?.ScriptHash ?? "",
+                    partnerBaseScriptHash: partChar?.BaseScriptHash ?? "",
+                    partnerWorkshopId: partChar?.WorkshopId ?? 0UL);
+            }
+            return;
+        }
 
         Character character = ctx.Data.LuaEngine.CreateCharacter(fighterId, slot: slot);
         target.ChangeCharacter(character);
@@ -144,39 +224,66 @@ public class CharacterSelectScreen : IUIScreen
 
     private void SyncDescriptionPanels(GameData data)
     {
-        Character? c1 = data.Player1?.CurrentCharacter;
+        bool is2v2 = Is2v2Mode;
+        Character? c1 = data.Player1?.PrimaryCharacter;
+        Character? c1Partner = data.Player1?.PartnerCharacter;
         if (_p1DescPanel != null)
         {
-            string key = c1 != null ? $"{c1.Name}|{c1.ScriptHash}" : "";
+            string key = $"{c1?.Name ?? ""}|{c1?.ScriptHash ?? ""}|{c1Partner?.Name ?? ""}|{c1Partner?.ScriptHash ?? ""}|{_p1PickSlot}";
             if (!string.Equals(_knownP1Key, key, StringComparison.Ordinal))
             {
                 _knownP1Key = key;
-                _p1DescPanel.Title = c1 != null ? $"P1: {c1.Name.ToUpperInvariant()}" : "PLAYER 1 FIGHTER";
-                _p1DescPanel.Text = c1?.Description ?? "Select a fighter on the left roster.";
+                if (is2v2)
+                {
+                    Character? focused = (_p1PickSlot == 1 ? c1Partner : c1) ?? c1 ?? c1Partner;
+                    _p1DescPanel.Title = $"P1: {c1?.Name.ToUpperInvariant() ?? "?"} + {c1Partner?.Name.ToUpperInvariant() ?? "?"}";
+                    _p1DescPanel.Text = focused?.Description ?? "Pick Slot 1 (Point) and Slot 2 (Partner).";
+                }
+                else
+                {
+                    _p1DescPanel.Title = c1 != null ? $"P1: {c1.Name.ToUpperInvariant()}" : "PLAYER 1 FIGHTER";
+                    _p1DescPanel.Text = c1?.Description ?? "Select a fighter on the left roster.";
+                }
             }
-            if (c1 == null && _p1Roster?.SelectedFighterId != null)
+            Character? sel1 = is2v2 ? (_p1PickSlot == 1 ? c1Partner : c1) : c1;
+            if (sel1 == null && _p1Roster?.SelectedFighterId != null)
             {
                 _p1Roster.SetSelectedFighter(null);
             }
-            else if (c1 != null && data.Services != null && _p1Roster?.SelectedFighterId == null)
+            else if (sel1 != null)
             {
-                _p1Roster?.SetSelectedFighter(data.Services.SelectedLobbyFighterId);
+                _p1Roster?.SetSelectedFighter(sel1.CharacterId);
             }
         }
 
-        Character? c2 = data.Player2?.CurrentCharacter;
+        Character? c2 = data.Player2?.PrimaryCharacter;
+        Character? c2Partner = data.Player2?.PartnerCharacter;
         if (_p2DescPanel != null)
         {
-            string key = c2 != null ? $"{c2.Name}|{c2.ScriptHash}" : "";
+            string key = $"{c2?.Name ?? ""}|{c2?.ScriptHash ?? ""}|{c2Partner?.Name ?? ""}|{c2Partner?.ScriptHash ?? ""}|{_p2PickSlot}";
             if (!string.Equals(_knownP2Key, key, StringComparison.Ordinal))
             {
                 _knownP2Key = key;
-                _p2DescPanel.Title = c2 != null ? $"P2: {c2.Name.ToUpperInvariant()}" : "PLAYER 2 FIGHTER";
-                _p2DescPanel.Text = c2?.Description ?? "Select a fighter on the right roster.";
+                if (is2v2)
+                {
+                    Character? focused = (_p2PickSlot == 1 ? c2Partner : c2) ?? c2 ?? c2Partner;
+                    _p2DescPanel.Title = $"P2: {c2?.Name.ToUpperInvariant() ?? "?"} + {c2Partner?.Name.ToUpperInvariant() ?? "?"}";
+                    _p2DescPanel.Text = focused?.Description ?? "Pick Slot 1 (Point) and Slot 2 (Partner).";
+                }
+                else
+                {
+                    _p2DescPanel.Title = c2 != null ? $"P2: {c2.Name.ToUpperInvariant()}" : "PLAYER 2 FIGHTER";
+                    _p2DescPanel.Text = c2?.Description ?? "Select a fighter on the right roster.";
+                }
             }
-            if (c2 == null && _p2Roster?.SelectedFighterId != null)
+            Character? sel2 = is2v2 ? (_p2PickSlot == 1 ? c2Partner : c2) : c2;
+            if (sel2 == null && _p2Roster?.SelectedFighterId != null)
             {
                 _p2Roster.SetSelectedFighter(null);
+            }
+            else if (sel2 != null)
+            {
+                _p2Roster?.SetSelectedFighter(sel2.CharacterId);
             }
         }
     }
@@ -186,12 +293,51 @@ public class CharacterSelectScreen : IUIScreen
         if (_knownCatalogVersion != ModManager.CatalogVersion)
             RefreshRosters();
 
+        bool is2v2 = Is2v2Mode;
+        if (is2v2)
+        {
+            if (_p1PointTab != null)
+            {
+                _p1PointTab.IsSelected = _p1PickSlot == 0;
+                _p1PointTab.Text = $"1: {context.Data.Player1?.PrimaryCharacter?.Name.ToUpperInvariant() ?? "POINT"}";
+            }
+            if (_p1PartnerTab != null)
+            {
+                _p1PartnerTab.IsSelected = _p1PickSlot == 1;
+                _p1PartnerTab.Text = $"2: {context.Data.Player1?.PartnerCharacter?.Name.ToUpperInvariant() ?? "PARTNER"}";
+            }
+            if (_p2PointTab != null)
+            {
+                _p2PointTab.IsSelected = _p2PickSlot == 0;
+                _p2PointTab.Text = $"1: {context.Data.Player2?.PrimaryCharacter?.Name.ToUpperInvariant() ?? "POINT"}";
+            }
+            if (_p2PartnerTab != null)
+            {
+                _p2PartnerTab.IsSelected = _p2PickSlot == 1;
+                _p2PartnerTab.Text = $"2: {context.Data.Player2?.PartnerCharacter?.Name.ToUpperInvariant() ?? "PARTNER"}";
+            }
+        }
+
         if (SteamLobbyManager.IsInMatchLobby)
         {
             if (SteamLobbyManager.LocalSlot == 0)
+            {
+                if (is2v2)
+                {
+                    _p1PointTab?.Update(context);
+                    _p1PartnerTab?.Update(context);
+                }
                 _p1Roster?.Update(context);
+            }
             else
+            {
+                if (is2v2)
+                {
+                    _p2PointTab?.Update(context);
+                    _p2PartnerTab?.Update(context);
+                }
                 _p2Roster?.Update(context);
+            }
 
             // Auto-launch once host & guest are both ready and mod hash is verified
             if (SteamLobbyManager.IsHost &&
@@ -204,6 +350,13 @@ public class CharacterSelectScreen : IUIScreen
         }
         else
         {
+            if (is2v2)
+            {
+                _p1PointTab?.Update(context);
+                _p1PartnerTab?.Update(context);
+                _p2PointTab?.Update(context);
+                _p2PartnerTab?.Update(context);
+            }
             _p1Roster?.Update(context);
             _p2Roster?.Update(context);
         }
@@ -231,28 +384,65 @@ public class CharacterSelectScreen : IUIScreen
     {
         int sw = Raylib.GetScreenWidth();
         int sh = Raylib.GetScreenHeight();
+        bool is2v2 = Is2v2Mode;
         int headerSize = Math.Max(16, (int)(sh * 0.04f));
-        int infoSize = Math.Max(14, (int)(sh * 0.03f));
+        int infoSize = Math.Max(14, (int)(sh * (is2v2 ? 0.025f : 0.03f)));
 
-        string p1Name = SteamLobbyManager.IsInMatchLobby
-            ? (SteamLobbyManager.LocalSlot == 0
-                ? $"{SteamManager.LocalPersonaName}: {data.Player1?.CurrentCharacter?.Name ?? "Selecting"}"
-                : $"{SteamLobbyManager.PeerPersonaName}: {(!string.IsNullOrEmpty(SteamLobbyManager.PeerCharId) ? SteamLobbyManager.PeerCharId.ToUpperInvariant() : "Selecting")}")
-            : (data.Player1?.CurrentCharacter?.Name ?? "None");
+        string p1Name;
+        string p2Name;
 
-        string p2Name = SteamLobbyManager.IsInMatchLobby
-            ? (SteamLobbyManager.LocalSlot == 1
-                ? $"{SteamManager.LocalPersonaName}: {data.Player2?.CurrentCharacter?.Name ?? "Selecting"}"
-                : $"{SteamLobbyManager.PeerPersonaName}: {(!string.IsNullOrEmpty(SteamLobbyManager.PeerCharId) ? SteamLobbyManager.PeerCharId.ToUpperInvariant() : "Selecting")}")
-            : (data.Player2?.CurrentCharacter?.Name ?? "None");
+        if (SteamLobbyManager.IsInMatchLobby)
+        {
+            if (is2v2)
+            {
+                p1Name = SteamLobbyManager.LocalSlot == 0
+                    ? $"{SteamManager.LocalPersonaName}: {data.Player1?.PrimaryCharacter?.Name ?? "?"} + {data.Player1?.PartnerCharacter?.Name ?? "?"}"
+                    : $"{SteamLobbyManager.PeerPersonaName}: {FormatPeerPair(SteamLobbyManager.PeerCharId, SteamLobbyManager.PeerPartnerCharId)}";
 
-        Raylib.DrawText(SteamLobbyManager.IsInMatchLobby ? $"P1 - {p1Name}" : $"P1: {p1Name}", (int)(sw * 0.03f), (int)(sh * 0.07f), infoSize, Color.DARKBLUE);
-        Raylib.DrawText(SteamLobbyManager.IsInMatchLobby ? $"P2 - {p2Name}" : $"P2: {p2Name}", (int)(sw * 0.53f), (int)(sh * 0.07f), infoSize, Color.MAROON);
+                p2Name = SteamLobbyManager.LocalSlot == 1
+                    ? $"{SteamManager.LocalPersonaName}: {data.Player2?.PrimaryCharacter?.Name ?? "?"} + {data.Player2?.PartnerCharacter?.Name ?? "?"}"
+                    : $"{SteamLobbyManager.PeerPersonaName}: {FormatPeerPair(SteamLobbyManager.PeerCharId, SteamLobbyManager.PeerPartnerCharId)}";
+            }
+            else
+            {
+                p1Name = SteamLobbyManager.LocalSlot == 0
+                    ? $"{SteamManager.LocalPersonaName}: {data.Player1?.CurrentCharacter?.Name ?? "Selecting"}"
+                    : $"{SteamLobbyManager.PeerPersonaName}: {(!string.IsNullOrEmpty(SteamLobbyManager.PeerCharId) ? SteamLobbyManager.PeerCharId.ToUpperInvariant() : "Selecting")}";
+
+                p2Name = SteamLobbyManager.LocalSlot == 1
+                    ? $"{SteamManager.LocalPersonaName}: {data.Player2?.CurrentCharacter?.Name ?? "Selecting"}"
+                    : $"{SteamLobbyManager.PeerPersonaName}: {(!string.IsNullOrEmpty(SteamLobbyManager.PeerCharId) ? SteamLobbyManager.PeerCharId.ToUpperInvariant() : "Selecting")}";
+            }
+        }
+        else if (is2v2)
+        {
+            p1Name = $"{data.Player1?.PrimaryCharacter?.Name ?? "None"} + {data.Player1?.PartnerCharacter?.Name ?? "None"}";
+            p2Name = $"{data.Player2?.PrimaryCharacter?.Name ?? "None"} + {data.Player2?.PartnerCharacter?.Name ?? "None"}";
+        }
+        else
+        {
+            p1Name = data.Player1?.CurrentCharacter?.Name ?? "None";
+            p2Name = data.Player2?.CurrentCharacter?.Name ?? "None";
+        }
+
+        Raylib.DrawText(SteamLobbyManager.IsInMatchLobby ? $"P1 - {p1Name}" : $"P1: {p1Name}", (int)(sw * 0.03f), (int)(sh * 0.068f), infoSize, Color.DARKBLUE);
+        Raylib.DrawText(SteamLobbyManager.IsInMatchLobby ? $"P2 - {p2Name}" : $"P2: {p2Name}", (int)(sw * 0.53f), (int)(sh * 0.068f), infoSize, Color.MAROON);
+
+        if (is2v2)
+        {
+            _p1PointTab?.Draw();
+            _p1PartnerTab?.Draw();
+            _p2PointTab?.Draw();
+            _p2PartnerTab?.Draw();
+        }
 
         _p1Roster?.Draw();
         _p2Roster?.Draw();
         _p1DescPanel?.Draw();
         _p2DescPanel?.Draw();
+
+        bool p1Ready = data.Player1?.PrimaryCharacter != null && (!is2v2 || data.Player1?.PartnerCharacter != null);
+        bool p2Ready = data.Player2?.PrimaryCharacter != null && (!is2v2 || data.Player2?.PartnerCharacter != null);
 
         if (SteamLobbyManager.IsInMatchLobby)
         {
@@ -265,9 +455,10 @@ public class CharacterSelectScreen : IUIScreen
             };
 
             string handshakeLabel = SteamLobbyManager.HandshakeState.ToString().ToUpperInvariant();
-            if (SteamLobbyManager.HandshakeState == ModHandshakeState.SyncingMod && SteamLobbyManager.PeerWorkshopId != 0UL)
+            ulong syncWsId = SteamLobbyManager.ActiveSyncWorkshopId;
+            if (SteamLobbyManager.HandshakeState == ModHandshakeState.SyncingMod && syncWsId != 0UL)
             {
-                int pct = (int)Math.Round(SteamWorkshopManager.GetDownloadProgress(SteamLobbyManager.PeerWorkshopId) * 100f);
+                int pct = (int)Math.Round(SteamWorkshopManager.GetDownloadProgress(syncWsId) * 100f);
                 handshakeLabel = $"SYNCING WORKSHOP MOD ({pct}%)";
             }
 
@@ -276,9 +467,9 @@ public class CharacterSelectScreen : IUIScreen
             int swText = Raylib.MeasureText(statusMsg, fontPx);
             Raylib.DrawText(statusMsg, (sw - swText) / 2, (int)(sh * 0.758f), fontPx, badgeCol);
         }
-        else if (data.Player1?.CurrentCharacter != null && data.Player2?.CurrentCharacter != null)
+        else if (p1Ready && p2Ready)
         {
-            string readyMsg = "FIGHTERS READY!";
+            string readyMsg = is2v2 ? "2v2 TEAMS READY!" : "FIGHTERS READY!";
             int w = Raylib.MeasureText(readyMsg, headerSize);
             Raylib.DrawText(readyMsg, (sw - w) / 2, (int)(sh * 0.755f), headerSize, Color.DARKGREEN);
         }
@@ -289,8 +480,27 @@ public class CharacterSelectScreen : IUIScreen
         }
     }
 
+    private static string FormatPeerPair(string primaryId, string partnerId)
+    {
+        string a = string.IsNullOrEmpty(primaryId) ? "Selecting" : primaryId.ToUpperInvariant();
+        string b = string.IsNullOrEmpty(partnerId) ? "Partner" : partnerId.ToUpperInvariant();
+        return $"{a} + {b}";
+    }
+
     public void Dispose()
     {
+        _p1PointTab?.Dispose();
+        _p1PointTab = null;
+
+        _p1PartnerTab?.Dispose();
+        _p1PartnerTab = null;
+
+        _p2PointTab?.Dispose();
+        _p2PointTab = null;
+
+        _p2PartnerTab?.Dispose();
+        _p2PartnerTab = null;
+
         _p1Roster?.Dispose();
         _p1Roster = null;
 

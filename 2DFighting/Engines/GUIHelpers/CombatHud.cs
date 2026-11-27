@@ -70,8 +70,8 @@ public static class CombatHUD
 
     private static void DrawHealthBars(Player p1, Player p2)
     {
-        float p1Pct = Math.Clamp(p1.Health / (float)Player.MAX_HEALTH, 0f, 1f);
-        float p2Pct = Math.Clamp(p2.Health / (float)Player.MAX_HEALTH, 0f, 1f);
+        float p1Pct = Math.Clamp(p1.Health / (float)Math.Max(1, p1.ActiveMember.MaxHealth), 0f, 1f);
+        float p2Pct = Math.Clamp(p2.Health / (float)Math.Max(1, p2.ActiveMember.MaxHealth), 0f, 1f);
 
         float dt = Raylib.GetFrameTime();
 
@@ -86,8 +86,116 @@ public static class CombatHUD
         Rectangle p1Rect = UIRenderer.GetPctRect(0.10f, 0.05f, 0.32f, 0.045f);
         Rectangle p2Rect = UIRenderer.GetPctRect(0.58f, 0.05f, 0.32f, 0.045f);
 
-        UIRenderer.DrawProgressBar(p1Rect, p1Pct, _p1TrailPct, P1HealthStyle);
-        UIRenderer.DrawProgressBar(p2Rect, p2Pct, _p2TrailPct, P2HealthStyle);
+        DrawPlayerHealthHud(p1, p1Rect, p1Pct, _p1TrailPct, P1HealthStyle, rightToLeft: false);
+        DrawPlayerHealthHud(p2, p2Rect, p2Pct, _p2TrailPct, P2HealthStyle, rightToLeft: true);
+    }
+
+    private static void DrawPlayerHealthHud(
+        Player player,
+        Rectangle primaryRect,
+        float primaryPct,
+        float trailPct,
+        UIBarStyle primaryStyle,
+        bool rightToLeft)
+    {
+        int sh = Raylib.GetScreenHeight();
+        int nameFont = Math.Max(11, (int)(sh * 0.017f));
+        string activeName = (player.CurrentCharacter?.Name ?? player.Name).ToUpperInvariant();
+        int nameW = UIRenderer.MeasureText(activeName, nameFont);
+        float nameX = rightToLeft ? (primaryRect.x + primaryRect.width - nameW) : primaryRect.x;
+        UIRenderer.DrawTextShadowed(activeName, nameX, primaryRect.y - nameFont - 2f, nameFont, Color.WHITE, shadowOffset: 1f);
+
+        UIRenderer.DrawProgressBar(primaryRect, primaryPct, trailPct, primaryStyle);
+
+        if (!player.IsTagTeam || player.ActivePartnerCharacter == null)
+            return;
+
+        TagTeamMember partner = player.PartnerMember;
+        float partnerPct = Math.Clamp(partner.Health / (float)Math.Max(1, partner.MaxHealth), 0f, 1f);
+        float recovPct = partner.IsAlive
+            ? Math.Clamp((partner.Health + partner.RecoverableHealth) / (float)Math.Max(1, partner.MaxHealth), 0f, 1f)
+            : -1f;
+
+        float partnerW = primaryRect.width * 0.60f;
+        float partnerH = MathF.Max(10f, primaryRect.height * 0.48f);
+        float partnerY = primaryRect.y + primaryRect.height + (sh * 0.006f);
+        float partnerX = rightToLeft ? (primaryRect.x + primaryRect.width - partnerW) : primaryRect.x;
+        Rectangle partnerRect = new(partnerX, partnerY, partnerW, partnerH);
+
+        UIBarStyle partnerStyle = new()
+        {
+            BackgroundColor = partner.IsAlive ? new Color(22, 24, 34, 215) : new Color(35, 35, 40, 215),
+            FillColor = partner.IsAlive
+                ? (rightToLeft ? new Color(135, 110, 255, 255) : new Color(55, 210, 175, 255))
+                : Color.DARKGRAY,
+            BorderColor = partner.IsAlive ? new Color(200, 210, 230, 255) : Color.GRAY,
+            BorderThickness = 1.5f,
+            RightToLeft = rightToLeft
+        };
+        UIRenderer.DrawProgressBar(partnerRect, partnerPct, recovPct, partnerStyle);
+
+        int partnerFont = Math.Max(10, (int)(sh * 0.015f));
+        string partnerLabel = partner.IsAlive
+            ? $"PARTNER: {player.ActivePartnerCharacter.Name.ToUpperInvariant()}"
+            : $"PARTNER: {player.ActivePartnerCharacter.Name.ToUpperInvariant()} [K.O.]";
+        int pLabelW = UIRenderer.MeasureText(partnerLabel, partnerFont);
+        float pLabelX = rightToLeft ? (partnerRect.x + partnerRect.width - pLabelW) : partnerRect.x;
+        Color pLabelCol = partner.IsAlive ? new Color(210, 235, 245, 255) : Color.GRAY;
+        UIRenderer.DrawTextShadowed(partnerLabel, pLabelX, partnerRect.y + partnerRect.height + 2f, partnerFont, pLabelCol, shadowOffset: 1f);
+
+        // TAG and ASSIST cooldown pills in the remaining width alongside partner health bar
+        float gap = MathF.Max(6f, primaryRect.width * 0.02f);
+        float pillsTotalW = (primaryRect.width - partnerW) - gap;
+        float pillW = (pillsTotalW - gap) * 0.5f;
+        float pillsStartX = rightToLeft ? primaryRect.x : (partnerRect.x + partnerW + gap);
+
+        DrawTeamCooldownPill(
+            new Rectangle(pillsStartX, partnerY, pillW, partnerH),
+            label: "TAG",
+            remaining: player.TagCooldownTimer,
+            maxCd: Player.TAG_SWITCH_COOLDOWN,
+            enabled: partner.IsAlive,
+            rightToLeft: rightToLeft,
+            fontSize: partnerFont);
+
+        DrawTeamCooldownPill(
+            new Rectangle(pillsStartX + pillW + gap, partnerY, pillW, partnerH),
+            label: "AST",
+            remaining: player.AssistCooldownTimer,
+            maxCd: Player.ASSIST_COOLDOWN,
+            enabled: partner.IsAlive,
+            rightToLeft: rightToLeft,
+            fontSize: partnerFont);
+    }
+
+    private static void DrawTeamCooldownPill(
+        Rectangle rect,
+        string label,
+        float remaining,
+        float maxCd,
+        bool enabled,
+        bool rightToLeft,
+        int fontSize)
+    {
+        float pct = !enabled
+            ? 0f
+            : (remaining <= 0f ? 1f : 1f - Math.Clamp(remaining / MathF.Max(0.01f, maxCd), 0f, 1f));
+
+        UIBarStyle style = (!enabled || remaining > 0f) ? CooldownChargingStyle : CooldownReadyStyle;
+        if (!enabled)
+            style.FillColor = Color.DARKGRAY;
+        style.RightToLeft = rightToLeft;
+
+        UIRenderer.DrawProgressBar(rect, pct, style);
+        string text = !enabled ? $"{label} KO" : (remaining <= 0f ? $"{label} RDY" : $"{label} {remaining:0.0}s");
+        int fitFont = UIRenderer.FitFontSize(text, fontSize, 8, rect.width - 4f, out int textW);
+        UIRenderer.DrawTextShadowed(
+            text,
+            rect.x + (rect.width - textW) * 0.5f,
+            rect.y + (rect.height - fitFont) * 0.5f,
+            fitFont,
+            enabled ? Color.WHITE : Color.LIGHTGRAY,
+            shadowOffset: 1f);
     }
 
     private static void DrawRoundPips(Player p1, Player p2)
@@ -178,7 +286,7 @@ public static class CombatHUD
         float slotW = 0.042f;
         float slotH = 0.022f;
         float spacing = 0.006f;
-        float yPct = 0.105f;
+        float yPct = player.IsTagTeam ? 0.155f : 0.105f;
 
         var skills = player.CurrentCharacter.SkillController.SkillList;
         int index = 0;
@@ -235,7 +343,7 @@ public static class CombatHUD
         int textW = UIRenderer.MeasureText(text, fontSize);
 
         float drawX = rightAlign ? (sw * xPct) - textW : (sw * xPct);
-        float drawY = sh * 0.16f;
+        float drawY = sh * (player.IsTagTeam ? 0.21f : 0.16f);
 
         UIRenderer.DrawTextShadowed(text, drawX, drawY, fontSize, Color.GOLD, shadowOffset: 2f);
     }

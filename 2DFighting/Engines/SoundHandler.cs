@@ -176,7 +176,13 @@ public class SoundHandler : IDisposable
     public void PlaySkillSound(Player? player, string skillName)
     {
         float vol = GetBusEffectiveVolume("sfx_character");
-        PlaySkillSoundInternal(player, skillName, vol, 1.0f);
+        PlaySkillSoundByName(player?.CurrentCharacter?.Name, skillName, vol, 1.0f);
+    }
+
+    public void PlaySkillSound(Character? character, string skillName)
+    {
+        float vol = GetBusEffectiveVolume("sfx_character");
+        PlaySkillSoundByName(character?.Name, skillName, vol, 1.0f);
     }
 
     private void PlaySoundInternal(Player? player, SoundType soundType, float volume, float pitch)
@@ -226,13 +232,16 @@ public class SoundHandler : IDisposable
         PlayFallbackSound("Global", SoundTypeNames[(int)soundType], volume, pitch);
     }
 
-    private void PlaySkillSoundInternal(Player? player, string skillName, float volume, float pitch)
+    private void PlaySkillSoundInternal(Player? player, string skillName, float volume, float pitch) =>
+        PlaySkillSoundByName(player?.CurrentCharacter?.Name, skillName, volume, pitch);
+
+    private void PlaySkillSoundByName(string? characterName, string skillName, float volume, float pitch)
     {
         if (PhysicsEngine.IsTrainingMode || PhysicsEngine.SuppressPresentation || volume <= 0f) return;
 
-        string targetName = player?.CurrentCharacter?.Name ?? "Global";
+        string targetName = characterName ?? "Global";
 
-        if (player?.CurrentCharacter != null)
+        if (!string.IsNullOrEmpty(characterName))
         {
             for (int i = 0; i < _activeSoundBanks.Count; i++)
             {
@@ -263,15 +272,22 @@ public class SoundHandler : IDisposable
         }
         _activeSoundBanks.Clear();
 
-        if (p1?.CurrentCharacter != null)
+        Character?[] teamChars =
         {
-            _activeSoundBanks.Add(new Character_Sounds(p1.CurrentCharacter));
-        }
+            p1?.PrimaryCharacter,
+            p1?.PartnerCharacter,
+            p2?.PrimaryCharacter,
+            p2?.PartnerCharacter
+        };
 
-        if (p2?.CurrentCharacter != null &&
-            p2.CurrentCharacter.Name != p1?.CurrentCharacter?.Name)
+        var loadedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < teamChars.Length; i++)
         {
-            _activeSoundBanks.Add(new Character_Sounds(p2.CurrentCharacter));
+            Character? ch = teamChars[i];
+            if (ch == null || !loadedNames.Add(ch.Name))
+                continue;
+
+            _activeSoundBanks.Add(new Character_Sounds(ch));
         }
     }
 

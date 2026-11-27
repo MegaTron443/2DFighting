@@ -286,10 +286,16 @@ public class EngineServices
         int peerSlot = SteamLobbyManager.PeerSlot;
         Player localPlayer = localSlot == 0 ? Player1 : Player2;
         Player peerPlayer = peerSlot == 0 ? Player1 : Player2;
+        bool is2v2 = SteamLobbyManager.Is2v2Lobby;
 
-        if (localPlayer.CurrentCharacter == null && !string.IsNullOrEmpty(SteamLobbyManager.LocalCharId))
+        if (localPlayer.PrimaryCharacter == null && !string.IsNullOrEmpty(SteamLobbyManager.LocalCharId))
         {
             localPlayer.ChangeCharacter(Lua.CreateCharacter(SteamLobbyManager.LocalCharId, slot: localSlot));
+        }
+
+        if (is2v2 && localPlayer.PartnerCharacter == null && !string.IsNullOrEmpty(SteamLobbyManager.LocalPartnerCharId))
+        {
+            localPlayer.SetPartnerCharacter(Lua.CreateCharacter(SteamLobbyManager.LocalPartnerCharId, slot: localSlot + 2));
         }
 
         if (!string.IsNullOrEmpty(SteamLobbyManager.PeerCustomScriptPath) &&
@@ -301,12 +307,31 @@ public class EngineServices
                 CharacterLoader.ApplyGenome(peerChar, SteamLobbyManager.PeerCustomBalanceGenome);
             peerPlayer.ChangeCharacter(peerChar);
         }
-        else if (peerPlayer.CurrentCharacter == null && !string.IsNullOrEmpty(SteamLobbyManager.PeerCharId))
+        else if (peerPlayer.PrimaryCharacter == null && !string.IsNullOrEmpty(SteamLobbyManager.PeerCharId))
         {
             peerPlayer.ChangeCharacter(Lua.CreateCharacter(SteamLobbyManager.PeerCharId, slot: peerSlot));
         }
 
-        if (Player1.CurrentCharacter == null || Player2.CurrentCharacter == null)
+        if (is2v2)
+        {
+            if (!string.IsNullOrEmpty(SteamLobbyManager.PeerPartnerCustomScriptPath) &&
+                File.Exists(SteamLobbyManager.PeerPartnerCustomScriptPath))
+            {
+                bool applyPartnerStored = SteamLobbyManager.PeerPartnerCustomBalanceGenome == null && BalanceOverrideStore.IsEnabled;
+                Character peerPartner = Lua.CreateCharacterFromPath(SteamLobbyManager.PeerPartnerCustomScriptPath, peerSlot + 2, applyStoredBalance: applyPartnerStored);
+                if (SteamLobbyManager.PeerPartnerCustomBalanceGenome != null)
+                    CharacterLoader.ApplyGenome(peerPartner, SteamLobbyManager.PeerPartnerCustomBalanceGenome);
+                peerPlayer.SetPartnerCharacter(peerPartner);
+            }
+            else if (peerPlayer.PartnerCharacter == null && !string.IsNullOrEmpty(SteamLobbyManager.PeerPartnerCharId))
+            {
+                peerPlayer.SetPartnerCharacter(Lua.CreateCharacter(SteamLobbyManager.PeerPartnerCharId, slot: peerSlot + 2));
+            }
+        }
+
+        if (Player1.PrimaryCharacter == null || Player2.PrimaryCharacter == null)
+            return;
+        if (is2v2 && (Player1.PartnerCharacter == null || Player2.PartnerCharacter == null))
             return;
 
         Match.IsTrainingMode = false;
@@ -332,8 +357,10 @@ public class EngineServices
     public void PruneUnusedCharacterSpriteSheets()
     {
         var activePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        Player1?.CurrentCharacter?.CollectTexturePaths(activePaths);
-        Player2?.CurrentCharacter?.CollectTexturePaths(activePaths);
+        Player1?.PrimaryCharacter?.CollectTexturePaths(activePaths);
+        Player1?.PartnerCharacter?.CollectTexturePaths(activePaths);
+        Player2?.PrimaryCharacter?.CollectTexturePaths(activePaths);
+        Player2?.PartnerCharacter?.CollectTexturePaths(activePaths);
         CharacterLoader.UnloadUnusedSpriteSheets(activePaths);
     }
 
