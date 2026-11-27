@@ -11,7 +11,9 @@ public enum NetInputBits : ushort
     KeyTop    = 1 << 4,
     KeyBottom = 1 << 5,
     KeyLeft   = 1 << 6,
-    KeyRight  = 1 << 7
+    KeyRight  = 1 << 7,
+    TagSwitch = 1 << 8,
+    Assist    = 1 << 9
 }
 
 public struct NetTickInput

@@ -14,6 +14,8 @@ public class KeyHandler
     private bool _latchedJumpPressed = false;
     private bool _latchedCrouch = false;
     private bool _latchedCrouchPressed = false;
+    private bool _latchedTagPressed = false;
+    private bool _latchedAssistPressed = false;
     private float _simTime = 0f;
     private ushort _pendingNetPresses = 0;
 
@@ -23,6 +25,8 @@ public class KeyHandler
         public readonly bool LatchedJumpPressed;
         public readonly bool LatchedCrouch;
         public readonly bool LatchedCrouchPressed;
+        public readonly bool LatchedTagPressed;
+        public readonly bool LatchedAssistPressed;
         public readonly float SimTime;
         public readonly (float time, int mask)[] BufferedEntries;
 
@@ -31,6 +35,8 @@ public class KeyHandler
             bool latchedJumpPressed,
             bool latchedCrouch,
             bool latchedCrouchPressed,
+            bool latchedTagPressed,
+            bool latchedAssistPressed,
             float simTime,
             (float time, int mask)[] bufferedEntries)
         {
@@ -38,6 +44,8 @@ public class KeyHandler
             LatchedJumpPressed = latchedJumpPressed;
             LatchedCrouch = latchedCrouch;
             LatchedCrouchPressed = latchedCrouchPressed;
+            LatchedTagPressed = latchedTagPressed;
+            LatchedAssistPressed = latchedAssistPressed;
             SimTime = simTime;
             BufferedEntries = bufferedEntries;
         }
@@ -48,7 +56,7 @@ public class KeyHandler
         (float time, int mask)[] entries = _inputBuffers.TryGetValue(playerIndex, out var buf)
             ? buf.ToArray()
             : Array.Empty<(float, int)>();
-        return new Snapshot(_latchedDir, _latchedJumpPressed, _latchedCrouch, _latchedCrouchPressed, _simTime, entries);
+        return new Snapshot(_latchedDir, _latchedJumpPressed, _latchedCrouch, _latchedCrouchPressed, _latchedTagPressed, _latchedAssistPressed, _simTime, entries);
     }
 
     public void RestoreSnapshot(int playerIndex, in Snapshot snapshot)
@@ -57,6 +65,8 @@ public class KeyHandler
         _latchedJumpPressed = snapshot.LatchedJumpPressed;
         _latchedCrouch = snapshot.LatchedCrouch;
         _latchedCrouchPressed = snapshot.LatchedCrouchPressed;
+        _latchedTagPressed = snapshot.LatchedTagPressed;
+        _latchedAssistPressed = snapshot.LatchedAssistPressed;
         _simTime = snapshot.SimTime;
 
         if (!_inputBuffers.TryGetValue(playerIndex, out var buf))
@@ -78,6 +88,8 @@ public class KeyHandler
         if (Raylib.IsKeyPressed(controls.KeyBottom)) _pendingNetPresses |= (ushort)NetInputBits.KeyBottom;
         if (Raylib.IsKeyPressed(controls.KeyLeft))   _pendingNetPresses |= (ushort)NetInputBits.KeyLeft;
         if (Raylib.IsKeyPressed(controls.KeyRight))  _pendingNetPresses |= (ushort)NetInputBits.KeyRight;
+        if (Raylib.IsKeyPressed(controls.TagSwitch)) _pendingNetPresses |= (ushort)NetInputBits.TagSwitch;
+        if (Raylib.IsKeyPressed(controls.Assist))    _pendingNetPresses |= (ushort)NetInputBits.Assist;
     }
 
     public ushort SampleHardwareInputBitmask(int bindingsIndex = 0)
@@ -94,6 +106,8 @@ public class KeyHandler
         if (Raylib.IsKeyDown(controls.KeyBottom)) mask |= (ushort)NetInputBits.KeyBottom;
         if (Raylib.IsKeyDown(controls.KeyLeft))   mask |= (ushort)NetInputBits.KeyLeft;
         if (Raylib.IsKeyDown(controls.KeyRight))  mask |= (ushort)NetInputBits.KeyRight;
+        if (Raylib.IsKeyDown(controls.TagSwitch)) mask |= (ushort)NetInputBits.TagSwitch;
+        if (Raylib.IsKeyDown(controls.Assist))    mask |= (ushort)NetInputBits.Assist;
 
         return mask;
     }
@@ -115,6 +129,12 @@ public class KeyHandler
         _latchedCrouch = (curr & NetInputBits.Crouch) != 0;
         if ((rising & NetInputBits.Crouch) != 0)
             _latchedCrouchPressed = true;
+
+        if ((rising & NetInputBits.TagSwitch) != 0)
+            _latchedTagPressed = true;
+
+        if ((rising & NetInputBits.Assist) != 0)
+            _latchedAssistPressed = true;
 
         int pressedMask = 0;
         if ((rising & NetInputBits.KeyTop) != 0)    pressedMask |= 1 << 0;
@@ -152,6 +172,16 @@ public class KeyHandler
         if (Raylib.IsKeyPressed(controls.Crouch))
         {
             _latchedCrouchPressed = true;
+        }
+
+        if (Raylib.IsKeyPressed(controls.TagSwitch))
+        {
+            _latchedTagPressed = true;
+        }
+
+        if (Raylib.IsKeyPressed(controls.Assist))
+        {
+            _latchedAssistPressed = true;
         }
 
         int pressedThisFrame = 0;
@@ -204,6 +234,8 @@ public class KeyHandler
         _latchedJumpPressed = false;
         _latchedCrouch = false;
         _latchedCrouchPressed = false;
+        _latchedTagPressed = false;
+        _latchedAssistPressed = false;
         if (_inputBuffers.TryGetValue(playerIndex, out var buffer))
         {
             buffer.Clear();
@@ -213,6 +245,24 @@ public class KeyHandler
     public bool ConsumeBufferedInput(Character currentCharacter, Player player, int playerIndex)
     {
         if (currentCharacter == null) return true;
+
+        bool tagPressed = _latchedTagPressed;
+        bool assistPressed = _latchedAssistPressed;
+        _latchedTagPressed = false;
+        _latchedAssistPressed = false;
+
+        if (tagPressed && player.TryTagSwitch())
+        {
+            _latchedJumpPressed = false;
+            _latchedCrouchPressed = false;
+            if (_inputBuffers.TryGetValue(playerIndex, out var tagBuf)) tagBuf.Clear();
+            return false;
+        }
+
+        if (assistPressed)
+        {
+            player.TryCallAssist();
+        }
 
         float dir = _latchedDir;
         bool jumped = _latchedJumpPressed;

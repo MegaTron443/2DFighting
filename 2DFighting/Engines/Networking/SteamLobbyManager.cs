@@ -47,6 +47,10 @@ public static class SteamLobbyManager
     private const string MemberKeyBaseHash = "base_hash";
     private const string MemberKeyReady = "ready";
     private const string MemberKeyWorkshopId = "workshop_id";
+    private const string MemberKeyPartnerCharId = "partner_char_id";
+    private const string MemberKeyPartnerScriptHash = "partner_script_hash";
+    private const string MemberKeyPartnerBaseHash = "partner_base_hash";
+    private const string MemberKeyPartnerWorkshopId = "partner_workshop_id";
 
     private sealed class IncomingModTransfer
     {
@@ -71,11 +75,15 @@ public static class SteamLobbyManager
     private static float _hostSessionPingCooldown = 0f;
     private static bool _joiningViaFriendInvite = false;
     private static ulong _pendingWorkshopDownloadId = 0UL;
-    private static ulong _completedWorkshopDownloadId = 0UL;
+    private static readonly HashSet<ulong> _completedWorkshopDownloadIds = new();
+    private static bool _activeModRequestIsPartner = false;
+    private static string _activeModRequestCharId = "";
+    private static string _activeModRequestHash = "";
 
     public static LobbySearchState State { get; private set; } = LobbySearchState.Idle;
     public static ModHandshakeState HandshakeState { get; private set; } = ModHandshakeState.Pending;
     public static string QueuedMode { get; private set; } = "1v1";
+    public static bool Is2v2Lobby => string.Equals(QueuedMode, "2v2", StringComparison.OrdinalIgnoreCase);
     public static ModFilterMode LobbyModFilter { get; private set; } = ModFilterMode.VanillaAndMods;
     public static bool LobbyGaEnabled { get; private set; } = true;
     public static bool IsPrivateOrFriendsLobby { get; private set; }
@@ -95,6 +103,10 @@ public static class SteamLobbyManager
     public static string LocalBaseScriptHash { get; private set; } = "";
     public static bool LocalReady { get; private set; }
     public static ulong LocalWorkshopId { get; private set; }
+    public static string LocalPartnerCharId { get; private set; } = "";
+    public static string LocalPartnerScriptHash { get; private set; } = "";
+    public static string LocalPartnerBaseScriptHash { get; private set; } = "";
+    public static ulong LocalPartnerWorkshopId { get; private set; }
 
     public static string PeerCharId { get; private set; } = "";
     public static string PeerScriptHash { get; private set; } = "";
@@ -102,9 +114,16 @@ public static class SteamLobbyManager
     public static bool PeerReady { get; private set; }
     public static bool PeerGaEnabled { get; private set; } = true;
     public static ulong PeerWorkshopId { get; private set; }
+    public static string PeerPartnerCharId { get; private set; } = "";
+    public static string PeerPartnerScriptHash { get; private set; } = "";
+    public static string PeerPartnerBaseScriptHash { get; private set; } = "";
+    public static ulong PeerPartnerWorkshopId { get; private set; }
+    public static ulong ActiveSyncWorkshopId { get; private set; }
 
     public static string? PeerCustomScriptPath { get; private set; }
     public static CharacterBalanceGenome? PeerCustomBalanceGenome { get; private set; }
+    public static string? PeerPartnerCustomScriptPath { get; private set; }
+    public static CharacterBalanceGenome? PeerPartnerCustomBalanceGenome { get; private set; }
 
     public static bool ShouldEnterCharacterSelect { get; private set; }
     public static PendingOnlineMatchStart? PendingStart { get; private set; }
@@ -207,6 +226,10 @@ public static class SteamLobbyManager
         LocalBaseScriptHash = "";
         LocalReady = false;
         LocalWorkshopId = 0UL;
+        LocalPartnerCharId = "";
+        LocalPartnerScriptHash = "";
+        LocalPartnerBaseScriptHash = "";
+        LocalPartnerWorkshopId = 0UL;
         ResetPeerHandshakeState();
         _hostSessionPingCooldown = 0f;
         PendingStart = null;
@@ -229,24 +252,47 @@ public static class SteamLobbyManager
         PeerBaseScriptHash = "";
         PeerReady = false;
         PeerWorkshopId = 0UL;
+        PeerPartnerCharId = "";
+        PeerPartnerScriptHash = "";
+        PeerPartnerBaseScriptHash = "";
+        PeerPartnerWorkshopId = 0UL;
+        ActiveSyncWorkshopId = 0UL;
         PeerCustomScriptPath = null;
         PeerCustomBalanceGenome = null;
+        PeerPartnerCustomScriptPath = null;
+        PeerPartnerCustomBalanceGenome = null;
         _activeModTransfer = null;
         _modRequestCooldown = 0f;
         _modRequestAttempts = 0;
         _hostSessionPingCooldown = 0f;
         _pendingWorkshopDownloadId = 0UL;
-        _completedWorkshopDownloadId = 0UL;
+        _completedWorkshopDownloadIds.Clear();
+        _activeModRequestIsPartner = false;
+        _activeModRequestCharId = "";
+        _activeModRequestHash = "";
         HandshakeState = PeerSteamId != 0UL ? ModHandshakeState.WaitingForPeer : ModHandshakeState.Pending;
     }
 
-    public static void SetLocalSelection(string charId, string scriptHash, string baseScriptHash, bool ready, ulong workshopId = 0UL)
+    public static void SetLocalSelection(
+        string charId,
+        string scriptHash,
+        string baseScriptHash,
+        bool ready,
+        ulong workshopId = 0UL,
+        string partnerCharId = "",
+        string partnerScriptHash = "",
+        string partnerBaseScriptHash = "",
+        ulong partnerWorkshopId = 0UL)
     {
         LocalCharId = charId ?? "";
         LocalScriptHash = scriptHash ?? "";
         LocalBaseScriptHash = baseScriptHash ?? "";
         LocalReady = ready;
         LocalWorkshopId = workshopId;
+        LocalPartnerCharId = partnerCharId ?? "";
+        LocalPartnerScriptHash = partnerScriptHash ?? "";
+        LocalPartnerBaseScriptHash = partnerBaseScriptHash ?? "";
+        LocalPartnerWorkshopId = partnerWorkshopId;
 
         if (!IsInMatchLobby) return;
 
@@ -256,6 +302,10 @@ public static class SteamLobbyManager
         SteamMatchmaking.SetLobbyMemberData(current, MemberKeyBaseHash, LocalBaseScriptHash);
         SteamMatchmaking.SetLobbyMemberData(current, MemberKeyReady, ready ? "1" : "0");
         SteamMatchmaking.SetLobbyMemberData(current, MemberKeyWorkshopId, LocalWorkshopId.ToString());
+        SteamMatchmaking.SetLobbyMemberData(current, MemberKeyPartnerCharId, LocalPartnerCharId);
+        SteamMatchmaking.SetLobbyMemberData(current, MemberKeyPartnerScriptHash, LocalPartnerScriptHash);
+        SteamMatchmaking.SetLobbyMemberData(current, MemberKeyPartnerBaseHash, LocalPartnerBaseScriptHash);
+        SteamMatchmaking.SetLobbyMemberData(current, MemberKeyPartnerWorkshopId, LocalPartnerWorkshopId.ToString());
 
         if (!string.IsNullOrEmpty(LocalCharId) && CanSendP2PToPeer())
         {
@@ -266,7 +316,11 @@ public static class SteamLobbyManager
                 LocalBaseScriptHash,
                 LocalReady,
                 BalanceOverrideStore.IsEnabled,
-                LocalWorkshopId);
+                LocalWorkshopId,
+                LocalPartnerCharId,
+                LocalPartnerScriptHash,
+                LocalPartnerBaseScriptHash,
+                LocalPartnerWorkshopId);
         }
 
         EvaluateHandshake();
@@ -285,18 +339,22 @@ public static class SteamLobbyManager
                 LocalBaseScriptHash,
                 LocalReady,
                 BalanceOverrideStore.IsEnabled,
-                LocalWorkshopId);
+                LocalWorkshopId,
+                LocalPartnerCharId,
+                LocalPartnerScriptHash,
+                LocalPartnerBaseScriptHash,
+                LocalPartnerWorkshopId);
         }
 
         if (HandshakeState == ModHandshakeState.SyncingMod &&
-            PeerWorkshopId == 0UL &&
+            ActiveSyncWorkshopId == 0UL &&
             IsPrivateOrFriendsLobby &&
-            !string.IsNullOrEmpty(PeerCharId) &&
+            !string.IsNullOrEmpty(_activeModRequestCharId) &&
             _modRequestAttempts == 0)
         {
             _modRequestAttempts = 1;
             _modRequestCooldown = 2.0f;
-            SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
+            SteamNetTransport.SendModScriptRequest(PeerSteamId, _activeModRequestCharId, _activeModRequestHash);
         }
     }
 
@@ -324,21 +382,22 @@ public static class SteamLobbyManager
             }
         }
 
-        if (HandshakeState == ModHandshakeState.SyncingMod && PeerWorkshopId != 0UL)
+        if (HandshakeState == ModHandshakeState.SyncingMod && ActiveSyncWorkshopId != 0UL)
         {
-            int pct = (int)Math.Round(SteamWorkshopManager.GetDownloadProgress(PeerWorkshopId) * 100f);
+            int pct = (int)Math.Round(SteamWorkshopManager.GetDownloadProgress(ActiveSyncWorkshopId) * 100f);
             StatusText = $"DOWNLOADING WORKSHOP MOD: {pct}%...";
-            if (!SteamWorkshopManager.IsItemDownloading(PeerWorkshopId) &&
-                SteamWorkshopManager.IsItemInstalled(PeerWorkshopId) &&
-                _completedWorkshopDownloadId != PeerWorkshopId)
+            if (!SteamWorkshopManager.IsItemDownloading(ActiveSyncWorkshopId) &&
+                SteamWorkshopManager.IsItemInstalled(ActiveSyncWorkshopId) &&
+                !_completedWorkshopDownloadIds.Contains(ActiveSyncWorkshopId))
             {
-                OnWorkshopItemReady(PeerWorkshopId, succeeded: true);
+                OnWorkshopItemReady(ActiveSyncWorkshopId, succeeded: true);
             }
             return;
         }
 
         if (HandshakeState == ModHandshakeState.SyncingMod &&
-            PeerWorkshopId == 0UL &&
+            ActiveSyncWorkshopId == 0UL &&
+            !string.IsNullOrEmpty(_activeModRequestCharId) &&
             IsPrivateOrFriendsLobby &&
             CanSendP2PToPeer())
         {
@@ -346,7 +405,7 @@ public static class SteamLobbyManager
             {
                 _modRequestAttempts = 1;
                 _modRequestCooldown = 2.0f;
-                SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
+                SteamNetTransport.SendModScriptRequest(PeerSteamId, _activeModRequestCharId, _activeModRequestHash);
             }
             else if (_modRequestCooldown > 0f)
             {
@@ -355,12 +414,12 @@ public static class SteamLobbyManager
                 {
                     _modRequestAttempts++;
                     _modRequestCooldown = 2.0f;
-                    SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
+                    SteamNetTransport.SendModScriptRequest(PeerSteamId, _activeModRequestCharId, _activeModRequestHash);
                 }
                 else if (_modRequestCooldown <= 0f && _modRequestAttempts >= 3)
                 {
                     HandshakeState = ModHandshakeState.MismatchBlocked;
-                    StatusText = $"MOD TRANSFER FAILED ({PeerCharId.ToUpperInvariant()})";
+                    StatusText = $"MOD TRANSFER FAILED ({_activeModRequestCharId.ToUpperInvariant()})";
                 }
             }
         }
@@ -373,7 +432,16 @@ public static class SteamLobbyManager
 
         if (!IsHost)
         {
-            SetLocalSelection(LocalCharId, LocalScriptHash, LocalBaseScriptHash, ready: true, LocalWorkshopId);
+            SetLocalSelection(
+                LocalCharId,
+                LocalScriptHash,
+                LocalBaseScriptHash,
+                ready: true,
+                LocalWorkshopId,
+                LocalPartnerCharId,
+                LocalPartnerScriptHash,
+                LocalPartnerBaseScriptHash,
+                LocalPartnerWorkshopId);
             return false;
         }
 
@@ -489,7 +557,16 @@ public static class SteamLobbyManager
             PullPeerMemberData();
             if (!string.IsNullOrEmpty(LocalCharId))
             {
-                SetLocalSelection(LocalCharId, LocalScriptHash, LocalBaseScriptHash, LocalReady, LocalWorkshopId);
+                SetLocalSelection(
+                    LocalCharId,
+                    LocalScriptHash,
+                    LocalBaseScriptHash,
+                    LocalReady,
+                    LocalWorkshopId,
+                    LocalPartnerCharId,
+                    LocalPartnerScriptHash,
+                    LocalPartnerBaseScriptHash,
+                    LocalPartnerWorkshopId);
             }
             else if (IsHost)
             {
@@ -534,7 +611,16 @@ public static class SteamLobbyManager
                     SteamMatchmaking.SetLobbyData(_currentLobby, LobbyKeyState, "selecting");
                     if (!string.IsNullOrEmpty(LocalCharId))
                     {
-                        SetLocalSelection(LocalCharId, LocalScriptHash, LocalBaseScriptHash, LocalReady, LocalWorkshopId);
+                        SetLocalSelection(
+                            LocalCharId,
+                            LocalScriptHash,
+                            LocalBaseScriptHash,
+                            LocalReady,
+                            LocalWorkshopId,
+                            LocalPartnerCharId,
+                            LocalPartnerScriptHash,
+                            LocalPartnerBaseScriptHash,
+                            LocalPartnerWorkshopId);
                     }
                     else
                     {
@@ -611,9 +697,26 @@ public static class SteamLobbyManager
         string workshopStr = SteamMatchmaking.GetLobbyMemberData(_currentLobby, peer, MemberKeyWorkshopId) ?? "";
         ulong.TryParse(workshopStr, out ulong workshopId);
 
+        string partnerCharId = SteamMatchmaking.GetLobbyMemberData(_currentLobby, peer, MemberKeyPartnerCharId) ?? "";
+        string partnerScriptHash = SteamMatchmaking.GetLobbyMemberData(_currentLobby, peer, MemberKeyPartnerScriptHash) ?? "";
+        string partnerBaseHash = SteamMatchmaking.GetLobbyMemberData(_currentLobby, peer, MemberKeyPartnerBaseHash) ?? "";
+        string partnerWorkshopStr = SteamMatchmaking.GetLobbyMemberData(_currentLobby, peer, MemberKeyPartnerWorkshopId) ?? "";
+        ulong.TryParse(partnerWorkshopStr, out ulong partnerWorkshopId);
+
         if (!string.IsNullOrEmpty(charId))
         {
-            OnRemoteFighterSelection(PeerSteamId, charId, scriptHash, baseHash, ready, LobbyGaEnabled, workshopId);
+            OnRemoteFighterSelection(
+                PeerSteamId,
+                charId,
+                scriptHash,
+                baseHash,
+                ready,
+                LobbyGaEnabled,
+                workshopId,
+                partnerCharId,
+                partnerScriptHash,
+                partnerBaseHash,
+                partnerWorkshopId);
         }
     }
 
@@ -624,13 +727,21 @@ public static class SteamLobbyManager
         string baseScriptHash,
         bool ready,
         bool gaEnabled,
-        ulong workshopId = 0UL)
+        ulong workshopId = 0UL,
+        string partnerCharId = "",
+        string partnerScriptHash = "",
+        string partnerBaseScriptHash = "",
+        ulong partnerWorkshopId = 0UL)
     {
         if (senderId != PeerSteamId || string.IsNullOrEmpty(charId)) return;
 
-        bool changedFighter = !string.Equals(PeerCharId, charId, StringComparison.OrdinalIgnoreCase) ||
+        bool changedPrimary = !string.Equals(PeerCharId, charId, StringComparison.OrdinalIgnoreCase) ||
                               !string.Equals(PeerScriptHash, scriptHash, StringComparison.OrdinalIgnoreCase) ||
                               PeerWorkshopId != workshopId;
+
+        bool changedPartner = !string.Equals(PeerPartnerCharId, partnerCharId, StringComparison.OrdinalIgnoreCase) ||
+                              !string.Equals(PeerPartnerScriptHash, partnerScriptHash, StringComparison.OrdinalIgnoreCase) ||
+                              PeerPartnerWorkshopId != partnerWorkshopId;
 
         PeerCharId = charId;
         PeerScriptHash = scriptHash;
@@ -638,16 +749,29 @@ public static class SteamLobbyManager
         PeerReady = ready;
         PeerGaEnabled = gaEnabled;
         PeerWorkshopId = workshopId;
+        PeerPartnerCharId = partnerCharId ?? "";
+        PeerPartnerScriptHash = partnerScriptHash ?? "";
+        PeerPartnerBaseScriptHash = partnerBaseScriptHash ?? "";
+        PeerPartnerWorkshopId = partnerWorkshopId;
 
-        if (changedFighter)
+        if (changedPrimary)
         {
             PeerCustomScriptPath = null;
             PeerCustomBalanceGenome = null;
+        }
+        if (changedPartner)
+        {
+            PeerPartnerCustomScriptPath = null;
+            PeerPartnerCustomBalanceGenome = null;
+        }
+
+        if (changedPrimary || changedPartner)
+        {
             _activeModTransfer = null;
             _modRequestAttempts = 0;
             _modRequestCooldown = 0f;
             _pendingWorkshopDownloadId = 0UL;
-            _completedWorkshopDownloadId = 0UL;
+            _completedWorkshopDownloadIds.Clear();
             EvaluateHandshake();
         }
     }
@@ -677,8 +801,120 @@ public static class SteamLobbyManager
         return string.Equals(localEffectiveHash, expectedEffectiveHash, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool EvaluateSingleFighterSync(
+        string charId,
+        string expectedHash,
+        ulong workshopId,
+        bool isPartner)
+    {
+        if (workshopId != 0UL)
+        {
+            SteamWorkshopManager.TryEnsureInstalledItemRegistered(workshopId);
+
+            string? workshopScript = ModManager.ResolveCharacterScriptForWorkshop(workshopId, charId)
+                                     ?? ModManager.ResolveCharacterScript(charId);
+
+            if (TryMatchScriptHash(workshopScript, charId, expectedHash, out CharacterBalanceGenome? matchedGenome))
+            {
+                bool matchesDefault = string.Equals(ModManager.ResolveCharacterScript(charId), workshopScript, StringComparison.OrdinalIgnoreCase);
+                if (!isPartner)
+                {
+                    PeerCustomScriptPath = matchesDefault ? null : workshopScript;
+                    PeerCustomBalanceGenome = matchesDefault ? null : matchedGenome;
+                }
+                else
+                {
+                    PeerPartnerCustomScriptPath = matchesDefault ? null : workshopScript;
+                    PeerPartnerCustomBalanceGenome = matchesDefault ? null : matchedGenome;
+                }
+                return true;
+            }
+
+            if (_completedWorkshopDownloadIds.Contains(workshopId))
+            {
+                HandshakeState = ModHandshakeState.MismatchBlocked;
+                StatusText = $"WORKSHOP MOD HASH MISMATCH ({charId.ToUpperInvariant()})";
+                return false;
+            }
+
+            HandshakeState = ModHandshakeState.SyncingMod;
+            ActiveSyncWorkshopId = workshopId;
+            if (_pendingWorkshopDownloadId != workshopId)
+            {
+                _pendingWorkshopDownloadId = workshopId;
+                bool started = SteamWorkshopManager.DownloadWorkshopItem(workshopId, subscribe: true);
+                if (!started && !SteamWorkshopManager.IsItemDownloading(workshopId))
+                {
+                    HandshakeState = ModHandshakeState.MismatchBlocked;
+                    StatusText = $"WORKSHOP DOWNLOAD FAILED ({workshopId})";
+                    return false;
+                }
+            }
+
+            int pct = (int)Math.Round(SteamWorkshopManager.GetDownloadProgress(workshopId) * 100f);
+            StatusText = $"DOWNLOADING WORKSHOP MOD: {pct}%...";
+            return false;
+        }
+
+        string? localScriptPath = ModManager.ResolveCharacterScript(charId);
+        if (TryMatchScriptHash(localScriptPath, charId, expectedHash, out _))
+        {
+            if (!isPartner)
+            {
+                PeerCustomScriptPath = null;
+                PeerCustomBalanceGenome = null;
+            }
+            else
+            {
+                PeerPartnerCustomScriptPath = null;
+                PeerPartnerCustomBalanceGenome = null;
+            }
+            return true;
+        }
+
+        string? existingNetPath = isPartner ? PeerPartnerCustomScriptPath : PeerCustomScriptPath;
+        if (!string.IsNullOrEmpty(existingNetPath) &&
+            TryMatchScriptHash(existingNetPath, charId, expectedHash, out _))
+        {
+            return true;
+        }
+
+        if (!IsPrivateOrFriendsLobby)
+        {
+            HandshakeState = ModHandshakeState.MismatchBlocked;
+            StatusText = "MOD MUST BE UPLOADED TO STEAM WORKSHOP";
+            return false;
+        }
+
+        HandshakeState = ModHandshakeState.SyncingMod;
+        ActiveSyncWorkshopId = 0UL;
+        _activeModRequestIsPartner = isPartner;
+        _activeModRequestCharId = charId;
+        _activeModRequestHash = expectedHash;
+        StatusText = $"SYNCING MOD: {charId.ToUpperInvariant()}...";
+
+        if (CanSendP2PToPeer())
+        {
+            _modRequestAttempts = 1;
+            _modRequestCooldown = 2.0f;
+            SteamNetTransport.SendModScriptRequest(PeerSteamId, charId, expectedHash);
+        }
+        else
+        {
+            _modRequestAttempts = 0;
+            _modRequestCooldown = 0f;
+        }
+
+        return false;
+    }
+
     private static void EvaluateHandshake()
     {
+        ActiveSyncWorkshopId = 0UL;
+        _activeModRequestIsPartner = false;
+        _activeModRequestCharId = "";
+        _activeModRequestHash = "";
+
         if (PeerSteamId == 0UL || string.IsNullOrWhiteSpace(PeerCharId))
         {
             HandshakeState = ModHandshakeState.WaitingForPeer;
@@ -692,134 +928,92 @@ public static class SteamLobbyManager
             return;
         }
 
-        if (PeerWorkshopId != 0UL)
+        if (!EvaluateSingleFighterSync(PeerCharId, PeerScriptHash, PeerWorkshopId, isPartner: false))
+            return;
+
+        if (Is2v2Lobby)
         {
-            SteamWorkshopManager.TryEnsureInstalledItemRegistered(PeerWorkshopId);
-
-            string? workshopScript = ModManager.ResolveCharacterScriptForWorkshop(PeerWorkshopId, PeerCharId)
-                                     ?? ModManager.ResolveCharacterScript(PeerCharId);
-
-            if (TryMatchScriptHash(workshopScript, PeerCharId, PeerScriptHash, out CharacterBalanceGenome? matchedGenome))
+            if (string.IsNullOrWhiteSpace(PeerPartnerCharId))
             {
-                HandshakeState = ModHandshakeState.Verified;
-                if (string.Equals(ModManager.ResolveCharacterScript(PeerCharId), workshopScript, StringComparison.OrdinalIgnoreCase))
-                {
-                    PeerCustomScriptPath = null;
-                    PeerCustomBalanceGenome = null;
-                }
-                else
-                {
-                    PeerCustomScriptPath = workshopScript;
-                    PeerCustomBalanceGenome = matchedGenome;
-                }
-                StatusText = $"{PeerCharId.ToUpperInvariant()} WORKSHOP MOD VERIFIED";
+                HandshakeState = ModHandshakeState.WaitingForPeer;
+                StatusText = "WAITING FOR OPPONENT PARTNER...";
                 return;
             }
 
-            if (_completedWorkshopDownloadId == PeerWorkshopId)
-            {
-                HandshakeState = ModHandshakeState.MismatchBlocked;
-                StatusText = $"WORKSHOP MOD HASH MISMATCH ({PeerCharId.ToUpperInvariant()})";
+            if (!EvaluateSingleFighterSync(PeerPartnerCharId, PeerPartnerScriptHash, PeerPartnerWorkshopId, isPartner: true))
                 return;
-            }
-
-            HandshakeState = ModHandshakeState.SyncingMod;
-            if (_pendingWorkshopDownloadId != PeerWorkshopId)
-            {
-                _pendingWorkshopDownloadId = PeerWorkshopId;
-                bool started = SteamWorkshopManager.DownloadWorkshopItem(PeerWorkshopId, subscribe: true);
-                if (!started && !SteamWorkshopManager.IsItemDownloading(PeerWorkshopId))
-                {
-                    HandshakeState = ModHandshakeState.MismatchBlocked;
-                    StatusText = $"WORKSHOP DOWNLOAD FAILED ({PeerWorkshopId})";
-                    return;
-                }
-            }
-
-            int pct = (int)Math.Round(SteamWorkshopManager.GetDownloadProgress(PeerWorkshopId) * 100f);
-            StatusText = $"DOWNLOADING WORKSHOP MOD: {pct}%...";
-            return;
         }
 
-        string? localScriptPath = ModManager.ResolveCharacterScript(PeerCharId);
-        if (TryMatchScriptHash(localScriptPath, PeerCharId, PeerScriptHash, out _))
-        {
-            HandshakeState = ModHandshakeState.Verified;
-            PeerCustomScriptPath = null;
-            PeerCustomBalanceGenome = null;
-            StatusText = $"{PeerCharId.ToUpperInvariant()} HASH VERIFIED";
-            return;
-        }
-
-        // Check if we already received this exact net-mod bundle locally
-        if (!string.IsNullOrEmpty(PeerCustomScriptPath) && File.Exists(PeerCustomScriptPath))
-        {
-            HandshakeState = ModHandshakeState.Verified;
-            StatusText = $"{PeerCharId.ToUpperInvariant()} NET-MOD VERIFIED";
-            return;
-        }
-
-        if (!IsPrivateOrFriendsLobby)
-        {
-            HandshakeState = ModHandshakeState.MismatchBlocked;
-            StatusText = "MOD MUST BE UPLOADED TO STEAM WORKSHOP";
-            return;
-        }
-
-        HandshakeState = ModHandshakeState.SyncingMod;
-        StatusText = $"SYNCING MOD: {PeerCharId.ToUpperInvariant()}...";
-        if (CanSendP2PToPeer())
-        {
-            _modRequestAttempts = 1;
-            _modRequestCooldown = 2.0f;
-            SteamNetTransport.SendModScriptRequest(PeerSteamId, PeerCharId, PeerScriptHash);
-        }
-        else
-        {
-            _modRequestAttempts = 0;
-            _modRequestCooldown = 0f;
-        }
+        HandshakeState = ModHandshakeState.Verified;
+        StatusText = Is2v2Lobby
+            ? $"{PeerCharId.ToUpperInvariant()} + {PeerPartnerCharId.ToUpperInvariant()} VERIFIED"
+            : $"{PeerCharId.ToUpperInvariant()} HASH VERIFIED";
     }
 
     public static void OnWorkshopItemReady(ulong workshopId, bool succeeded)
     {
-        if (!IsInMatchLobby || PeerSteamId == 0UL || workshopId != PeerWorkshopId) return;
+        bool relevant = workshopId == PeerWorkshopId ||
+                        (Is2v2Lobby && workshopId == PeerPartnerWorkshopId) ||
+                        workshopId == ActiveSyncWorkshopId;
+        if (!IsInMatchLobby || PeerSteamId == 0UL || !relevant) return;
 
-        _pendingWorkshopDownloadId = 0UL;
+        if (_pendingWorkshopDownloadId == workshopId)
+            _pendingWorkshopDownloadId = 0UL;
+
         if (!succeeded)
         {
             HandshakeState = ModHandshakeState.MismatchBlocked;
-            StatusText = $"WORKSHOP DOWNLOAD FAILED ({PeerCharId.ToUpperInvariant()})";
+            StatusText = $"WORKSHOP DOWNLOAD FAILED ({workshopId})";
             return;
         }
 
-        _completedWorkshopDownloadId = workshopId;
+        _completedWorkshopDownloadIds.Add(workshopId);
         EvaluateHandshake();
 
         if (HandshakeState == ModHandshakeState.Verified &&
             EngineServices.Current != null &&
             GameState.CurrentState == global::State.ChoiceMenu)
         {
-            EngineServices services = EngineServices.Current;
-            services.Lua.ClearCharacterCache();
-            Player? opp = PeerSlot == 0 ? services.Player1 : services.Player2;
-            if (opp != null)
+            InstantiatePeerCharactersInSelect(EngineServices.Current);
+        }
+    }
+
+    private static void InstantiatePeerCharactersInSelect(EngineServices services)
+    {
+        services.Lua.ClearCharacterCache();
+        Player? opp = PeerSlot == 0 ? services.Player1 : services.Player2;
+        if (opp == null || string.IsNullOrEmpty(PeerCharId)) return;
+
+        Character primaryLoaded;
+        if (!string.IsNullOrEmpty(PeerCustomScriptPath) && File.Exists(PeerCustomScriptPath))
+        {
+            bool applyStored = PeerCustomBalanceGenome == null && BalanceOverrideStore.IsEnabled;
+            primaryLoaded = services.Lua.CreateCharacterFromPath(PeerCustomScriptPath, PeerSlot, applyStoredBalance: applyStored);
+            if (PeerCustomBalanceGenome != null)
+                CharacterLoader.ApplyGenome(primaryLoaded, PeerCustomBalanceGenome);
+        }
+        else
+        {
+            primaryLoaded = services.Lua.CreateCharacter(PeerCharId, slot: PeerSlot);
+        }
+
+        Character? partnerLoaded = opp.PartnerCharacter;
+        if (Is2v2Lobby && !string.IsNullOrEmpty(PeerPartnerCharId))
+        {
+            if (!string.IsNullOrEmpty(PeerPartnerCustomScriptPath) && File.Exists(PeerPartnerCustomScriptPath))
             {
-                Character loaded;
-                if (!string.IsNullOrEmpty(PeerCustomScriptPath) && File.Exists(PeerCustomScriptPath))
-                {
-                    bool applyStored = PeerCustomBalanceGenome == null && BalanceOverrideStore.IsEnabled;
-                    loaded = services.Lua.CreateCharacterFromPath(PeerCustomScriptPath, PeerSlot, applyStoredBalance: applyStored);
-                    if (PeerCustomBalanceGenome != null)
-                        CharacterLoader.ApplyGenome(loaded, PeerCustomBalanceGenome);
-                }
-                else
-                {
-                    loaded = services.Lua.CreateCharacter(PeerCharId, slot: PeerSlot);
-                }
-                opp.ChangeCharacter(loaded);
+                bool applyPartnerStored = PeerPartnerCustomBalanceGenome == null && BalanceOverrideStore.IsEnabled;
+                partnerLoaded = services.Lua.CreateCharacterFromPath(PeerPartnerCustomScriptPath, PeerSlot + 2, applyStoredBalance: applyPartnerStored);
+                if (PeerPartnerCustomBalanceGenome != null)
+                    CharacterLoader.ApplyGenome(partnerLoaded, PeerPartnerCustomBalanceGenome);
+            }
+            else
+            {
+                partnerLoaded = services.Lua.CreateCharacter(PeerPartnerCharId, slot: PeerSlot + 2);
             }
         }
+
+        opp.SetTeam(primaryLoaded, partnerLoaded);
     }
 
     public static void OnModScriptRequestReceived(ulong senderId, string charId, string expectedHash)
@@ -917,9 +1111,15 @@ public static class SteamLobbyManager
                 }
             }
 
+            bool isPartner = _activeModRequestIsPartner ||
+                             (Is2v2Lobby &&
+                              string.Equals(rxCharId, PeerPartnerCharId, StringComparison.OrdinalIgnoreCase) &&
+                              !string.Equals(rxCharId, PeerCharId, StringComparison.OrdinalIgnoreCase));
+            string expectedPeerHash = isPartner ? PeerPartnerScriptHash : PeerScriptHash;
+
             bool hashValid = string.Equals(computedEffective, rxEffectiveHash, StringComparison.OrdinalIgnoreCase) &&
-                             (string.IsNullOrEmpty(PeerScriptHash) ||
-                              string.Equals(computedEffective, PeerScriptHash, StringComparison.OrdinalIgnoreCase));
+                             (string.IsNullOrEmpty(expectedPeerHash) ||
+                              string.Equals(computedEffective, expectedPeerHash, StringComparison.OrdinalIgnoreCase));
 
             if (!hashValid)
             {
@@ -936,22 +1136,27 @@ public static class SteamLobbyManager
             string destPath = Path.Combine(netModsDir, $"{safeChar}_{shortHash}.lua");
             File.WriteAllText(destPath, rxLuaSource);
 
-            PeerCustomScriptPath = destPath;
-            PeerCustomBalanceGenome = rxGenome;
-            HandshakeState = ModHandshakeState.Verified;
-            StatusText = $"{rxCharId.ToUpperInvariant()} MOD SYNCED & VERIFIED";
+            if (isPartner)
+            {
+                PeerPartnerCustomScriptPath = destPath;
+                PeerPartnerCustomBalanceGenome = rxGenome;
+            }
+            else
+            {
+                PeerCustomScriptPath = destPath;
+                PeerCustomBalanceGenome = rxGenome;
+            }
+
+            EvaluateHandshake();
+            if (HandshakeState == ModHandshakeState.Verified)
+            {
+                StatusText = $"{rxCharId.ToUpperInvariant()} MOD SYNCED & VERIFIED";
+            }
 
             // Pre-instantiate into opponent slot immediately if inside CharacterSelect
             if (services != null && GameState.CurrentState == global::State.ChoiceMenu)
             {
-                Player? opp = PeerSlot == 0 ? services.Player1 : services.Player2;
-                if (opp != null)
-                {
-                    Character loaded = services.Lua.CreateCharacterFromPath(destPath, PeerSlot, applyStoredBalance: false);
-                    if (rxGenome != null)
-                        CharacterLoader.ApplyGenome(loaded, rxGenome);
-                    opp.ChangeCharacter(loaded);
-                }
+                InstantiatePeerCharactersInSelect(services);
             }
 
             SteamNetTransport.SendModScriptAck(senderId, rxCharId, rxEffectiveHash, accepted: true);

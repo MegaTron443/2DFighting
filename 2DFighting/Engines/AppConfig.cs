@@ -30,7 +30,16 @@ public class AppConfig
                 PropertyNameCaseInsensitive = true,
                 Converters = { new JsonStringEnumConverter() } 
             };
-            return JsonSerializer.Deserialize<AppConfig>(json, options) ?? new AppConfig();
+            var loaded = JsonSerializer.Deserialize<AppConfig>(json, options) ?? new AppConfig();
+            if (loaded.Controls.P1.TagSwitch == KeyboardKey.KEY_NULL)
+                loaded.Controls.P1.TagSwitch = KeyboardKey.KEY_R;
+            if (loaded.Controls.P1.Assist == KeyboardKey.KEY_NULL)
+                loaded.Controls.P1.Assist = KeyboardKey.KEY_Y;
+            if (loaded.Controls.P2.TagSwitch == KeyboardKey.KEY_NULL)
+                loaded.Controls.P2.TagSwitch = KeyboardKey.KEY_U;
+            if (loaded.Controls.P2.Assist == KeyboardKey.KEY_NULL)
+                loaded.Controls.P2.Assist = KeyboardKey.KEY_O;
+            return loaded;
         }
         catch
         {
@@ -75,7 +84,9 @@ public class ControlSettings
         KeyTop =  KeyboardKey.KEY_T,
         KeyRight = KeyboardKey.KEY_H,
         KeyLeft = KeyboardKey.KEY_F,
-        KeyBottom = KeyboardKey.KEY_G
+        KeyBottom = KeyboardKey.KEY_G,
+        TagSwitch = KeyboardKey.KEY_R,
+        Assist = KeyboardKey.KEY_Y
     };
 
     public PlayerControls P2 { get; set; } = new PlayerControls
@@ -87,7 +98,9 @@ public class ControlSettings
         KeyTop =  KeyboardKey.KEY_I,
         KeyRight = KeyboardKey.KEY_L,
         KeyLeft = KeyboardKey.KEY_J,
-        KeyBottom = KeyboardKey.KEY_K
+        KeyBottom = KeyboardKey.KEY_K,
+        TagSwitch = KeyboardKey.KEY_U,
+        Assist = KeyboardKey.KEY_O
     };
 }
 
@@ -102,4 +115,7 @@ public class PlayerControls
     public KeyboardKey KeyRight { get; set; }
     public KeyboardKey KeyLeft { get; set; }
     public KeyboardKey KeyBottom { get; set; }
+
+    public KeyboardKey TagSwitch { get; set; }
+    public KeyboardKey Assist { get; set; }
 }

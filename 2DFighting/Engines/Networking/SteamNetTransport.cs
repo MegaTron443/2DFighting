@@ -167,9 +167,13 @@ public static class SteamNetTransport
         string baseScriptHash,
         bool ready,
         bool gaEnabled,
-        ulong workshopId = 0UL)
+        ulong workshopId = 0UL,
+        string partnerCharId = "",
+        string partnerScriptHash = "",
+        string partnerBaseScriptHash = "",
+        ulong partnerWorkshopId = 0UL)
     {
-        using var ms = new MemoryStream(160);
+        using var ms = new MemoryStream(256);
         using var bw = new BinaryWriter(ms, Encoding.UTF8);
         bw.Write((byte)NetMessageType.FighterSelection);
         bw.Write(charId ?? string.Empty);
@@ -178,6 +182,10 @@ public static class SteamNetTransport
         bw.Write(ready);
         bw.Write(gaEnabled);
         bw.Write(workshopId);
+        bw.Write(partnerCharId ?? string.Empty);
+        bw.Write(partnerScriptHash ?? string.Empty);
+        bw.Write(partnerBaseScriptHash ?? string.Empty);
+        bw.Write(partnerWorkshopId);
         bw.Flush();
         SendReliable(peerSteamId, ms.GetBuffer().AsSpan(0, (int)ms.Length));
     }
@@ -415,7 +423,22 @@ public static class SteamNetTransport
                 bool ready = br.ReadBoolean();
                 bool gaEnabled = br.ReadBoolean();
                 ulong workshopId = (ms.Position + 8 <= ms.Length) ? br.ReadUInt64() : 0UL;
-                SteamLobbyManager.OnRemoteFighterSelection(senderId, charId, scriptHash, baseHash, ready, gaEnabled, workshopId);
+                string partnerCharId = ms.Position < ms.Length ? br.ReadString() : "";
+                string partnerScriptHash = ms.Position < ms.Length ? br.ReadString() : "";
+                string partnerBaseHash = ms.Position < ms.Length ? br.ReadString() : "";
+                ulong partnerWorkshopId = (ms.Position + 8 <= ms.Length) ? br.ReadUInt64() : 0UL;
+                SteamLobbyManager.OnRemoteFighterSelection(
+                    senderId,
+                    charId,
+                    scriptHash,
+                    baseHash,
+                    ready,
+                    gaEnabled,
+                    workshopId,
+                    partnerCharId,
+                    partnerScriptHash,
+                    partnerBaseHash,
+                    partnerWorkshopId);
                 break;
             }
 

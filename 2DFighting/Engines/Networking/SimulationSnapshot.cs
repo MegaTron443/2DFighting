@@ -42,6 +42,33 @@ public sealed class SimulationSnapshot
         public float GravityPct;
         public float Friction;
         public float HitStun;
+
+        // 2v2 Tag Team & Assist snapshot
+        public int ActiveMemberIndex;
+        public int Member0Health;
+        public int Member1Health;
+        public float Member0RecoverableHealth;
+        public float Member1RecoverableHealth;
+        public float BenchRegenAccum;
+        public float TagCooldownTimer;
+        public float AssistCooldownTimer;
+        public bool IsAssistActive;
+        public Vector2 AssistPosition;
+        public Vector2 AssistPreviousPosition;
+        public bool AssistFacingRight;
+        public int AssistActionFrame;
+        public bool AssistHasHit;
+        public string? AssistSkillName;
+
+        public SkillController.ControllerSnapshot PartnerSkillState;
+        public readonly Dictionary<string, float> PartnerCustomDataValues = new(StringComparer.OrdinalIgnoreCase);
+        public float PartnerWidthPct;
+        public float PartnerHeightPct;
+        public float PartnerWalkSpeedPct;
+        public float PartnerJumpForcePct;
+        public float PartnerGravityPct;
+        public float PartnerFriction;
+        public float PartnerHitStun;
     }
 
     public int Tick;
@@ -131,7 +158,25 @@ public sealed class SimulationSnapshot
         dst.LastExecutedSkillName = player.LastExecutedSkillName;
         dst.KeyState = player.CaptureKeyHandlerSnapshot();
 
-        Character? ch = player.CurrentCharacter;
+        TagTeamMember m0 = player.GetMember(0);
+        TagTeamMember m1 = player.GetMember(1);
+        dst.ActiveMemberIndex = player.ActiveMemberIndex;
+        dst.Member0Health = m0.Health;
+        dst.Member1Health = m1.Health;
+        dst.Member0RecoverableHealth = m0.RecoverableHealth;
+        dst.Member1RecoverableHealth = m1.RecoverableHealth;
+        dst.BenchRegenAccum = player.BenchRegenAccum;
+        dst.TagCooldownTimer = player.TagCooldownTimer;
+        dst.AssistCooldownTimer = player.AssistCooldownTimer;
+        dst.IsAssistActive = player.IsAssistActive;
+        dst.AssistPosition = player.AssistPosition;
+        dst.AssistPreviousPosition = player.AssistPreviousPosition;
+        dst.AssistFacingRight = player.AssistFacingRight;
+        dst.AssistActionFrame = player.AssistActionFrame;
+        dst.AssistHasHit = player.AssistHasHit;
+        dst.AssistSkillName = player.AssistSkillName;
+
+        Character? ch = player.PrimaryCharacter;
         if (ch != null)
         {
             dst.SkillState = ch.SkillController.CaptureSnapshot();
@@ -144,10 +189,41 @@ public sealed class SimulationSnapshot
             dst.Friction = ch.Friction;
             dst.HitStun = ch.HitStun;
         }
+
+        Character? partner = player.PartnerCharacter;
+        if (partner != null)
+        {
+            dst.PartnerSkillState = partner.SkillController.CaptureSnapshot();
+            partner.CustomData.CopyCustomValuesTo(dst.PartnerCustomDataValues);
+            dst.PartnerWidthPct = partner.WidthPct;
+            dst.PartnerHeightPct = partner.HeightPct;
+            dst.PartnerWalkSpeedPct = partner.WalkSpeedPct;
+            dst.PartnerJumpForcePct = partner.JumpForcePct;
+            dst.PartnerGravityPct = partner.GravityPct;
+            dst.PartnerFriction = partner.Friction;
+            dst.PartnerHitStun = partner.HitStun;
+        }
     }
 
     private static void RestorePlayer(Player player, PlayerSnapshot src)
     {
+        player.RestoreTeamSnapshot(
+            src.ActiveMemberIndex,
+            src.Member0Health,
+            src.Member1Health,
+            src.Member0RecoverableHealth,
+            src.Member1RecoverableHealth,
+            src.BenchRegenAccum,
+            src.TagCooldownTimer,
+            src.AssistCooldownTimer,
+            src.IsAssistActive,
+            src.AssistPosition,
+            src.AssistPreviousPosition,
+            src.AssistFacingRight,
+            src.AssistActionFrame,
+            src.AssistHasHit,
+            src.AssistSkillName);
+
         player.Position = src.Position;
         player.PreviousPosition = src.PreviousPosition;
         player.Velocity = src.Velocity;
@@ -173,7 +249,7 @@ public sealed class SimulationSnapshot
         player.LastExecutedSkillName = src.LastExecutedSkillName;
         player.RestoreKeyHandlerSnapshot(src.KeyState);
 
-        Character? ch = player.CurrentCharacter;
+        Character? ch = player.PrimaryCharacter;
         if (ch != null)
         {
             ch.SkillController.RestoreSnapshot(src.SkillState);
@@ -185,6 +261,20 @@ public sealed class SimulationSnapshot
             ch.GravityPct = src.GravityPct;
             ch.Friction = src.Friction;
             ch.HitStun = src.HitStun;
+        }
+
+        Character? partner = player.PartnerCharacter;
+        if (partner != null)
+        {
+            partner.SkillController.RestoreSnapshot(src.PartnerSkillState);
+            partner.CustomData.RestoreCustomValues(src.PartnerCustomDataValues);
+            partner.WidthPct = src.PartnerWidthPct;
+            partner.HeightPct = src.PartnerHeightPct;
+            partner.WalkSpeedPct = src.PartnerWalkSpeedPct;
+            partner.JumpForcePct = src.PartnerJumpForcePct;
+            partner.GravityPct = src.PartnerGravityPct;
+            partner.Friction = src.PartnerFriction;
+            partner.HitStun = src.PartnerHitStun;
         }
     }
 
@@ -209,10 +299,16 @@ public sealed class SimulationSnapshot
         HashUInt(BitConverter.SingleToUInt32Bits(p.Position.Y), ref hash, prime);
         HashUInt(BitConverter.SingleToUInt32Bits(p.Velocity.X), ref hash, prime);
         HashUInt(BitConverter.SingleToUInt32Bits(p.Velocity.Y), ref hash, prime);
-        HashUInt((uint)p.Health, ref hash, prime);
+        HashUInt((uint)p.ActiveMemberIndex, ref hash, prime);
+        HashUInt((uint)p.GetMember(0).Health, ref hash, prime);
+        HashUInt((uint)p.GetMember(1).Health, ref hash, prime);
         HashUInt((uint)p.RoundsWon, ref hash, prime);
         HashUInt((uint)(p.CurrentCharacter?.CurrentActionFrame ?? 0), ref hash, prime);
         HashUInt(p.FacingRight ? 1u : 0u, ref hash, prime);
+        HashUInt(BitConverter.SingleToUInt32Bits(p.TagCooldownTimer), ref hash, prime);
+        HashUInt(BitConverter.SingleToUInt32Bits(p.AssistCooldownTimer), ref hash, prime);
+        HashUInt(p.IsAssistActive ? 1u : 0u, ref hash, prime);
+        HashUInt((uint)p.AssistActionFrame, ref hash, prime);
     }
 
     private static void HashUInt(uint value, ref uint hash, uint prime)
