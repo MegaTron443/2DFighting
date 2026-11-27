@@ -167,6 +167,61 @@ public class CombatResolver
         {
             ResolveHitInteraction(gamedata, p2, p1, p2.CurrentCharacter!.ActiveSkill!);
         }
+
+        ResolveAssistHit(gamedata, p1, p2);
+        ResolveAssistHit(gamedata, p2, p1);
+    }
+
+    private void ResolveAssistHit(GameData gamedata, Player attacker, Player defender)
+    {
+        if (!attacker.IsAssistActive || attacker.AssistHasHit || defender.IsInvulnerable)
+            return;
+
+        SkillData? assistSkill = attacker.ActiveAssistSkill;
+        if (assistSkill == null || !attacker.TryGetAssistHitbox(out Rectangle assistHb))
+            return;
+
+        if (!Raylib.CheckCollisionRecs(assistHb, defender.GetHurtbox()))
+            return;
+
+        attacker.AssistHasHit = true;
+
+        if (!PhysicsEngine.IsHeadlessThread)
+        {
+            _matchManager.AddHitstop(LightHitstopDuration);
+        }
+
+        bool savedFacing = attacker.FacingRight;
+        try
+        {
+            attacker.FacingRight = attacker.AssistFacingRight;
+
+            if (CanBlockHeight(defender, assistSkill.Height, assistSkill.IsBlockBreak))
+            {
+                ApplyBlockedHit(gamedata, attacker, defender, assistSkill);
+                return;
+            }
+
+            if (assistSkill.OnHit?.Function != null)
+            {
+                try
+                {
+                    LuaEngine.CallSandboxed(assistSkill.OnHit, LuaEngine.MaxTickInstructions, attacker, defender, assistSkill);
+                }
+                catch (ScriptRuntimeException ex)
+                {
+                    DiagnosticsLogger.LogSilentIssueOnce($"lua_assist_onhit_{attacker.ActivePartnerCharacter?.CharacterId}_{assistSkill.Name}", $"Assist OnHit error: {ex.DecoratedMessage}", LogSeverity.Error);
+                }
+                gamedata.SoundHandler?.PlaySound(defender, SoundType.CustomOnHit);
+                return;
+            }
+
+            ApplyCleanHit(gamedata, attacker, defender, assistSkill);
+        }
+        finally
+        {
+            attacker.FacingRight = savedFacing;
+        }
     }
 
     private bool CheckHitCollision(Player attacker, Player defender)

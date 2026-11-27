@@ -147,6 +147,9 @@ public class PhysicsEngine
 
         Projectiles.Update(dt, Match);
 
+        p1.TryHandleForcedTagOnKO(data);
+        p2.TryHandleForcedTagOnKO(data);
+
         if (!p1.IsInHitstun) p2.ComboCount = 0;
         if (!p2.IsInHitstun) p1.ComboCount = 0;
 
@@ -286,6 +289,12 @@ public class PhysicsEngine
         if (player.CurrentCharacter?.ActiveSkill != null && player.CurrentCharacter.CurrentActionFrame == 1)
         {
             data.SoundHandler?.PlaySkillSound(player, player.CurrentCharacter.ActiveSkill.Name);
+        }
+
+        if (player.IsAssistActive && player.AssistActionFrame == 1 &&
+            player.ActiveAssistSkill != null && player.ActivePartnerCharacter != null)
+        {
+            data.SoundHandler?.PlaySkillSound(player.ActivePartnerCharacter, player.ActiveAssistSkill.Name);
         }
     }
 

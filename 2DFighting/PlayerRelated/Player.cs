@@ -9,6 +9,15 @@ public enum DummyBlockMode
     Crouch
 }
 
+public sealed class TagTeamMember
+{
+    public Character? Character { get; set; }
+    public int Health { get; set; } = Player.MAX_HEALTH;
+    public int MaxHealth { get; set; } = Player.MAX_HEALTH;
+    public float RecoverableHealth { get; set; } = 0f;
+    public bool IsAlive => Character != null && Health > 0;
+}
+
 [MoonSharpUserData]
 public class Player : IDisposable
 {
@@ -18,6 +27,13 @@ public class Player : IDisposable
 
     public const int MAX_HEALTH = 350;
     public const float CROUCH_HEIGHT_RATIO = 0.65f;
+    public const float TAG_SWITCH_COOLDOWN = 4.0f;
+    public const float ASSIST_COOLDOWN = 5.0f;
+    public const float FORCED_TAG_INVULN_DURATION = 0.75f;
+    public const float TAG_IN_INVULN_DURATION = 0.25f;
+    public const float RECOVERABLE_HEALTH_RATIO = 0.35f;
+    public const float BENCH_REGEN_PER_SEC = 18.0f;
+    public const float ASSIST_SPAWN_OFFSET_X_PCT = 0.08f;
     private const float TECH_INVULNERABILITY_DURATION = 0.25f;
     private const float TECH_POPUP_DURATION = 0.45f;
     private const float AIR_TECH_WINDOW_SECONDS = 0.15f;
@@ -30,6 +46,8 @@ public class Player : IDisposable
     private readonly int _playerIndex;
     private readonly KeyHandler _keyHandler;
     private readonly PlayerAI? _aiController;
+    private readonly TagTeamMember[] _team = { new(), new() };
+    private float _benchRegenAccum = 0f;
 
     public int PlayerIndex => _playerIndex;
     public string Name => _name;
@@ -46,8 +64,32 @@ public class Player : IDisposable
     public bool IsInHitstun => HitstunTimer > 0f;
     public bool IsInvulnerable => InvulnerableTimer > 0f;
 
-    public Character? CurrentCharacter { get; private set; }
+    public int ActiveMemberIndex { get; private set; } = 0;
+    public TagTeamMember ActiveMember => _team[ActiveMemberIndex];
+    public TagTeamMember PartnerMember => _team[ActiveMemberIndex == 0 ? 1 : 0];
+    public TagTeamMember GetMember(int index) => _team[index == 1 ? 1 : 0];
+    public Character? PrimaryCharacter => _team[0].Character;
+    public Character? PartnerCharacter => _team[1].Character;
+    public Character? ActivePartnerCharacter => PartnerMember.Character;
+    public bool HasPartner => _team[1].Character != null;
+    public bool IsTagTeam => _team[0].Character != null && _team[1].Character != null;
+    public Character? CurrentCharacter => _team[ActiveMemberIndex].Character;
     public Player? TargetOpponent { get; private set; }
+
+    public float TagCooldownTimer { get; set; } = 0f;
+    public float AssistCooldownTimer { get; set; } = 0f;
+    public bool IsAssistActive { get; set; } = false;
+    public Vector2 AssistPosition;
+    public Vector2 AssistPreviousPosition;
+    public bool AssistFacingRight { get; set; } = true;
+    public int AssistActionFrame { get; set; } = 0;
+    public bool AssistHasHit { get; set; } = false;
+    public string? AssistSkillName { get; set; } = null;
+    public SkillData? ActiveAssistSkill =>
+        (!string.IsNullOrEmpty(AssistSkillName) && ActivePartnerCharacter != null && ActivePartnerCharacter.Skills.TryGetValue(AssistSkillName, out var skill))
+            ? skill
+            : null;
+    public float BenchRegenAccum => _benchRegenAccum;
 
     public Vector2 Position;
     public Vector2 PreviousPosition;
@@ -70,8 +112,30 @@ public class Player : IDisposable
         CurrentCharacter?.ActiveSkill == null &&
         !IsInHitstun;
 
-    public int Health { get; set; } = MAX_HEALTH;
-    public bool IsAlive => Health > 0;
+    public int Health
+    {
+        get => _team[ActiveMemberIndex].Health;
+        set
+        {
+            TagTeamMember active = _team[ActiveMemberIndex];
+            int prev = active.Health;
+            int clamped = Math.Clamp(value, 0, active.MaxHealth);
+            if (clamped < prev)
+            {
+                float maxRecoverable = Math.Max(0, active.MaxHealth - clamped);
+                active.RecoverableHealth = MathF.Min(maxRecoverable, active.RecoverableHealth + ((prev - clamped) * RECOVERABLE_HEALTH_RATIO));
+            }
+            else if (clamped > prev)
+            {
+                active.RecoverableHealth = MathF.Min(active.RecoverableHealth, Math.Max(0, active.MaxHealth - clamped));
+            }
+            active.Health = clamped;
+        }
+    }
+
+    public bool IsAlive => _team[ActiveMemberIndex].Health > 0;
+    public bool IsTeamAlive => HasPartner ? (_team[0].Health > 0 || _team[1].Health > 0) : (_team[0].Health > 0);
+    public int TotalTeamHealth => HasPartner ? (_team[0].Health + _team[1].Health) : _team[0].Health;
     public bool IsStunned => IsInHitstun;
     public bool IsHit { get; set; } = false;
 
@@ -152,18 +216,95 @@ public class Player : IDisposable
 
     public bool ChangeCharacter(Character newCharacter)
     {
-        CurrentCharacter = newCharacter;
-        Health = MAX_HEALTH;
+        ActiveMemberIndex = 0;
+        _team[0].Character = newCharacter;
+        _team[0].Health = MAX_HEALTH;
+        _team[0].MaxHealth = MAX_HEALTH;
+        _team[0].RecoverableHealth = 0f;
         Velocity = Vector2.Zero;
         return true;
     }
 
+    public void SetPartnerCharacter(Character? partner)
+    {
+        _team[1].Character = partner;
+        _team[1].MaxHealth = MAX_HEALTH;
+        _team[1].Health = partner != null ? MAX_HEALTH : 0;
+        _team[1].RecoverableHealth = 0f;
+        EndAssist(spawnVfx: false);
+    }
+
+    public void SetTeam(Character primary, Character? partner)
+    {
+        ActiveMemberIndex = 0;
+        _team[0].Character = primary;
+        _team[0].MaxHealth = MAX_HEALTH;
+        _team[0].Health = MAX_HEALTH;
+        _team[0].RecoverableHealth = 0f;
+
+        _team[1].Character = partner;
+        _team[1].MaxHealth = MAX_HEALTH;
+        _team[1].Health = partner != null ? MAX_HEALTH : 0;
+        _team[1].RecoverableHealth = 0f;
+
+        _benchRegenAccum = 0f;
+        TagCooldownTimer = 0f;
+        AssistCooldownTimer = 0f;
+        Velocity = Vector2.Zero;
+        EndAssist(spawnVfx: false);
+    }
+
+    public void RestoreTeamSnapshot(
+        int activeMemberIndex,
+        int member0Health,
+        int member1Health,
+        float member0Recoverable,
+        float member1Recoverable,
+        float benchRegenAccum,
+        float tagCooldownTimer,
+        float assistCooldownTimer,
+        bool isAssistActive,
+        Vector2 assistPos,
+        Vector2 assistPrevPos,
+        bool assistFacingRight,
+        int assistActionFrame,
+        bool assistHasHit,
+        string? assistSkillName)
+    {
+        ActiveMemberIndex = (activeMemberIndex == 1 && _team[1].Character != null) ? 1 : 0;
+        _team[0].Health = Math.Clamp(member0Health, 0, _team[0].MaxHealth);
+        _team[1].Health = Math.Clamp(member1Health, 0, _team[1].MaxHealth);
+        _team[0].RecoverableHealth = MathF.Max(0f, member0Recoverable);
+        _team[1].RecoverableHealth = MathF.Max(0f, member1Recoverable);
+        _benchRegenAccum = MathF.Max(0f, benchRegenAccum);
+        TagCooldownTimer = MathF.Max(0f, tagCooldownTimer);
+        AssistCooldownTimer = MathF.Max(0f, assistCooldownTimer);
+        IsAssistActive = isAssistActive;
+        AssistPosition = assistPos;
+        AssistPreviousPosition = assistPrevPos;
+        AssistFacingRight = assistFacingRight;
+        AssistActionFrame = assistActionFrame;
+        AssistHasHit = assistHasHit;
+        AssistSkillName = assistSkillName;
+    }
+
     public void ResetState(bool faceRight)
     {
+        ActiveMemberIndex = 0;
+        _team[0].MaxHealth = MAX_HEALTH;
+        _team[0].Health = _team[0].Character != null ? MAX_HEALTH : 0;
+        _team[0].RecoverableHealth = 0f;
+        _team[1].MaxHealth = MAX_HEALTH;
+        _team[1].Health = _team[1].Character != null ? MAX_HEALTH : 0;
+        _team[1].RecoverableHealth = 0f;
+        _benchRegenAccum = 0f;
+        TagCooldownTimer = 0f;
+        AssistCooldownTimer = 0f;
+        EndAssist(spawnVfx: false);
+
         Position = SpawnPosition;
         PreviousPosition = SpawnPosition;
         Velocity = Vector2.Zero;
-        Health = MAX_HEALTH;
         HitstunTimer = 0f;
         TimeSinceHitstun = 0f;
         InvulnerableTimer = 0f;
@@ -179,12 +320,192 @@ public class Player : IDisposable
         LastExecutedSkillName = null;
         _keyHandler.ClearBuffer(_playerIndex);
 
-        CurrentCharacter?.ResetCombatState();
+        _team[0].Character?.ResetCombatState();
+        _team[1].Character?.ResetCombatState();
+    }
+
+    public bool TryTagSwitch(bool forced = false)
+    {
+        if (!IsTagTeam) return false;
+
+        int nextIndex = ActiveMemberIndex == 0 ? 1 : 0;
+        TagTeamMember incoming = _team[nextIndex];
+        if (incoming.Character == null || incoming.Health <= 0)
+            return false;
+
+        if (!forced && (TagCooldownTimer > 0f || IsInHitstun || IsAssistActive))
+            return false;
+
+        CurrentCharacter?.SkillController.CancelActiveSkill();
+        EndAssist(spawnVfx: false);
+
+        ActiveMemberIndex = nextIndex;
+        Character nextChar = _team[nextIndex].Character!;
+        nextChar.SkillController.CancelActiveSkill();
+
+        Velocity = Vector2.Zero;
+        IsCrouching = false;
+        IsAirStalled = false;
+        HasUsedAirStall = false;
+        _benchRegenAccum = 0f;
+
+        if (forced)
+        {
+            HitstunTimer = 0f;
+            TimeSinceHitstun = 0f;
+            InvulnerableTimer = FORCED_TAG_INVULN_DURATION;
+            if (TargetOpponent != null) TargetOpponent.ComboCount = 0;
+
+            float groundY = PhysicsEngine.GetEffectiveGroundY(Position);
+            Position.Y = groundY - (nextChar.Height * 0.5f);
+            PreviousPosition = Position;
+            IsGrounded = true;
+            IsOnPlatform = false;
+        }
+        else
+        {
+            InvulnerableTimer = MathF.Max(InvulnerableTimer, TAG_IN_INVULN_DURATION);
+            TagCooldownTimer = TAG_SWITCH_COOLDOWN;
+        }
+
+        VFXManager.SpawnPreset(VFXPreset.Shockwave, Position, FacingRight);
+        if (!PhysicsEngine.IsHeadlessThread && !PhysicsEngine.SuppressPresentation)
+        {
+            SoundHandler.Current?.PlaySound(this, SoundType.RoundStart);
+        }
+
+        return true;
+    }
+
+    public bool TryHandleForcedTagOnKO(GameData data)
+    {
+        if (!IsAlive && IsTeamAlive)
+        {
+            if (!PhysicsEngine.IsHeadlessThread && !PhysicsEngine.SuppressPresentation)
+            {
+                data.SoundHandler?.PlaySound(this, SoundType.Death);
+            }
+            return TryTagSwitch(forced: true);
+        }
+        return false;
+    }
+
+    public bool TryCallAssist()
+    {
+        if (!IsTagTeam || IsAssistActive || AssistCooldownTimer > 0f)
+            return false;
+
+        TagTeamMember partner = PartnerMember;
+        if (!partner.IsAlive || partner.Character == null)
+            return false;
+
+        SkillData? chosen = SelectAssistSkill(partner.Character);
+        if (chosen == null)
+            return false;
+
+        float dir = FacingRight ? 1f : -1f;
+        float halfW = partner.Character.Width * 0.5f;
+        float spawnX = Math.Clamp(
+            Position.X - (dir * PhysicsEngine.ViewportWidth * ASSIST_SPAWN_OFFSET_X_PCT),
+            PhysicsEngine.LeftBoundary + halfW,
+            PhysicsEngine.RightBoundary - halfW);
+        float groundY = PhysicsEngine.GetEffectiveGroundY(Position);
+        float spawnY = groundY - (partner.Character.Height * 0.5f);
+
+        AssistPosition = new Vector2(spawnX, spawnY);
+        AssistPreviousPosition = AssistPosition;
+        AssistFacingRight = FacingRight;
+        AssistActionFrame = 0;
+        AssistHasHit = false;
+        AssistSkillName = chosen.Name;
+        IsAssistActive = true;
+        AssistCooldownTimer = ASSIST_COOLDOWN;
+
+        if (!PhysicsEngine.IsHeadlessThread)
+        {
+            partner.Character.Animator.SetState(AnimationState.Attacking, chosen.AnimationClipName);
+        }
+
+        VFXManager.SpawnPreset(VFXPreset.Dust, AssistPosition, AssistFacingRight);
+        return true;
+    }
+
+    public void EndAssist(bool spawnVfx = true)
+    {
+        if (spawnVfx && IsAssistActive)
+        {
+            VFXManager.SpawnPreset(VFXPreset.Dust, AssistPosition, AssistFacingRight);
+        }
+        IsAssistActive = false;
+        AssistActionFrame = 0;
+        AssistHasHit = false;
+        AssistSkillName = null;
+    }
+
+    public bool TryGetAssistHitbox(out Rectangle hitbox)
+    {
+        hitbox = default;
+        Character? partner = ActivePartnerCharacter;
+        SkillData? skill = ActiveAssistSkill;
+        if (!IsAssistActive || partner == null || skill == null) return false;
+
+        int start = skill.StartupFrames;
+        int end = start + skill.ActiveFrames;
+        if (AssistActionFrame < start || AssistActionFrame >= end)
+            return false;
+
+        Rectangle pct = skill.HitboxOffsetPct;
+        float hbWidth = partner.Width * pct.width;
+        float hbHeight = partner.Height * pct.height;
+        float offsetX = partner.Width * pct.x;
+        float offsetY = partner.Height * pct.y;
+
+        float rootX = AssistPosition.X - (partner.Width * 0.5f);
+        float rootY = AssistPosition.Y - (partner.Height * 0.5f);
+        float hitX = AssistFacingRight
+            ? rootX + offsetX
+            : rootX + partner.Width - offsetX - hbWidth;
+        float hitY = rootY + offsetY;
+
+        hitbox = new Rectangle(hitX, hitY, hbWidth, hbHeight);
+        return true;
+    }
+
+    private static SkillData? SelectAssistSkill(Character partner)
+    {
+        if (partner.Skills.TryGetValue("assist", out SkillData? explicitAssist))
+            return explicitAssist;
+
+        SkillData? best = null;
+        int bestBits = int.MaxValue;
+        var list = partner.SkillController.SkillList;
+        for (int i = 0; i < list.Count; i++)
+        {
+            SkillData s = list[i];
+            if (s.IsCounter) continue;
+            if (s.TriggerMask != 0)
+            {
+                int bits = BitOperations.PopCount((uint)s.TriggerMask);
+                if (bits < bestBits)
+                {
+                    bestBits = bits;
+                    best = s;
+                }
+            }
+            else if (best == null)
+            {
+                best = s;
+            }
+        }
+
+        return best ?? (list.Count > 0 ? list[0] : null);
     }
 
     public void SavePreviousState()
     {
         PreviousPosition = Position;
+        if (IsAssistActive)
+            AssistPreviousPosition = AssistPosition;
     }
 
     public Vector2 GetInterpolatedPosition(float alpha) // Larp funtion, lets LARP together.
@@ -386,13 +707,98 @@ public class Player : IDisposable
         if (InvulnerableTimer > 0f) InvulnerableTimer = MathF.Max(0f, InvulnerableTimer - dt);
         if (TechPopupTimer > 0f) TechPopupTimer = MathF.Max(0f, TechPopupTimer - dt);
         if (PlatformDropTimer > 0f) PlatformDropTimer = MathF.Max(0f, PlatformDropTimer - dt);
+        if (TagCooldownTimer > 0f) TagCooldownTimer = MathF.Max(0f, TagCooldownTimer - dt);
+        if (AssistCooldownTimer > 0f) AssistCooldownTimer = MathF.Max(0f, AssistCooldownTimer - dt);
+
+        if (IsTagTeam && !IsAssistActive)
+        {
+            TagTeamMember bench = PartnerMember;
+            if (bench.IsAlive && bench.RecoverableHealth > 0f && bench.Health < bench.MaxHealth)
+            {
+                float healFloat = MathF.Min(bench.RecoverableHealth, BENCH_REGEN_PER_SEC * dt);
+                _benchRegenAccum += healFloat;
+                int wholeHeal = (int)_benchRegenAccum;
+                if (wholeHeal > 0)
+                {
+                    int actualHeal = Math.Min(wholeHeal, bench.MaxHealth - bench.Health);
+                    bench.Health += actualHeal;
+                    bench.RecoverableHealth = MathF.Max(0f, bench.RecoverableHealth - actualHeal);
+                    _benchRegenAccum -= wholeHeal;
+                }
+            }
+        }
 
         if (CurrentCharacter == null) return;
         CurrentCharacter.Update(this, dt);
+
+        if (IsAssistActive)
+        {
+            UpdateAssist(dt);
+        }
+    }
+
+    private void UpdateAssist(float dt)
+    {
+        Character? partner = ActivePartnerCharacter;
+        SkillData? skill = ActiveAssistSkill;
+        if (partner == null || skill == null)
+        {
+            EndAssist(spawnVfx: false);
+            return;
+        }
+
+        if (skill.CustomLogic && skill.OnCustomLogic?.Function != null)
+        {
+            Vector2 savedPos = Position;
+            Vector2 savedPrev = PreviousPosition;
+            Vector2 savedVel = Velocity;
+            bool savedFacing = FacingRight;
+            int savedMemberIdx = ActiveMemberIndex;
+            try
+            {
+                ActiveMemberIndex = savedMemberIdx == 0 ? 1 : 0;
+                Position = AssistPosition;
+                PreviousPosition = AssistPreviousPosition;
+                Velocity = Vector2.Zero;
+                FacingRight = AssistFacingRight;
+                LuaEngine.CallSandboxed(skill.OnCustomLogic, LuaEngine.MaxTickInstructions, this, partner, dt);
+                AssistPosition = Position + (Velocity * dt);
+            }
+            catch (ScriptRuntimeException ex)
+            {
+                DiagnosticsLogger.LogSilentIssueOnce($"lua_assist_err_{partner.CharacterId}_{skill.Name}", $"Assist CustomLogic error: {ex.DecoratedMessage}", LogSeverity.Error);
+            }
+            finally
+            {
+                ActiveMemberIndex = savedMemberIdx;
+                Position = savedPos;
+                PreviousPosition = savedPrev;
+                Velocity = savedVel;
+                FacingRight = savedFacing;
+            }
+        }
+
+        if (!PhysicsEngine.IsHeadlessThread)
+        {
+            partner.Animator.SetState(AnimationState.Attacking, skill.AnimationClipName);
+            partner.Animator.Update(dt, partner.Animations);
+        }
+
+        AssistActionFrame++;
+        int totalFrames = Math.Max(1, skill.StartupFrames + skill.ActiveFrames + skill.RecoveryFrames);
+        if (AssistActionFrame >= totalFrames)
+        {
+            EndAssist(spawnVfx: true);
+        }
     }
 
     public void Draw(float alpha)
     {
+        if (IsAssistActive && ActivePartnerCharacter != null)
+        {
+            DrawAssistPartner(alpha);
+        }
+
         if (CurrentCharacter == null) return;
         CurrentCharacter.Draw(this, alpha);
 
@@ -415,6 +821,35 @@ public class Player : IDisposable
             int fontSize = Math.Max(12, (int)(PhysicsEngine.LogicalHeight * 0.018f));
             int tw = Raylib.MeasureText(aiText, fontSize);
             Raylib.DrawText(aiText, (int)renderPos.X - (tw / 2), (int)(renderPos.Y - (CurrentCharacter.Height * 0.85f)), fontSize, Color.DARKGREEN);
+        }
+    }
+
+    private void DrawAssistPartner(float alpha)
+    {
+        Character? partner = ActivePartnerCharacter;
+        if (partner == null) return;
+
+        Vector2 savedPos = Position;
+        Vector2 savedPrev = PreviousPosition;
+        bool savedFacing = FacingRight;
+        bool savedCrouching = IsCrouching;
+        int savedMemberIdx = ActiveMemberIndex;
+        try
+        {
+            ActiveMemberIndex = savedMemberIdx == 0 ? 1 : 0;
+            Position = AssistPosition;
+            PreviousPosition = AssistPreviousPosition;
+            FacingRight = AssistFacingRight;
+            IsCrouching = false;
+            partner.Draw(this, alpha);
+        }
+        finally
+        {
+            ActiveMemberIndex = savedMemberIdx;
+            Position = savedPos;
+            PreviousPosition = savedPrev;
+            FacingRight = savedFacing;
+            IsCrouching = savedCrouching;
         }
     }
 }

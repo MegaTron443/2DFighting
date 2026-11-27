@@ -68,9 +68,11 @@ public class MatchManager
                 }
                 else if (!PhysicsEngine.SuppressPresentation)
                 {
-                    MatchWinnerText = p1.RoundsWon > p2.RoundsWon
-                        ? $"{p1.Name} ({p1.CurrentCharacter!.Name}) WINS!"
-                        : $"{p2.Name} ({p2.CurrentCharacter!.Name}) WINS!";
+                    Player winner = p1.RoundsWon > p2.RoundsWon ? p1 : p2;
+                    string winRoster = winner.IsTagTeam
+                        ? $"{winner.PrimaryCharacter!.Name} & {winner.PartnerCharacter!.Name}"
+                        : winner.CurrentCharacter!.Name;
+                    MatchWinnerText = $"{winner.Name} ({winRoster}) WINS!";
                     GameState.SetState(State.GameOver);
                 }
             }
@@ -98,8 +100,11 @@ public class MatchManager
 
     public void CheckRoundEndCondition(GameData data, Player p1, Player p2)
     {
-        bool p1Dead = !p1.IsAlive;
-        bool p2Dead = !p2.IsAlive;
+        p1.TryHandleForcedTagOnKO(data);
+        p2.TryHandleForcedTagOnKO(data);
+
+        bool p1Dead = !p1.IsTeamAlive;
+        bool p2Dead = !p2.IsTeamAlive;
         bool timeOut = RoundTimer <= 0f;
 
         if (!PhysicsEngine.SuppressPresentation)
@@ -130,12 +135,12 @@ public class MatchManager
         }
         else if (timeOut)
         {
-            if (p1.Health > p2.Health)
+            if (p1.TotalTeamHealth > p2.TotalTeamHealth)
             {
                 p1.RoundsWon++;
                 RoundAnnouncement = $"TIME OVER! {p1.Name} takes Round {CurrentRound}!";
             }
-            else if (p2.Health > p1.Health)
+            else if (p2.TotalTeamHealth > p1.TotalTeamHealth)
             {
                 p2.RoundsWon++;
                 RoundAnnouncement = $"TIME OVER! {p2.Name} takes Round {CurrentRound}!";
@@ -146,8 +151,8 @@ public class MatchManager
             }
         }
 
-        bool p1WonRound = !isDoubleKO && (p2Dead || (timeOut && p1.Health > p2.Health));
-        bool p2WonRound = !isDoubleKO && (p1Dead || (timeOut && p2.Health > p1.Health));
+        bool p1WonRound = !isDoubleKO && (p2Dead || (timeOut && p1.TotalTeamHealth > p2.TotalTeamHealth));
+        bool p2WonRound = !isDoubleKO && (p1Dead || (timeOut && p2.TotalTeamHealth > p1.TotalTeamHealth));
 
         p1.NotifyRoundEnd(p1WonRound);
         p2.NotifyRoundEnd(p2WonRound);
